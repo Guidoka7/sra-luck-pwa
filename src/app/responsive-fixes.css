@@ -170,13 +170,64 @@ html.dark {
 
 /* =========================================================
    ADMIN — TEMA VISUAL CONSISTENTE
-   A correção anterior aumentou contraste, mas várias telas ainda
-   usavam utilitários Tailwind legados diretamente (white/gray/black).
-   Estes normalizadores fazem esses elementos obedecerem ao mesmo
-   sistema visual sem alterar layout, dados ou comportamento.
    ========================================================= */
 
-/* MODO CLARO: superfícies sólidas e texto legível */
+/*
+ * MODO CLARO
+ * O problema restante estava nos componentes legados que usam gray/slate/zinc
+ * diretamente. O dark já possuía normalização ampla; o light não. Estas regras
+ * fazem SOMENTE esses utilitários neutros respeitarem o sistema SRA LUCK.
+ * Cores semânticas (emerald/red/amber etc.) não são alteradas.
+ */
+html:not(.dark) .admin-shell [class~="text-gray-950"],
+html:not(.dark) .admin-shell [class~="text-gray-900"],
+html:not(.dark) .admin-shell [class~="text-gray-800"],
+html:not(.dark) .admin-shell [class~="text-gray-700"],
+html:not(.dark) .admin-shell [class~="text-gray-600"],
+html:not(.dark) .admin-shell [class~="text-gray-500"],
+html:not(.dark) .admin-shell [class~="text-gray-400"],
+html:not(.dark) .admin-shell [class~="text-gray-300"],
+html:not(.dark) .admin-shell [class~="text-slate-950"],
+html:not(.dark) .admin-shell [class~="text-slate-900"],
+html:not(.dark) .admin-shell [class~="text-slate-800"],
+html:not(.dark) .admin-shell [class~="text-slate-700"],
+html:not(.dark) .admin-shell [class~="text-slate-600"],
+html:not(.dark) .admin-shell [class~="text-slate-500"],
+html:not(.dark) .admin-shell [class~="text-slate-400"],
+html:not(.dark) .admin-shell [class~="text-zinc-950"],
+html:not(.dark) .admin-shell [class~="text-zinc-900"],
+html:not(.dark) .admin-shell [class~="text-zinc-800"],
+html:not(.dark) .admin-shell [class~="text-zinc-700"],
+html:not(.dark) .admin-shell [class~="text-zinc-600"],
+html:not(.dark) .admin-shell [class~="text-zinc-500"],
+html:not(.dark) .admin-shell [class~="text-zinc-400"],
+html:not(.dark) .admin-shell [class~="text-black"] {
+  color: rgb(var(--text-main)) !important;
+}
+
+html:not(.dark) .admin-shell [class~="bg-gray-50"],
+html:not(.dark) .admin-shell [class~="bg-gray-100"],
+html:not(.dark) .admin-shell [class~="bg-gray-200"],
+html:not(.dark) .admin-shell [class~="bg-slate-50"],
+html:not(.dark) .admin-shell [class~="bg-slate-100"],
+html:not(.dark) .admin-shell [class~="bg-zinc-50"],
+html:not(.dark) .admin-shell [class~="bg-zinc-100"] {
+  background-color: rgb(var(--surface-1)) !important;
+}
+
+html:not(.dark) .admin-shell [class~="border-gray-100"],
+html:not(.dark) .admin-shell [class~="border-gray-200"],
+html:not(.dark) .admin-shell [class~="border-gray-300"],
+html:not(.dark) .admin-shell [class~="border-slate-100"],
+html:not(.dark) .admin-shell [class~="border-slate-200"],
+html:not(.dark) .admin-shell [class~="border-slate-300"],
+html:not(.dark) .admin-shell [class~="border-zinc-100"],
+html:not(.dark) .admin-shell [class~="border-zinc-200"],
+html:not(.dark) .admin-shell [class~="border-zinc-300"] {
+  border-color: rgb(var(--color-burgundy) / 0.10) !important;
+}
+
+/* Custom SRA LUCK text opacities: keep them readable in light mode. */
 html:not(.dark) .admin-shell .text-clay\/78,
 html:not(.dark) .admin-shell .text-clay\/60,
 html:not(.dark) .admin-shell .text-clay\/55,
@@ -217,7 +268,16 @@ html:not(.dark) .admin-shell textarea::placeholder {
   color: rgb(var(--color-clay) / 0.58) !important;
 }
 
-/* MODO ESCURO: não deixar nenhuma camada branca/acinzentada escapar */
+/* Inputs e selects claros: não deixar estilos nativos/legados apagarem o texto. */
+html:not(.dark) .admin-shell input,
+html:not(.dark) .admin-shell textarea,
+html:not(.dark) .admin-shell select {
+  color: rgb(var(--text-main));
+  background-color: rgb(255 255 255 / 0.96);
+  border-color: rgb(var(--color-burgundy) / 0.10);
+}
+
+/* MODO ESCURO */
 html.dark .admin-shell [class~="bg-white"],
 html.dark .admin-shell [class~="bg-white/95"],
 html.dark .admin-shell [class~="bg-white/90"],
@@ -259,17 +319,16 @@ html.dark .admin-shell [class~="border-gray-300"] {
   border-color: rgb(255 255 255 / 0.10) !important;
 }
 
-html.dark .admin-shell [class~="text-clay\/78"],
-html.dark .admin-shell [class~="text-clay\/60"],
-html.dark .admin-shell [class~="text-clay\/55"],
-html.dark .admin-shell [class~="text-clay\/50"],
-html.dark .admin-shell [class~="text-clay\/45"],
-html.dark .admin-shell [class~="text-clay\/40"],
-html.dark .admin-shell [class~="text-clay\/35"] {
+html.dark .admin-shell .text-clay\/78,
+html.dark .admin-shell .text-clay\/60,
+html.dark .admin-shell .text-clay\/55,
+html.dark .admin-shell .text-clay\/50,
+html.dark .admin-shell .text-clay\/45,
+html.dark .admin-shell .text-clay\/40,
+html.dark .admin-shell .text-clay\/35 {
   color: rgb(var(--text-soft)) !important;
 }
 
-/* Elementos interativos legados ficam com o mesmo acabamento das telas novas. */
 html.dark .admin-shell button[class*="bg-gray"],
 html.dark .admin-shell a[class*="bg-gray"] {
   color: rgb(var(--color-pearl)) !important;
@@ -288,7 +347,6 @@ html.dark .admin-shell textarea::placeholder {
   color: rgb(var(--text-soft) / 0.72) !important;
 }
 
-/* O gradiente/overlay decorativo não pode agir como uma película sobre o dark. */
 html.dark .admin-shell > .pointer-events-none.fixed {
   background:
     radial-gradient(circle at top left, rgb(var(--color-rose) / 0.08), transparent 28%),
@@ -296,7 +354,6 @@ html.dark .admin-shell > .pointer-events-none.fixed {
     linear-gradient(180deg, rgb(255 255 255 / 0.015), rgb(255 255 255 / 0.005)) !important;
 }
 
-/* Bordas brancas/translúcidas do shell ficam discretas no dark. */
 html.dark .admin-shell [class*="border-white"] {
   border-color: rgb(255 255 255 / 0.10) !important;
 }
