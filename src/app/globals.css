@@ -189,17 +189,11 @@ html.dark {
 
 @media (min-width: 640px) {
   .client-app {
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
+    display: flex !important;
+    align-items: flex-start !important;
+    justify-content: center !important;
     padding-top: 3rem !important;
     padding-bottom: 3rem !important;
-  }
-
-  .client-app .mobile-app-frame {
-    width: 100%;
-    max-width: 30rem; /* ~480px: largura de um app real, não de um site */
-    max-height: none;
   }
 }
 
