@@ -57,7 +57,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const [menuAberto, setMenuAberto] = useState(false);
 
-  // fecha o menu automaticamente ao navegar (evita telas presas em mobile)
   useEffect(() => {
     setMenuAberto(false);
   }, [pathname]);
@@ -91,7 +90,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="min-h-screen bg-bloom">
+    <div className="admin-shell min-h-screen bg-bloom">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(173,104,107,0.12),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(122,38,50,0.08),transparent_22%),linear-gradient(180deg,rgba(255,255,255,0.55),rgba(255,255,255,0.92))]" />
 
       <div className="relative flex items-center justify-between border-b border-white/60 bg-white/80 px-5 py-4 shadow-sm backdrop-blur-xl lg:hidden">
@@ -106,21 +105,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle compact />
-          <button
-          onClick={() => setMenuAberto(true)}
-          aria-label="Abrir menu"
-          className="rounded-2xl border border-rose/15 bg-white/70 p-2.5 text-burgundy transition-colors hover:bg-blush"
-        >
-          <Menu className="h-6 w-6" />
+          <button onClick={() => setMenuAberto(true)} aria-label="Abrir menu" className="rounded-2xl border border-rose/15 bg-white/70 p-2.5 text-burgundy transition-colors hover:bg-blush">
+            <Menu className="h-6 w-6" />
           </button>
         </div>
       </div>
 
       {menuAberto && (
-        <div
-          onClick={() => setMenuAberto(false)}
-          className="fixed inset-0 z-40 bg-burgundy-dark/24 backdrop-blur-sm animate-fadeIn lg:hidden"
-        />
+        <div onClick={() => setMenuAberto(false)} className="fixed inset-0 z-40 bg-burgundy-dark/24 backdrop-blur-sm animate-fadeIn lg:hidden" />
       )}
 
       <div className="relative mx-auto flex min-h-screen w-full max-w-[1720px] gap-6 px-4 pb-6 lg:px-6 lg:pt-6">
@@ -140,11 +132,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <Wordmark maxWidth={190} />
                 <p className="mt-3 text-xs uppercase tracking-[0.32em] text-burgundy/45">Painel premium</p>
               </div>
-              <button
-                onClick={() => setMenuAberto(false)}
-                aria-label="Fechar menu"
-                className="rounded-xl p-2 text-clay/45 hover:bg-blush/70 hover:text-burgundy lg:hidden"
-              >
+              <button onClick={() => setMenuAberto(false)} aria-label="Fechar menu" className="rounded-xl p-2 text-clay/45 hover:bg-blush/70 hover:text-burgundy lg:hidden">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -165,24 +153,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                           onFocus={() => prefetchAdminTab(router, item.href)}
                           className={cn(
                             "group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm transition-all duration-200",
-                            ativo
-                              ? "bg-burgundy text-pearl shadow-soft"
-                              : "text-clay/78 hover:bg-white/70 hover:text-burgundy"
+                            ativo ? "bg-burgundy text-pearl shadow-soft" : "text-clay/78 hover:bg-white/70 hover:text-burgundy"
                           )}
                         >
-                          <span
-                            className={cn(
-                              "flex h-10 w-10 items-center justify-center rounded-2xl transition-colors",
-                              ativo ? "bg-white/16 text-pearl" : "bg-blush/60 text-burgundy group-hover:bg-blush"
-                            )}
-                          >
+                          <span className={cn("flex h-10 w-10 items-center justify-center rounded-2xl transition-colors", ativo ? "bg-white/16 text-pearl" : "bg-blush/60 text-burgundy group-hover:bg-blush")}>
                             <item.icon className="h-4 w-4" />
                           </span>
                           <div className="min-w-0 flex-1">
                             <p className="truncate font-medium">{item.label}</p>
-                            <p className={cn("truncate text-xs", ativo ? "text-pearl/72" : "text-burgundy/40")}>
-                              {item.group}
-                            </p>
+                            <p className={cn("truncate text-xs", ativo ? "text-pearl/72" : "text-burgundy/40")}>{item.group}</p>
                           </div>
                         </Link>
                       );
@@ -195,10 +174,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
           <div className="space-y-3">
             <ThemeToggle />
-            <button
-              onClick={sair}
-              className="flex w-full items-center justify-center gap-3 rounded-2xl border border-rose/12 bg-white/72 px-4 py-3 text-sm text-burgundy/78 transition-colors duration-200 hover:bg-blush/70 hover:text-burgundy"
-            >
+            <button onClick={sair} className="flex w-full items-center justify-center gap-3 rounded-2xl border border-rose/12 bg-white/72 px-4 py-3 text-sm text-burgundy/78 transition-colors duration-200 hover:bg-blush/70 hover:text-burgundy">
               <LogOut className="h-4 w-4" /> Sair
             </button>
           </div>
