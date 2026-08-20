@@ -135,7 +135,15 @@ export default function AdminNotificacoes() {
       const res = await fetch('/api/admin/notificacoes/enviar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clienteId, titulo, mensagem }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.erro || 'Falha no envio.');
-      setFeedback({ type: 'ok', text: `Notificação enviada para ${data.cliente?.nome ?? 'a cliente'}.` });
+      const push = data.push;
+      const pushTexto = push
+        ? push.enviadas > 0
+          ? ` Push entregue em ${push.enviadas} dispositivo(s).`
+          : push.falhas > 0
+            ? ` Atenção: push falhou (${push.erros?.[0] ?? 'ver logs'}).`
+            : ' Nenhum dispositivo com push ativado para esta cliente.'
+        : '';
+      setFeedback({ type: push?.falhas > 0 ? 'error' : 'ok', text: `Notificação enviada para ${data.cliente?.nome ?? 'a cliente'}.${pushTexto}` });
       setClienteId(''); setTitulo(''); setMensagem('');
       await carregar();
     } catch (e: any) { setFeedback({ type: 'error', text: e.message }); }

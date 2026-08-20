@@ -52,7 +52,16 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
 
-  await supabase.from("notificacao_logs").insert({
+  // IMPORTANTE: grava o log com o cliente de serviço (service_role), não com
+  // o cliente autenticado do admin. O cliente autenticado é sujeito às regras
+  // de segurança (RLS) da tabela notificacao_logs e, se a policy não liberar
+  // INSERT para o papel "authenticated", a gravação falha silenciosamente
+  // (o client do Supabase não lança exceção, só retorna { error } — que aqui
+  // nem era checado). Isso mascarava os logs de envio manual: a notificação
+  // e o push aconteciam normalmente, mas nada aparecia no histórico.
+  const serviceClient = createServiceSupabaseClient();
+
+  const { error: logError } = await serviceClient.from("notificacao_logs").insert({
     cliente_id: clienteId,
     notificacao_id: notificacao.id,
     tipo: "manual",
@@ -60,6 +69,7 @@ export async function POST(req: NextRequest) {
     corpo: notificacao.mensagem,
     status: "enviada",
   });
+  if (logError) console.error("Falha ao gravar log de notificação manual:", logError.message);
 
   await supabase.from("logs_alteracoes").insert({
     usuario: user.email ?? "admin",
@@ -73,7 +83,6 @@ export async function POST(req: NextRequest) {
   // escutando esse cliente_id) ver a notificação/Dynamic Island na hora.
   // Falha aqui não derruba o envio: a notificação já foi salva e vai
   // aparecer no próximo polling do sino de qualquer forma.
-  const serviceClient = createServiceSupabaseClient();
   try {
     await serviceClient.channel(canalNotificacoesCliente(clienteId)).send({
       type: "broadcast",
@@ -84,7 +93,8 @@ export async function POST(req: NextRequest) {
     console.error("Falha ao publicar notificação manual em tempo real:", erro);
   }
 
-  let push = { enviadas: 0, falhas: 0, removidas: 0 };
+  let push: { enviadas: number; falhas: number; removidas: number; erros?: string[] } = { enviadas: 0, falhas: 0, removidas: 0 };
+  let pushErroFatal: string | null = null;
   try {
     push = await enviarWebPushParaCliente(serviceClient, clienteId, {
       title: notificacao.titulo,
@@ -95,13 +105,16 @@ export async function POST(req: NextRequest) {
       tag: `notificacao-${notificacao.id}`,
       notificationId: notificacao.id,
     });
-  } catch (erro) {
+  } catch (erro: any) {
+    pushErroFatal = erro?.message ?? String(erro);
     console.error("Falha ao enviar Web Push manual:", erro);
   }
+  const pushStatus = push.enviadas > 0 ? "enviada" : (pushErroFatal ? "erro" : (push.removidas > 0 || push.falhas > 0 ? "falhou" : "sem_dispositivo"));
   await serviceClient.from("notificacao_logs").update({
     push_enviadas: push.enviadas,
     push_falhas: push.falhas,
-    push_status: push.enviadas > 0 ? "enviada" : "sem_dispositivo",
+    push_status: pushStatus,
+    erro_mensagem: pushErroFatal ?? push.erros?.join(" | ") ?? null,
   }).eq("notificacao_id", notificacao.id);
 
   return NextResponse.json({ notificacao, cliente: { id: cliente.id, nome: cliente.nome_completo }, push });

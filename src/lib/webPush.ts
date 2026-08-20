@@ -44,8 +44,9 @@ export async function enviarWebPush(
       } catch (error: any) {
         const status = Number(error?.statusCode ?? 0);
         if (status === 404 || status === 410) removiveis.push(subscription.endpoint);
-        console.warn("Falha no Web Push:", status || error?.message || error);
-        return { endpoint: subscription.endpoint, ok: false, status };
+        const detalhe = error?.body || error?.message || String(error);
+        console.warn("Falha no Web Push:", status || detalhe);
+        return { endpoint: subscription.endpoint, ok: false, status, erro: detalhe };
       }
     })
   );
@@ -62,13 +63,21 @@ export async function enviarWebPushParaCliente(
     .select("endpoint, p256dh, auth")
     .eq("cliente_id", clienteId);
   if (error) throw new Error(error.message);
-  if (!subscriptions?.length) return { enviadas: 0, falhas: 0, removidas: 0 };
+  if (!subscriptions?.length) return { enviadas: 0, falhas: 0, removidas: 0, erros: [] as string[] };
 
   const result = await enviarWebPush(subscriptions, payload);
   if (result.removiveis.length) {
     await serviceClient.from("web_push_subscriptions").delete().in("endpoint", result.removiveis);
   }
   const enviadas = result.resultados.filter((item: any) => item.status === "fulfilled" && item.value?.ok).length;
-  const falhas = result.resultados.filter((item: any) => item.status === "fulfilled" && !item.value?.ok).length + result.resultados.filter((item: any) => item.status === "rejected").length;
-  return { enviadas, falhas, removidas: result.removiveis.length };
+  const falhados = result.resultados.filter((item: any) => item.status === "fulfilled" && !item.value?.ok);
+  const rejeitados = result.resultados.filter((item: any) => item.status === "rejected");
+  const falhas = falhados.length + rejeitados.length;
+  // Junta as mensagens de erro reais (ex.: "VAPID key mismatch", "Unauthorized")
+  // pra elas aparecerem no log e a gente não precisar mais adivinhar a causa.
+  const erros = [
+    ...falhados.map((item: any) => `status ${item.value?.status ?? "?"}: ${item.value?.erro ?? "erro desconhecido"}`),
+    ...rejeitados.map((item: any) => String((item as any).reason?.message ?? (item as any).reason)),
+  ];
+  return { enviadas, falhas, removidas: result.removiveis.length, erros };
 }
