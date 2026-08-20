@@ -15,6 +15,7 @@ module.exports = {
         burgundy: {
           DEFAULT: "rgb(var(--color-burgundy) / <alpha-value>)",
           light: "rgb(var(--color-burgundy-light) / <alpha-value>)",
+          dark: "rgb(var(--color-burgundy-dark) / <alpha-value>)",
         },
         clay: "rgb(var(--color-clay) / <alpha-value>)",
         gold: "rgb(var(--color-gold) / <alpha-value>)",

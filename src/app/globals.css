@@ -16,6 +16,12 @@
   --color-rose: 173 104 107;
   --color-burgundy: 122 38 50;
   --color-burgundy-light: 150 49 63;
+  /* Tom fixo, propositalmente igual no claro e no escuro: usado em
+     overlays/tooltips (fundo escuro + texto claro por cima) que
+     precisam continuar legíveis nos dois temas. Sem essa variável a
+     classe `burgundy-dark` não existia no Tailwind e o fundo saía
+     transparente, deixando o texto cream invisível no modo claro. */
+  --color-burgundy-dark: 72 18 26;
   --color-clay: 61 42 44;
   --color-gold: 201 161 90;
   --color-alert: 220 38 38;

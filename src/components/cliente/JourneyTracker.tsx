@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Check, Calendar, FileSignature, HeartHandshake, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -55,6 +55,7 @@ export function JourneyTracker({
   ];
 
   const doneCount = steps.filter((s) => s.status === "done").length;
+  const totalSegmentos = steps.length - 1;
   const textos: Record<string, string> = {
     contratar: "Seu contrato foi iniciado. Agora, cada pagamento confirmado faz parte da sua evolução.",
     pagamento: percentualAtingido
@@ -70,7 +71,17 @@ export function JourneyTracker({
     cirurgia: agendada ? "Sua assinatura está confirmada. Em breve, a equipe definirá sua data de cirurgia." : "A cirurgia é a próxima conquista depois da assinatura dos termos.",
   };
   // Preenche até o meio do passo "current" pra dar sensação de progresso contínuo.
-  const fillPercent = Math.min(100, (doneCount / (steps.length - 1)) * 100 + (agendaLiberada && !agendada ? 12 : 0));
+  const fillPercent = Math.min(100, (doneCount / totalSegmentos) * 100 + (agendaLiberada && !agendada ? 12 : 0));
+
+  // Distribui esse progresso geral entre os segmentos individuais (um por
+  // trecho entre dois passos), pra cada pedaço da trilha encher na proporção
+  // certa — sem depender de posições fixas em % que desalinham em telas
+  // diferentes.
+  function preenchimentoDoSegmento(indice: number): number {
+    const fracaoGlobal = fillPercent / 100;
+    const fracaoDoSegmento = fracaoGlobal * totalSegmentos - indice;
+    return Math.min(100, Math.max(0, fracaoDoSegmento * 100));
+  }
 
   return (
     <div className="relative overflow-hidden rounded-[28px] border border-white/70 bg-gradient-to-br from-white via-blush/30 to-white p-5 shadow-card sm:p-6 dark:border-white/10 dark:bg-gradient-to-br dark:from-[#202225] dark:via-[#181a1d] dark:to-[#111315] dark:shadow-[0_24px_70px_-38px_rgba(0,0,0,0.92),0_1px_0_rgba(255,255,255,0.035)_inset]">
@@ -93,61 +104,69 @@ export function JourneyTracker({
         </span>
       </div>
 
-      <div className="relative flex px-1">
-        {/* Trilha */}
-        <div className="pointer-events-none absolute left-[12%] right-[12%] top-[19px] h-[2px]">
-          <div
-            className="h-full w-full rounded-full"
-            style={{
-              backgroundImage:
-                "repeating-linear-gradient(90deg, rgba(173,104,107,0.28) 0 6px, transparent 6px 12px)",
-            }}
-          />
-          <motion.div
-            className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-burgundy to-gold"
-            initial={{ width: 0 }}
-            animate={{ width: `${fillPercent}%` }}
-            transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
-          />
-        </div>
+      <div className="relative flex items-start justify-center">
+        {steps.map((step, indice) => (
+          <Fragment key={step.id}>
+            <button
+              type="button"
+              onClick={() => setEtapaAberta(step.id)}
+              aria-pressed={etapaAberta === step.id}
+              className="relative z-10 flex flex-none flex-col items-center gap-2 text-center outline-none"
+            >
+              <div
+                className={cn(
+                  "relative flex h-10 w-10 items-center justify-center rounded-full border-2 bg-white transition-all duration-300 active:scale-95 sm:h-11 sm:w-11 dark:bg-[#24272A]",
+                  step.status === "done" &&
+                    "border-burgundy bg-gradient-to-br from-burgundy to-burgundy-light text-cream shadow-[0_10px_22px_-10px_rgba(122,38,50,0.9)]",
+                  step.status === "current" &&
+                    "border-gold text-burgundy shadow-[0_0_0_5px_rgba(201,161,90,0.22)] dark:text-[#E8C979] dark:shadow-[0_0_0_5px_rgba(201,161,90,0.12)]",
+                  step.status === "upcoming" && "border-clay/15 text-clay/30 dark:border-white/10 dark:text-[#B8B0B3]/35",
+                  etapaAberta === step.id && "-translate-y-1 shadow-card"
+                )}
+              >
+                {step.status === "done" ? (
+                  <>
+                    <span className="absolute inset-1 rounded-full border border-gold/45" aria-hidden="true" />
+                    <Check className="relative h-5 w-5 stroke-[3]" aria-label="Etapa concluída" />
+                  </>
+                ) : (
+                  <step.icon className="h-4 w-4" />
+                )}
+              </div>
+              <span
+                className={cn(
+                  "w-16 text-[0.62rem] font-bold uppercase leading-tight tracking-wide text-clay/45 sm:w-20 dark:text-[#D9C8CB]/45",
+                  (step.status === "done" || step.status === "current") && "text-burgundy/85 dark:text-[#F0DDE0]/90"
+                )}
+              >
+                {step.label}
+              </span>
+            </button>
 
-        {steps.map((step) => (
-          <button
-            key={step.id}
-            type="button"
-            onClick={() => setEtapaAberta(step.id)}
-            aria-pressed={etapaAberta === step.id}
-            className="relative z-10 flex flex-1 flex-col items-center gap-2 text-center outline-none"
-          >
-            <div
-              className={cn(
-                "relative flex h-10 w-10 items-center justify-center rounded-full border-2 bg-white transition-all duration-300 active:scale-95 sm:h-11 sm:w-11 dark:bg-[#24272A]",
-                step.status === "done" &&
-                  "border-burgundy bg-gradient-to-br from-burgundy to-burgundy-light text-cream shadow-[0_10px_22px_-10px_rgba(122,38,50,0.9)]",
-                step.status === "current" &&
-                  "border-gold text-burgundy shadow-[0_0_0_5px_rgba(201,161,90,0.22)] dark:text-[#E8C979] dark:shadow-[0_0_0_5px_rgba(201,161,90,0.12)]",
-                step.status === "upcoming" && "border-clay/15 text-clay/30 dark:border-white/10 dark:text-[#B8B0B3]/35",
-                etapaAberta === step.id && "-translate-y-1 shadow-card"
-              )}
-            >
-              {step.status === "done" ? (
-                <>
-                  <span className="absolute inset-1 rounded-full border border-gold/45" aria-hidden="true" />
-                  <Check className="relative h-5 w-5 stroke-[3]" aria-label="Etapa concluída" />
-                </>
-              ) : (
-                <step.icon className="h-4 w-4" />
-              )}
-            </div>
-            <span
-              className={cn(
-                "max-w-[76px] text-[0.62rem] font-bold uppercase leading-tight tracking-wide text-clay/45 dark:text-[#D9C8CB]/45",
-                (step.status === "done" || step.status === "current") && "text-burgundy/85 dark:text-[#F0DDE0]/90"
-              )}
-            >
-              {step.label}
-            </span>
-          </button>
+            {/* Segmento da trilha entre este passo e o próximo. A altura
+                bate exatamente com a do círculo (h-10 / sm:h-11), então a
+                linha fica centralizada nele em qualquer largura de tela —
+                sem depender de posições fixas em px ou %. */}
+            {indice < steps.length - 1 && (
+              <div className="flex h-10 flex-1 items-center px-1 sm:h-11 sm:px-2">
+                <div className="relative h-[2px] w-full overflow-hidden rounded-full">
+                  <div
+                    className="absolute inset-0 rounded-full"
+                    style={{
+                      backgroundImage:
+                        "repeating-linear-gradient(90deg, rgba(173,104,107,0.28) 0 6px, transparent 6px 12px)",
+                    }}
+                  />
+                  <motion.div
+                    className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-burgundy to-gold"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${preenchimentoDoSegmento(indice)}%` }}
+                    transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1], delay: indice * 0.08 }}
+                  />
+                </div>
+              </div>
+            )}
+          </Fragment>
         ))}
       </div>
 
