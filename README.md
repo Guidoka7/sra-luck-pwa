@@ -94,3 +94,9 @@ A área da cliente agora pode pedir permissão para notificações do sistema e 
 Web Push exige contexto seguro. Para teste pela rede Wi-Fi usando `http://192.168.x.x:3000`, o site pode abrir normalmente, mas o navegador normalmente **não permite Push/Notificações do sistema nesse endereço HTTP**. Para receber notificações com o app fechado, use HTTPS ou um ambiente de desenvolvimento considerado seguro pelo navegador. No iPhone/iPad, o Web Push funciona para o app web instalado na Tela de Início (iOS/iPadOS 16.4+).
 
 A permissão é solicitada por um botão dentro da área da cliente. Depois de autorizada, a assinatura fica vinculada à cliente e ao dispositivo. Os envios manuais, automáticos de parcelas atrasadas e de previsão de liberação usam essa assinatura.
+
+## UI
+
+O painel administrativo e a área da cliente foram ajustados para uma apresentação mais compacta e organizada, com redução agressiva de espaçamentos e elementos visuais. O resumo **Orçamento das próximas liberações** foi removido da Agenda de Liberação.
+
+<!-- deploy trigger: 2026-08-20 -->
