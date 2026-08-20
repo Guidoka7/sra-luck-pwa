@@ -104,7 +104,7 @@ export function JourneyTracker({
         </span>
       </div>
 
-      <div className="relative flex items-start justify-center">
+      <div className="relative mx-auto flex max-w-sm items-start justify-center sm:max-w-md">
         {steps.map((step, indice) => (
           <Fragment key={step.id}>
             <button
