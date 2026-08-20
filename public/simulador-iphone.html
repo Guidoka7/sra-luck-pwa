@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#7A2632">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Sra. Luck">
+  <link rel="manifest" href="/simulador-iphone.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/sra-luck-192.png">
+  <title>Sra. Luck</title>
+  <style>
+    :root{color-scheme:light}
+    *{box-sizing:border-box}
+    html,body{margin:0;width:100%;min-height:100%;background:#fbf7f4;color:#3b1f24;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    body{min-height:100dvh;min-height:100svh;display:flex;align-items:center;justify-content:center;padding:max(18px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left))}
+    .card{width:min(460px,100%);border:1px solid rgba(122,38,50,.12);border-radius:28px;padding:26px;background:rgba(255,255,255,.96);box-shadow:0 20px 70px rgba(50,20,25,.14)}
+    .icon{width:58px;height:58px;border-radius:18px;display:flex;align-items:center;justify-content:center;background:#f3e7e8;color:#7A2632;font-size:26px;margin-bottom:18px}
+    .title{font-weight:800;font-size:22px;letter-spacing:-.025em}.text{font-size:14px;line-height:1.55;color:#755f63;margin-top:8px}
+    .actions{display:flex;gap:10px;margin-top:22px;flex-wrap:wrap}.btn{width:100%;border:0;border-radius:15px;padding:14px 16px;font-weight:800;font-size:14px;cursor:pointer;background:#7A2632;color:#fff;min-height:50px}.btn.secondary{background:#f3e7e8;color:#7A2632}.btn:disabled{opacity:.55;cursor:not-allowed}
+    .status{font-size:12px;line-height:1.5;color:#8a777b;margin-top:14px}.note{font-size:11px;line-height:1.45;color:#9b898d;margin-top:14px}.hidden{display:none!important}
+    .ios-steps{margin-top:18px;padding:14px;border-radius:16px;background:#f8eff0;font-size:13px;line-height:1.5;color:#684f54}.ios-steps b{color:#7A2632}
+    @media (display-mode: standalone){body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}}
+  </style>
+</head>
+<body>
+  <main id="onboarding" class="card" aria-live="polite">
+    <div class="icon">⌂</div>
+    <div id="title" class="title">Instale o aplicativo Sra. Luck</div>
+    <div id="text" class="text">Este acesso foi preparado para transformar a área da cliente em um aplicativo no celular, ocupando a tela sem a barra de endereço do navegador.</div>
+    <div id="iosSteps" class="ios-steps hidden"><b>iPhone/iPad:</b> toque em <b>Compartilhar</b> no Safari e depois em <b>Adicionar à Tela de Início</b>. Em seguida abra o ícone Sra. Luck pela tela inicial.</div>
+    <div class="actions">
+      <button id="primary" class="btn" type="button">Ativar notificações e instalar</button>
+      <button id="continue" class="btn secondary" type="button">Continuar no navegador</button>
+    </div>
+    <div id="status" class="status"></div>
+    <div id="note" class="note">O navegador exige confirmação do usuário para notificações e instalação. A primeira interação nesta tela inicia as duas etapas quando o navegador permitir.</div>
+  </main>
+  <script>
+    (function () {
+      const SW = '/simulador-iphone-sw.js';
+      const VAPID = '/api/cliente/push/vapid';
+      const SUBSCRIBE = '/api/cliente/push/subscribe';
+      const PENDING = 'sra-luck-pending-push-subscription';
+      let deferredInstall = null;
+      let busy = false;
+      let installReady = false;
+      let notificationDone = false;
+      const $ = (id) => document.getElementById(id);
+      const primary = $('primary'), continueBtn = $('continue'), status = $('status'), title = $('title'), text = $('text'), note = $('note'), iosSteps = $('iosSteps');
+
+      function isStandalone() { return Boolean(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true; }
+      function isIOS() { return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
+      function isMobile() { return /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent); }
+      function base64ToUint8Array(base64) { const padding='='.repeat((4-(base64.length%4))%4); const raw=atob((base64+padding).replace(/-/g,'+').replace(/_/g,'/')); return Uint8Array.from(Array.from(raw).map(c=>c.charCodeAt(0))); }
+      function setStatus(t){status.textContent=t||'';}
+      function savePending(subscription){try{localStorage.setItem(PENDING,JSON.stringify(subscription.toJSON?subscription.toJSON():subscription));}catch(_){} }
+      async function registerSW(){if(!('serviceWorker' in navigator))return null; const reg=await navigator.serviceWorker.register(SW,{scope:'/'}); await navigator.serviceWorker.ready; return reg;}
+
+      async function activateNotifications(){
+        if(notificationDone) return true;
+        if(!('Notification' in window)||!('PushManager' in window)||!('serviceWorker' in navigator)){setStatus('Este navegador não oferece Web Push.');return false;}
+        if(!window.isSecureContext){setStatus('Para Push no celular, use HTTPS. localhost só é seguro no próprio aparelho que executa o servidor.');return false;}
+        try{
+          let permission=Notification.permission;
+          if(permission==='default') permission=await Notification.requestPermission();
+          if(permission!=='granted'){setStatus('Notificações não autorizadas. Elas podem ser ativadas depois.');return false;}
+          const reg=await navigator.serviceWorker.ready;
+          const keyRes=await fetch(VAPID,{cache:'no-store'}); if(!keyRes.ok) throw new Error('Servidor de notificações não configurado.');
+          const {publicKey}=await keyRes.json(); let subscription=await reg.pushManager.getSubscription();
+          if(!subscription) subscription=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:base64ToUint8Array(publicKey)});
+          savePending(subscription);
+          try{const response=await fetch(SUBSCRIBE,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({subscription:subscription.toJSON()})});if(response.ok)localStorage.removeItem(PENDING);}catch(_){ }
+          notificationDone=true; setStatus('✓ Notificações autorizadas neste celular.'); return true;
+        }catch(e){setStatus(e&&e.message?e.message:'Não foi possível ativar as notificações.');return false;}
+      }
+
+      function setupInstallEvents(){
+        if(isStandalone()) return;
+        window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e;installReady=true;primary.disabled=false;setStatus('Aplicativo pronto para instalação. Toque no botão para abrir o prompt nativo.');});
+        window.addEventListener('appinstalled',()=>{deferredInstall=null;installReady=false;setStatus('✓ Aplicativo instalado. Abra o ícone Sra. Luck na tela inicial para entrar em tela de aplicativo.');setTimeout(go,500);});
+      }
+
+      async function installPWA(){
+        if(isStandalone()) return true;
+        if(isIOS()){
+          title.textContent='Adicione a Sra. Luck à Tela de Início';
+          text.textContent='No iPhone/iPad, a Apple não permite que uma página aceite sozinha a instalação. Use o menu Compartilhar do Safari e adicione o app à Tela de Início.';
+          iosSteps.classList.remove('hidden'); note.textContent='Depois de abrir pelo ícone da Tela de Início, a Sra. Luck funciona em modo de aplicativo, sem a barra de endereço.';
+          setStatus('Faça a confirmação no menu do Safari.'); return false;
+        }
+        if(!deferredInstall){setStatus('O navegador ainda não disponibilizou o prompt nativo. Verifique se está em HTTPS/localhost e se o navegador permite instalação de PWA.');return false;}
+        try{await deferredInstall.prompt();const choice=await deferredInstall.userChoice;deferredInstall=null;installReady=false;if(choice.outcome==='accepted'){setStatus('✓ Instalação confirmada.');return true;}setStatus('Instalação cancelada.');return false;}catch(_){setStatus('O navegador não conseguiu abrir o prompt de instalação.');return false;}
+      }
+      function go(){window.location.replace('/agenda');}
+
+      async function primaryAction(){
+        if(busy)return; busy=true; primary.disabled=true;
+        try{
+          await activateNotifications();
+          await installPWA();
+        }finally{primary.disabled=false;busy=false;}
+      }
+
+      function start(){
+        if(isStandalone()){go();return;}
+        setupInstallEvents(); registerSW().catch(()=>{});
+        if(!isMobile()) { title.textContent='Abra pelo celular para instalar'; text.textContent='Esta entrada foi feita para o celular. No computador, continue pelo sistema normalmente.'; }
+        if(isIOS()){primary.textContent='Como instalar no iPhone';iosSteps.classList.remove('hidden');}
+        continueBtn.onclick=go; primary.onclick=primaryAction;
+        // A primeira interação do usuário pode iniciar imediatamente as permissões.
+        // Isso não tenta burlar as proteções do navegador: Notification.requestPermission
+        // e beforeinstallprompt só são aceitos quando a plataforma permite o gesto.
+        const firstInteraction=()=>{document.removeEventListener('pointerdown',firstInteraction);if(!busy)primaryAction();};
+        document.addEventListener('pointerdown',firstInteraction,{once:true,passive:true});
+      }
+      start();
+    })();
+  </script>
+</body>
+</html>
