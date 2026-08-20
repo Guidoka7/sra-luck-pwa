@@ -100,6 +100,12 @@ html:not(.dark) .admin-shell [class~="text-black"] {
   color: rgb(var(--text-main)) !important;
 }
 
+/* text-clay é usado como foreground explícito nos logs e componentes legados.
+   No claro ele nunca pode herdar uma cor de foreground do dark. */
+html:not(.dark) .admin-shell [class~="text-clay"] {
+  color: rgb(var(--text-main)) !important;
+}
+
 /* Botões/superfícies burgundy ativas continuam com texto claro. */
 html:not(.dark) .admin-shell [class~="bg-burgundy"].text-pearl,
 html:not(.dark) .admin-shell [class~="bg-burgundy"].text-white,
