@@ -84,14 +84,14 @@ export function JourneyTracker({
   }
 
   return (
-    <div className="relative overflow-hidden rounded-[28px] border border-white/70 bg-gradient-to-br from-white via-blush/30 to-white p-5 shadow-card sm:p-6 dark:border-white/10 dark:bg-gradient-to-br dark:from-[#202225] dark:via-[#181a1d] dark:to-[#111315] dark:shadow-[0_24px_70px_-38px_rgba(0,0,0,0.92),0_1px_0_rgba(255,255,255,0.035)_inset]">
+    <div className="relative overflow-hidden rounded-2xl border border-white/70 bg-gradient-to-br from-white via-blush/30 to-white p-3.5 shadow-card sm:p-4 dark:border-white/10 dark:bg-gradient-to-br dark:from-[#202225] dark:via-[#181a1d] dark:to-[#111315] dark:shadow-[0_24px_70px_-38px_rgba(0,0,0,0.92),0_1px_0_rgba(255,255,255,0.035)_inset]">
       <div className="pointer-events-none absolute -right-14 -top-14 h-40 w-40 rounded-full bg-gold/10 blur-2xl" />
 
-      <div className="relative mb-5 flex items-baseline justify-between gap-3">
-        <h2 className="font-heading text-sm font-semibold text-burgundy sm:text-base dark:text-[#F4D9DC]">
+      <div className="relative mb-3 flex items-baseline justify-between gap-3">
+        <h2 className="font-heading text-[0.8rem] font-semibold text-burgundy sm:text-sm dark:text-[#F4D9DC]">
           Sua jornada até a cirurgia
         </h2>
-        <span className="text-[0.68rem] font-semibold uppercase tracking-label text-clay/40 dark:text-[#D9C8CB]/55">
+        <span className="text-[0.6rem] font-semibold uppercase tracking-label text-clay/40 dark:text-[#D9C8CB]/55">
           {agendada
             ? "Concluída"
             : agendaLiberada
@@ -111,31 +111,31 @@ export function JourneyTracker({
               type="button"
               onClick={() => setEtapaAberta(step.id)}
               aria-pressed={etapaAberta === step.id}
-              className="relative z-10 flex flex-none flex-col items-center gap-2 text-center outline-none"
+              className="relative z-10 flex flex-none flex-col items-center gap-1 text-center outline-none"
             >
               <div
                 className={cn(
-                  "relative flex h-10 w-10 items-center justify-center rounded-full border-2 bg-white transition-all duration-300 active:scale-95 sm:h-11 sm:w-11 dark:bg-[#24272A]",
+                  "relative flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white transition-all duration-300 active:scale-95 sm:h-9 sm:w-9 dark:bg-[#24272A]",
                   step.status === "done" &&
                     "border-burgundy bg-gradient-to-br from-burgundy to-burgundy-light text-cream shadow-[0_10px_22px_-10px_rgba(122,38,50,0.9)]",
                   step.status === "current" &&
-                    "border-gold text-burgundy shadow-[0_0_0_5px_rgba(201,161,90,0.22)] dark:text-[#E8C979] dark:shadow-[0_0_0_5px_rgba(201,161,90,0.12)]",
+                    "border-gold text-burgundy shadow-[0_0_0_4px_rgba(201,161,90,0.22)] dark:text-[#E8C979] dark:shadow-[0_0_0_4px_rgba(201,161,90,0.12)]",
                   step.status === "upcoming" && "border-clay/15 text-clay/30 dark:border-white/10 dark:text-[#B8B0B3]/35",
-                  etapaAberta === step.id && "-translate-y-1 shadow-card"
+                  etapaAberta === step.id && "-translate-y-0.5 shadow-card"
                 )}
               >
                 {step.status === "done" ? (
                   <>
                     <span className="absolute inset-1 rounded-full border border-gold/45" aria-hidden="true" />
-                    <Check className="relative h-5 w-5 stroke-[3]" aria-label="Etapa concluída" />
+                    <Check className="relative h-4 w-4 stroke-[3]" aria-label="Etapa concluída" />
                   </>
                 ) : (
-                  <step.icon className="h-4 w-4" />
+                  <step.icon className="h-3.5 w-3.5" />
                 )}
               </div>
               <span
                 className={cn(
-                  "w-16 text-[0.62rem] font-bold uppercase leading-tight tracking-wide text-clay/45 sm:w-20 dark:text-[#D9C8CB]/45",
+                  "w-14 text-[0.56rem] font-bold uppercase leading-tight tracking-wide text-clay/45 sm:w-16 dark:text-[#D9C8CB]/45",
                   (step.status === "done" || step.status === "current") && "text-burgundy/85 dark:text-[#F0DDE0]/90"
                 )}
               >
@@ -144,11 +144,11 @@ export function JourneyTracker({
             </button>
 
             {/* Segmento da trilha entre este passo e o próximo. A altura
-                bate exatamente com a do círculo (h-10 / sm:h-11), então a
+                bate exatamente com a do círculo (h-8 / sm:h-9), então a
                 linha fica centralizada nele em qualquer largura de tela —
                 sem depender de posições fixas em px ou %. */}
             {indice < steps.length - 1 && (
-              <div className="flex h-10 flex-1 items-center px-1 sm:h-11 sm:px-2">
+              <div className="flex h-8 flex-1 items-center px-1 sm:h-9">
                 <div className="relative h-[2px] w-full overflow-hidden rounded-full">
                   <div
                     className="absolute inset-0 rounded-full"
@@ -176,7 +176,7 @@ export function JourneyTracker({
           initial={{ opacity: 0, y: 5 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -5 }}
-          className="relative mt-5 rounded-2xl bg-bloom/70 px-4 py-3 text-center text-xs leading-relaxed text-clay/65 dark:border dark:border-white/[0.06] dark:bg-white/[0.045] dark:text-[#D8D0D2]/70"
+          className="relative mt-3 rounded-xl bg-bloom/70 px-3.5 py-2.5 text-center text-[0.72rem] leading-relaxed text-clay/65 dark:border dark:border-white/[0.06] dark:bg-white/[0.045] dark:text-[#D8D0D2]/70"
         >
           {textos[etapaAberta]}
         </motion.p>

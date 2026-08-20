@@ -238,7 +238,7 @@ export default function AgendaClientePage() {
   }
 
   return (
-    <main className="client-app min-h-[100dvh] bg-bloom px-4 pb-[max(env(safe-area-inset-bottom),1rem)] pt-[max(env(safe-area-inset-top),1rem)] sm:px-6 sm:pt-12 sm:pb-12">
+    <main className="client-app min-h-[100dvh] bg-bloom px-4 pb-[max(env(safe-area-inset-bottom),1rem)] pt-[max(env(safe-area-inset-top),0.75rem)] sm:px-6 sm:pt-6 sm:pb-8">
       {celebrando && (
         <CelebracaoData
           data={celebrando}
@@ -251,26 +251,26 @@ export default function AgendaClientePage() {
       )}
 
       <div className="mobile-app-frame mx-auto max-w-2xl">
-        <header className="mb-8 flex items-center justify-between sm:mb-10">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 flex-none items-center justify-center rounded-[20px] border border-white/70 bg-white/85 shadow-card dark:border-white/10 dark:bg-white/[0.055]">
-              <LogoMark className="h-7 w-7" />
+        <header className="mb-4 flex items-center justify-between sm:mb-5">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 flex-none items-center justify-center rounded-2xl border border-white/70 bg-white/85 shadow-card dark:border-white/10 dark:bg-white/[0.055]">
+              <LogoMark className="h-5.5 w-5.5" />
             </div>
             <div>
-              <p className="text-[0.65rem] uppercase tracking-label text-rose">Bem-vinda,</p>
-              <h1 className="font-heading text-xl font-semibold leading-tight text-burgundy sm:text-2xl">
+              <p className="text-[0.58rem] uppercase tracking-label text-rose">Bem-vinda,</p>
+              <h1 className="font-heading text-base font-semibold leading-tight text-burgundy sm:text-lg">
                 {primeiroNome(nome)}
               </h1>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <ThemeToggle compact />
             <CentralNotificacoes onAbrirAgenda={() => setAba("cirurgia")} refreshSignal={notificacaoTick} />
             <button
               onClick={sair}
-              className="flex items-center gap-1.5 rounded-full px-3 py-2 text-xs uppercase tracking-label text-clay/40 transition-all duration-200 hover:bg-white/60 hover:text-burgundy dark:hover:bg-white/10"
+              className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[0.68rem] uppercase tracking-label text-clay/40 transition-all duration-200 hover:bg-white/60 hover:text-burgundy dark:hover:bg-white/10"
             >
-              <LogOut className="h-3.5 w-3.5" /> Sair
+              <LogOut className="h-3 w-3" /> Sair
             </button>
           </div>
         </header>
@@ -279,7 +279,7 @@ export default function AgendaClientePage() {
         <AtivarNotificacoesPush />
 
         {/* Jornada visual */}
-        <div className="mb-6">
+        <div className="mb-4">
           <JourneyTracker
             percentualPagamento={porcentagemPagamento ?? 0}
             percentualAtingido={podeAgendar}
@@ -289,10 +289,10 @@ export default function AgendaClientePage() {
         </div>
 
         {/* Abas em formato pílula */}
-        <div className="mx-auto mb-6 flex w-full max-w-md gap-1 rounded-full bg-blush/70 p-1.5 dark:bg-white/[0.06]">
+        <div className="mx-auto mb-4 flex w-full max-w-md gap-1 rounded-full bg-blush/70 p-1 dark:bg-white/[0.06]">
           <button
             onClick={() => setAba("cirurgia")}
-            className={`flex-1 rounded-full px-4 py-2.5 text-xs font-bold uppercase tracking-label transition-all duration-200 ${
+            className={`flex-1 rounded-full px-3 py-2 text-[0.68rem] font-bold uppercase tracking-label transition-all duration-200 ${
               aba === "cirurgia"
                 ? "bg-burgundy text-cream shadow-card"
                 : "text-burgundy/60 hover:text-burgundy dark:text-pearl/55 dark:hover:text-pearl"
@@ -302,7 +302,7 @@ export default function AgendaClientePage() {
           </button>
           <button
             onClick={() => setAba("boletos")}
-            className={`flex-1 rounded-full px-4 py-2.5 text-xs font-bold uppercase tracking-label transition-all duration-200 ${
+            className={`flex-1 rounded-full px-3 py-2 text-[0.68rem] font-bold uppercase tracking-label transition-all duration-200 ${
               aba === "boletos"
                 ? "bg-burgundy text-cream shadow-card"
                 : "text-burgundy/60 hover:text-burgundy dark:text-pearl/55 dark:hover:text-pearl"
@@ -318,7 +318,7 @@ export default function AgendaClientePage() {
 
         {aba === "cirurgia" &&
           (agendamentoAtivo ? (
-            <div className="flex flex-col gap-5 animate-fadeUp">
+            <div className="flex flex-col gap-4 animate-fadeUp">
               <CardPrevisaoLiberacao
                 previsaoLiberacaoFinanceira={agendamentoAtivo.previsaoLiberacaoFinanceira}
                 dataAssinatura={agendamentoAtivo.data}
@@ -326,7 +326,7 @@ export default function AgendaClientePage() {
               />
             </div>
           ) : (
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-4">
               {statusRevisao === "pendente" && (
                 <motion.div
                   initial={{ opacity: 0, y: 12 }}
@@ -380,7 +380,7 @@ export default function AgendaClientePage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
               >
-                <Card className="p-4 sm:p-6">
+                <Card className="p-3.5 sm:p-4">
                   {datas.length === 0 ? (
                     <p className="p-6 text-center text-sm text-clay/50">
                       Ainda não há datas disponíveis no momento. Fale com a
