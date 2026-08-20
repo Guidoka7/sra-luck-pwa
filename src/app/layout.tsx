@@ -61,9 +61,10 @@ export default function RootLayout({
       className={`${display.variable} ${sans.variable} ${script.variable} ${heading.variable}`}
     >
       <head>
+        <meta name="mobile-web-app-capable" content="yes" />
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var s=localStorage.getItem("sra-luck-theme");var d=s==="dark";document.documentElement.classList.toggle("dark",d);document.documentElement.style.colorScheme=d?"dark":"light"}catch(e){}})()`,
+            __html: `(function(){try{var s=localStorage.getItem("sra-luck-theme");document.documentElement.classList.toggle("dark",s==="dark")}catch(e){}})()`,
           }}
         />
       </head>
