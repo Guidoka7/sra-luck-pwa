@@ -1,0 +1,94 @@
+/* SRA LUCK — LIGHT THEME CONTRAST PASS
+   Reforça somente a legibilidade do modo claro no painel administrativo.
+   O modo escuro não é afetado. Layout, dados, APIs e interações permanecem iguais.
+*/
+
+html:not(.dark) .admin-shell .text-clay\/78,
+html:not(.dark) .admin-shell .text-clay\/60 {
+  color: rgb(var(--color-clay) / 0.86) !important;
+}
+
+html:not(.dark) .admin-shell .text-clay\/55,
+html:not(.dark) .admin-shell .text-clay\/50,
+html:not(.dark) .admin-shell .text-clay\/45 {
+  color: rgb(var(--color-clay) / 0.76) !important;
+}
+
+html:not(.dark) .admin-shell .text-clay\/40,
+html:not(.dark) .admin-shell .text-clay\/35 {
+  color: rgb(var(--color-clay) / 0.66) !important;
+}
+
+html:not(.dark) .admin-shell .text-burgundy\/78,
+html:not(.dark) .admin-shell .text-burgundy\/60,
+html:not(.dark) .admin-shell .text-burgundy\/55 {
+  color: rgb(var(--color-burgundy) / 0.90) !important;
+}
+
+html:not(.dark) .admin-shell .text-burgundy\/45,
+html:not(.dark) .admin-shell .text-burgundy\/40,
+html:not(.dark) .admin-shell .text-burgundy\/38 {
+  color: rgb(var(--color-burgundy) / 0.74) !important;
+}
+
+/* Pearl is intentionally a dark-mode foreground. If it appears in a
+   non-dark admin surface with opacity, it must become a readable clay tone. */
+html:not(.dark) .admin-shell .text-pearl\/80,
+html:not(.dark) .admin-shell .text-pearl\/75,
+html:not(.dark) .admin-shell .text-pearl\/72,
+html:not(.dark) .admin-shell .text-pearl\/70,
+html:not(.dark) .admin-shell .text-pearl\/65,
+html:not(.dark) .admin-shell .text-pearl\/60,
+html:not(.dark) .admin-shell .text-pearl\/55,
+html:not(.dark) .admin-shell .text-pearl\/50 {
+  color: rgb(var(--color-clay) / 0.80) !important;
+}
+
+html:not(.dark) .admin-shell .text-pearl\/45,
+html:not(.dark) .admin-shell .text-pearl\/40,
+html:not(.dark) .admin-shell .text-pearl\/35,
+html:not(.dark) .admin-shell .text-pearl\/30 {
+  color: rgb(var(--color-clay) / 0.68) !important;
+}
+
+/* Neutral white text with opacity is also unreadable on the light cards. */
+html:not(.dark) .admin-shell .text-white\/80,
+html:not(.dark) .admin-shell .text-white\/70,
+html:not(.dark) .admin-shell .text-white\/60,
+html:not(.dark) .admin-shell .text-white\/55,
+html:not(.dark) .admin-shell .text-white\/50,
+html:not(.dark) .admin-shell .text-white\/45,
+html:not(.dark) .admin-shell .text-white\/40 {
+  color: rgb(var(--color-clay) / 0.78) !important;
+}
+
+/* Common light-mode utility combinations used by the admin cards. */
+html:not(.dark) .admin-shell [class~="text-gray-500"],
+html:not(.dark) .admin-shell [class~="text-gray-400"],
+html:not(.dark) .admin-shell [class~="text-slate-500"],
+html:not(.dark) .admin-shell [class~="text-slate-400"],
+html:not(.dark) .admin-shell [class~="text-zinc-500"],
+html:not(.dark) .admin-shell [class~="text-zinc-400"] {
+  color: rgb(var(--color-clay) / 0.76) !important;
+}
+
+/* Section headings and primary labels must remain visibly anchored to the brand. */
+html:not(.dark) .admin-shell h1,
+html:not(.dark) .admin-shell h2,
+html:not(.dark) .admin-shell h3 {
+  color: rgb(var(--color-burgundy));
+}
+
+/* Do not recolor semantic states (success/error/warning) or active burgundy buttons. */
+html:not(.dark) .admin-shell .text-success,
+html:not(.dark) .admin-shell .text-alert,
+html:not(.dark) .admin-shell [class*="text-emerald-"],
+html:not(.dark) .admin-shell [class*="text-red-"] {
+  color: revert-layer;
+}
+
+html.dark .admin-shell h1,
+html.dark .admin-shell h2,
+html.dark .admin-shell h3 {
+  color: revert-layer;
+}
