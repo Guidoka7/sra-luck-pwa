@@ -1,0 +1,178 @@
+/* SRA LUCK — correções de estabilidade visual para PWA/mobile.
+   Este arquivo não muda a identidade visual; apenas impede overflow,
+   encolhimento incorreto e controles difíceis de usar em Android/iPhone. */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Admin: superfície previsível no modo claro e sem vazamento horizontal. */
+.admin-shell {
+  width: 100%;
+  min-width: 0;
+  overflow-x: clip;
+  color: rgb(var(--text-main));
+}
+
+.admin-shell main {
+  min-width: 0;
+  width: 100%;
+}
+
+.admin-shell input,
+.admin-shell textarea,
+.admin-shell select {
+  color: rgb(var(--text-main));
+  color-scheme: light;
+}
+
+html.dark .admin-shell input,
+html.dark .admin-shell textarea,
+html.dark .admin-shell select {
+  color-scheme: dark;
+}
+
+/* Cliente: nunca permitir que um card largo force a viewport a crescer. */
+.client-app {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.client-app > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.client-app .mobile-app-frame,
+.client-app main,
+.client-app section,
+.client-app article,
+.client-app header,
+.client-app nav {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Calendário: células não podem crescer por causa de texto/ícones. */
+.client-app button {
+  min-width: 0;
+}
+
+@media (max-width: 639px) {
+  .admin-shell {
+    overflow-x: hidden;
+  }
+
+  .admin-shell main {
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+  }
+
+  .admin-shell .overflow-x-auto {
+    max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .client-app {
+    min-height: 100svh;
+    min-height: 100dvh;
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+  }
+
+  .client-app .mobile-app-frame {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .client-app .grid-cols-7 {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .client-app .grid-cols-7 > * {
+    min-width: 0;
+  }
+
+  .client-app .aspect-square {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .client-app input,
+  .client-app select,
+  .client-app textarea {
+    font-size: 16px;
+  }
+
+  /* Evita que cabeçalhos flexíveis estourem em Android estreito. */
+  .client-app .flex > .min-w-0,
+  .admin-shell .flex > .min-w-0 {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 380px) {
+  .admin-shell main {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .client-app .grid-cols-3 {
+    gap: 0.375rem;
+  }
+
+  .client-app .grid-cols-7 {
+    gap: 0.25rem;
+  }
+
+  .client-app .grid-cols-7 > button {
+    border-radius: 0.875rem;
+    font-size: 0.8125rem;
+  }
+}
+
+/* PWA standalone: respeita notch/Dynamic Island e barra de gestos em ambos
+   os sistemas sem depender de regras específicas de iOS. */
+@media (display-mode: standalone) {
+  body {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* O navegador Android pode manter uma preferência de contraste/cores. O
+   produto controla explicitamente light/dark pelo <html>, evitando que a
+   aparência do sistema altere cards e campos inesperadamente. */
+html:not(.dark) {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
