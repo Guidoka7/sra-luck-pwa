@@ -21,6 +21,26 @@ function isIOS() {
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
+function registrarInstalacao() {
+  try {
+    const deviceKey = localStorage.getItem("sra-luck-device-key");
+    if (!deviceKey) return;
+    void fetch("/api/cliente/app-telemetry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        deviceKey,
+        deviceType: window.innerWidth < 768 ? "mobile" : window.innerWidth < 1024 ? "tablet" : "desktop",
+        displayMode: "standalone",
+        isPwaInstalled: true,
+        notificationPermission: "Notification" in window ? Notification.permission : "default",
+        pushActive: false,
+      }),
+      keepalive: true,
+    });
+  } catch {}
+}
+
 export function PwaInstallPrompt() {
   const [evento, setEvento] = useState<BeforeInstallPromptEvent | null>(null);
   const [visivel, setVisivel] = useState(false);
@@ -39,21 +59,25 @@ export function PwaInstallPrompt() {
       setVisivel(true);
     };
 
-    window.addEventListener("beforeinstallprompt", onBeforeInstall);
-    window.addEventListener("appinstalled", () => {
+    const onInstalled = () => {
       setEvento(null);
       setVisivel(false);
+      registrarInstalacao();
       toast.success("Aplicativo instalado. Agora ele abre como um app.");
-    });
+    };
 
-    // No iPhone/iPad o Safari não expõe beforeinstallprompt. Ainda assim,
-    // mostramos o passo correto assim que a cliente entra na aplicação.
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    window.addEventListener("appinstalled", onInstalled);
+
     if (iosDevice) {
       const dispensado = sessionStorage.getItem("sra-luck-pwa-install-dismissed");
       if (!dispensado) setVisivel(true);
     }
 
-    return () => window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
   }, []);
 
   async function instalar() {
@@ -88,34 +112,16 @@ export function PwaInstallPrompt() {
   return (
     <div className="mb-4 rounded-2xl border border-burgundy/10 bg-white/90 p-4 shadow-card backdrop-blur-sm dark:border-white/10 dark:bg-white/[0.055]">
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blush text-burgundy dark:bg-white/10 dark:text-[#F4D9DC]">
-          <Smartphone className="h-5 w-5" />
-        </div>
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blush text-burgundy dark:bg-white/10 dark:text-[#F4D9DC]"><Smartphone className="h-5 w-5" /></div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-burgundy dark:text-pearl">Instale o aplicativo Sra. Luck</p>
-          <p className="mt-0.5 text-xs leading-relaxed text-clay/60 dark:text-pearl/55">
-            {ios
-              ? "No iPhone, use Compartilhar → Adicionar à Tela de Início para abrir como aplicativo."
-              : "Instale no celular para abrir em tela cheia, como um aplicativo normal."}
-          </p>
-          <button
-            type="button"
-            onClick={instalar}
-            disabled={instalando || (!ios && !evento)}
-            className="mt-3 inline-flex items-center gap-2 rounded-xl bg-burgundy px-3.5 py-2 text-xs font-semibold text-pearl disabled:opacity-60"
-          >
+          <p className="mt-0.5 text-xs leading-relaxed text-clay/60 dark:text-pearl/55">{ios ? "No iPhone, use Compartilhar → Adicionar à Tela de Início para abrir como aplicativo." : "Instale no celular para abrir em tela cheia, como um aplicativo normal."}</p>
+          <button type="button" onClick={instalar} disabled={instalando || (!ios && !evento)} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-burgundy px-3.5 py-2 text-xs font-semibold text-pearl disabled:opacity-60">
             {instalando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             {ios ? "Como instalar no iPhone" : instalando ? "Abrindo instalação..." : "Instalar aplicativo"}
           </button>
         </div>
-        <button
-          type="button"
-          aria-label="Dispensar instalação"
-          onClick={dispensar}
-          className="flex h-8 w-8 items-center justify-center rounded-full text-clay/40 hover:bg-blush dark:hover:bg-white/10"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <button type="button" aria-label="Dispensar instalação" onClick={dispensar} className="flex h-8 w-8 items-center justify-center rounded-full text-clay/40 hover:bg-blush dark:hover:bg-white/10"><X className="h-4 w-4" /></button>
       </div>
     </div>
   );
