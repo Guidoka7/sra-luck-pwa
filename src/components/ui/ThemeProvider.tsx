@@ -17,12 +17,12 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("light");
 
-  // A preferência vale durante a sessão atual, inclusive ao trocar de rota.
-  // Uma nova sessão começa em modo claro, como definido pelo produto.
+  // Modo claro é o padrão. Quando a cliente/admin escolhe um tema,
+  // a preferência fica persistida entre rotas, recarregamentos e sessões.
   useEffect(() => {
     let next: Theme = "light";
     try {
-      const saved = sessionStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(STORAGE_KEY);
       if (saved === "dark" || saved === "light") next = saved;
     } catch {}
 
@@ -36,7 +36,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.classList.toggle("dark", next === "dark");
     document.documentElement.style.colorScheme = next;
     try {
-      sessionStorage.setItem(STORAGE_KEY, next);
+      localStorage.setItem(STORAGE_KEY, next);
     } catch {}
   }
 
