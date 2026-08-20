@@ -7,6 +7,7 @@ import "./light-theme-fixes.css";
 import { ThemeProvider } from "@/components/ui/ThemeProvider";
 import { PwaRegister } from "@/components/ui/PwaRegister";
 import { DeviceRuntime } from "@/components/ui/DeviceRuntime";
+import { AppTelemetry } from "@/components/cliente/AppTelemetry";
 
 const display = Fraunces({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-display" });
 const sans = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-sans" });
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <DeviceRuntime />
           <PwaRegister />
+          <AppTelemetry />
           {children}
           <Toaster position="top-center" richColors closeButton />
         </ThemeProvider>
