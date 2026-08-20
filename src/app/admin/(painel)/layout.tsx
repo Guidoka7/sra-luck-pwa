@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CalendarRange, Cog, LayoutDashboard, LineChart, LogOut, Menu, Receipt, Bell, Users, X } from "lucide-react";
+import { CalendarRange, Cog, LayoutDashboard, LineChart, LogOut, Menu, Receipt, Users, X } from "lucide-react";
 import { createClientSupabaseClient } from "@/lib/supabase/client";
 import { LogoMark, Wordmark } from "@/components/ui/Logo";
 import { cn } from "@/lib/utils";
@@ -17,7 +17,6 @@ const NAV = [
   { href: "/admin/clientes", label: "Clientes", icon: Users, group: "Operação" },
   { href: "/admin/pagamentos", label: "Pagamentos", icon: Receipt, group: "Gestão" },
   { href: "/admin/relatorios", label: "Relatórios", icon: LineChart, group: "Gestão" },
-  { href: "/admin/notificacoes", label: "Notificações", icon: Bell, group: "Gestão" },
   { href: "/admin/configuracoes", label: "Configurações", icon: Cog, group: "Gestão" },
 ];
 
@@ -25,7 +24,6 @@ const API_PREFETCH: Record<string, string> = {
   "/admin/visao-geral": "/api/admin/visao-geral",
   "/admin/clientes": "/api/admin/clientes",
   "/admin/pagamentos": "/api/admin/boletos?",
-  "/admin/notificacoes": "/api/admin/notificacoes/automacao",
   "/admin/configuracoes": "/api/admin/configuracoes",
 };
 
@@ -46,28 +44,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [menuAberto, setMenuAberto] = useState(false);
 
   useEffect(() => setMenuAberto(false), [pathname]);
-
   useEffect(() => {
     let cancelado = false;
-    const iniciar = () => {
-      if (cancelado) return;
-      NAV.forEach((item, index) => window.setTimeout(() => { if (!cancelado) prefetchAdminTab(router, item.href); }, index * 180));
-    };
+    const iniciar = () => { if (cancelado) return; NAV.forEach((item, index) => window.setTimeout(() => { if (!cancelado) prefetchAdminTab(router, item.href); }, index * 180)); };
     const usaIdleCallback = typeof window.requestIdleCallback === "function";
     const idle = usaIdleCallback ? window.requestIdleCallback(iniciar, { timeout: 1800 }) : window.setTimeout(iniciar, 900);
-    return () => {
-      cancelado = true;
-      if (usaIdleCallback) window.cancelIdleCallback?.(idle as number);
-      else window.clearTimeout(idle as number);
-    };
+    return () => { cancelado = true; if (usaIdleCallback) window.cancelIdleCallback?.(idle as number); else window.clearTimeout(idle as number); };
   }, [router]);
 
-  async function sair() {
-    const supabase = createClientSupabaseClient();
-    await supabase.auth.signOut();
-    router.push("/admin/login");
-    router.refresh();
-  }
+  async function sair() { const supabase = createClientSupabaseClient(); await supabase.auth.signOut(); router.push("/admin/login"); router.refresh(); }
 
   return (
     <div className="admin-shell admin-compact min-h-screen bg-bloom">
