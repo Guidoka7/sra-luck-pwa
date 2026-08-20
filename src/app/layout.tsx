@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
+import "./responsive-fixes.css";
 import { ThemeProvider } from "@/components/ui/ThemeProvider";
 import { PwaRegister } from "@/components/ui/PwaRegister";
 
@@ -33,10 +34,6 @@ const script = Fraunces({
 export const metadata: Metadata = {
   title: "Sra. Luck — Cirurgia Programada",
   description: "Agenda exclusiva de crédito programado.",
-  // Meta tags "apple-mobile-web-app-*" já deixadas prontas aqui: elas não
-  // fazem nada enquanto o site é acessado pelo Safari normal, mas são o
-  // que faz o app rodar em tela cheia (sem barra de endereço) assim que
-  // você adicionar o manifest.json e transformar isso numa PWA de verdade.
   manifest: "/simulador-iphone.webmanifest",
   appleWebApp: {
     capable: true,
@@ -45,14 +42,6 @@ export const metadata: Metadata = {
   },
 };
 
-// Sem isso, o navegador do celular renderiza a página em largura de
-// desktop (~980px) e depois encolhe tudo pra caber na tela — é por isso
-// que elementos ficam cortados e o scroll parece travado no mobile.
-//
-// "viewportFit: cover" é o que permite o conteúdo ocupar a tela toda
-// (inclusive atrás do notch/Dynamic Island e da barra de home indicator)
-// em vez de deixar faixas pretas nas bordas — é assim que um app de
-// verdade se comporta, e é obrigatório para quando isso virar PWA.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -74,7 +63,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{document.documentElement.classList.remove("dark");document.documentElement.style.colorScheme="light"}catch(e){}})()`,
+            __html: `(function(){try{var s=localStorage.getItem("sra-luck-theme");var d=s==="dark";document.documentElement.classList.toggle("dark",d);document.documentElement.style.colorScheme=d?"dark":"light"}catch(e){}})()`,
           }}
         />
       </head>
