@@ -90,18 +90,18 @@ export function CardPrevisaoLiberacao({
         >
           <Card
             className={cn(
-              "overflow-hidden p-6 transition-shadow duration-700 sm:p-8",
+              "overflow-hidden p-4 transition-shadow duration-700 sm:p-5",
               destacar && "ring-2 ring-gold shadow-[0_0_0_6px_rgba(201,161,90,0.18)]"
             )}
           >
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-rose">
-                <Icone className="h-4 w-4" />
-                <p className="text-[0.65rem] font-semibold uppercase tracking-label">{titulo}</p>
+                <Icone className="h-3.5 w-3.5" />
+                <p className="text-[0.6rem] font-semibold uppercase tracking-label">{titulo}</p>
               </div>
               <span
                 className={cn(
-                  "whitespace-nowrap rounded-full px-2.5 py-1 text-[0.6rem] font-bold uppercase tracking-label",
+                  "whitespace-nowrap rounded-full px-2 py-0.5 text-[0.56rem] font-bold uppercase tracking-label",
                   statusTom === "success" && "bg-success/10 text-success",
                   statusTom === "gold" && "bg-gold/18 text-burgundy"
                 )}
@@ -111,34 +111,34 @@ export function CardPrevisaoLiberacao({
             </div>
 
             {estado === "liberacao" && diaLib && mesLib && anoLib ? (
-              <div className="mt-5 flex flex-col items-center text-center">
-                <span className="font-heading text-6xl font-bold leading-none text-burgundy sm:text-7xl">
+              <div className="mt-3.5 flex flex-col items-center text-center">
+                <span className="font-heading text-4xl font-bold leading-none text-burgundy sm:text-5xl">
                   {String(diaLib).padStart(2, "0")}
                 </span>
-                <span className="mt-2 text-lg font-bold uppercase tracking-[0.18em] text-burgundy/80 sm:text-xl">
+                <span className="mt-1.5 text-sm font-bold uppercase tracking-[0.18em] text-burgundy/80">
                   {nomeMes(mesLib)}
                 </span>
-                <span className="text-sm font-medium text-clay/50">{anoLib}</span>
+                <span className="text-xs font-medium text-clay/50">{anoLib}</span>
 
-                <p className="mt-4 text-sm font-semibold text-burgundy">
+                <p className="mt-3 text-[0.8rem] font-semibold text-burgundy">
                   Previsão de liberação financeira
                 </p>
-                <p className="mt-1 max-w-sm text-xs leading-relaxed text-clay/55">
+                <p className="mt-1 max-w-sm text-[0.7rem] leading-relaxed text-clay/55">
                   Esta é a data de liberação financeira informada a você
                   presencialmente no momento da assinatura dos termos.
                 </p>
               </div>
             ) : (
-              <div className="mt-5 flex flex-col items-center gap-2 text-center">
-                <p className="text-sm font-semibold text-burgundy">
+              <div className="mt-3.5 flex flex-col items-center gap-1.5 text-center">
+                <p className="text-[0.8rem] font-semibold text-burgundy">
                   {formatarDataLonga(dataAssinatura)}
                 </p>
                 {estado === "agendada" ? (
-                  <p className="max-w-sm text-xs leading-relaxed text-clay/55">
+                  <p className="max-w-sm text-[0.7rem] leading-relaxed text-clay/55">
                     Compareça ao escritório para realizar a assinatura dos termos.
                   </p>
                 ) : (
-                  <p className="max-w-sm text-xs leading-relaxed text-clay/55">
+                  <p className="max-w-sm text-[0.7rem] leading-relaxed text-clay/55">
                     Assinatura realizada com sucesso. Em breve sua previsão de
                     liberação financeira será registrada aqui.
                   </p>
@@ -146,9 +146,9 @@ export function CardPrevisaoLiberacao({
               </div>
             )}
 
-            <div className="mt-5 flex items-start gap-2 rounded-2xl bg-blush/40 p-3.5">
+            <div className="mt-3.5 flex items-start gap-2 rounded-xl bg-blush/40 p-3">
               <Info className="mt-0.5 h-3.5 w-3.5 flex-none text-rose" />
-              <p className="text-[0.72rem] leading-relaxed text-clay/60">
+              <p className="text-[0.68rem] leading-relaxed text-clay/60">
                 A escolha do médico é de escolha da cliente. A Sra. Luck
                 realiza a liberação financeira conforme a previsão registrada.
               </p>

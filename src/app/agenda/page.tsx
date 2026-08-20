@@ -250,7 +250,7 @@ export default function AgendaClientePage() {
         />
       )}
 
-      <div className="mobile-app-frame mx-auto max-w-2xl">
+      <div className="mobile-app-frame mx-auto w-full max-w-2xl sm:max-w-none">
         <header className="mb-4 flex items-center justify-between sm:mb-5">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 flex-none items-center justify-center rounded-2xl border border-white/70 bg-white/85 shadow-card dark:border-white/10 dark:bg-white/[0.055]">

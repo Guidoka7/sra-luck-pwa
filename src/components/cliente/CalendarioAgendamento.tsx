@@ -111,13 +111,13 @@ export function CalendarioAgendamento({
     <div className="relative">
       <div className={bloqueado ? "pointer-events-none select-none blur-[2px]" : ""}>
       {/* Cabeçalho de navegação do mês */}
-      <div className="mb-5 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between">
         <button
           onClick={() => mudarMes(-1)}
           aria-label="Mês anterior"
-          className="flex h-9 w-9 items-center justify-center rounded-full text-burgundy/70 transition-all duration-200 hover:bg-blush hover:text-burgundy active:scale-90"
+          className="flex h-8 w-8 items-center justify-center rounded-full text-burgundy/70 transition-all duration-200 hover:bg-blush hover:text-burgundy active:scale-90"
         >
-          <ChevronLeft className="h-5 w-5" />
+          <ChevronLeft className="h-4 w-4" />
         </button>
 
         <AnimatePresence mode="wait">
@@ -127,7 +127,7 @@ export function CalendarioAgendamento({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: direcao === 1 ? -8 : 8 }}
             transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-            className="font-heading text-lg font-semibold capitalize text-burgundy"
+            className="font-heading text-sm font-semibold capitalize text-burgundy"
           >
             {format(mesAtual, "MMMM yyyy", { locale: ptBR })}
           </motion.h3>
@@ -136,16 +136,16 @@ export function CalendarioAgendamento({
         <button
           onClick={() => mudarMes(1)}
           aria-label="Próximo mês"
-          className="flex h-9 w-9 items-center justify-center rounded-full text-burgundy/70 transition-all duration-200 hover:bg-blush hover:text-burgundy active:scale-90"
+          className="flex h-8 w-8 items-center justify-center rounded-full text-burgundy/70 transition-all duration-200 hover:bg-blush hover:text-burgundy active:scale-90"
         >
-          <ChevronRight className="h-5 w-5" />
+          <ChevronRight className="h-4 w-4" />
         </button>
       </div>
 
       {/* Dias da semana */}
-      <div className="mb-2 grid grid-cols-7 text-center">
+      <div className="mb-1.5 grid grid-cols-7 text-center">
         {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((d) => (
-          <span key={d} className="text-[0.65rem] font-semibold uppercase tracking-label text-rose/80">
+          <span key={d} className="text-[0.58rem] font-semibold uppercase tracking-label text-rose/80">
             {d}
           </span>
         ))}
@@ -159,7 +159,7 @@ export function CalendarioAgendamento({
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: direcao === 1 ? -16 : 16 }}
           transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-          className="grid grid-cols-7 gap-1.5 sm:gap-2"
+          className="mx-auto grid max-w-[22rem] grid-cols-7 gap-1 sm:max-w-[24rem] sm:gap-1.5"
         >
           {dias.map((dia, i) => {
             const noMes = isSameMonth(dia, mesAtual);
@@ -176,7 +176,7 @@ export function CalendarioAgendamento({
                 title={estado === "lotado" ? "Agenda lotada" : undefined}
                 style={{ animationDelay: `${i * 8}ms` }}
                 className={cn(
-                  "group relative aspect-square animate-fadeIn rounded-2xl border text-sm transition-all duration-200",
+                  "group relative aspect-square animate-fadeIn rounded-xl border text-[0.78rem] transition-all duration-200",
                   !noMes && "opacity-0 pointer-events-none",
                   estado === "passado" && "border-transparent text-clay/20",
                   estado === "lotado" &&
@@ -191,7 +191,7 @@ export function CalendarioAgendamento({
                 <span
                   className={cn(
                     "flex h-full w-full flex-col items-center justify-center gap-0.5",
-                    ehHoje && !selecionado && "ring-2 ring-rose/60 ring-inset rounded-2xl"
+                    ehHoje && !selecionado && "ring-2 ring-rose/60 ring-inset rounded-xl"
                   )}
                 >
                   <span className={cn(ehHoje && !selecionado && "text-rose font-bold")}>
@@ -200,7 +200,7 @@ export function CalendarioAgendamento({
                 </span>
 
                 {estado === "lotado" && (
-                  <span className="pointer-events-none absolute -top-1.5 left-1/2 z-10 hidden -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md bg-burgundy-dark px-2 py-1 text-[0.65rem] font-medium normal-case text-cream shadow-soft group-hover:block">
+                  <span className="pointer-events-none absolute -top-1.5 left-1/2 z-10 hidden -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md bg-burgundy-dark px-2 py-1 text-[0.6rem] font-medium normal-case text-cream shadow-soft group-hover:block">
                     Agenda lotada
                   </span>
                 )}
@@ -211,15 +211,15 @@ export function CalendarioAgendamento({
       </AnimatePresence>
 
       {/* Legenda */}
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-rose/10 pt-5 text-[0.72rem] text-clay/60">
-        <span className="flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full border border-success/40 bg-success/15" /> Disponível
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 border-t border-rose/10 pt-4 text-[0.65rem] text-clay/60">
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full border border-success/40 bg-success/15" /> Disponível
         </span>
-        <span className="flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full bg-alert/40" /> Agenda lotada
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-alert/40" /> Agenda lotada
         </span>
-        <span className="flex items-center gap-2">
-          <span className="h-2.5 w-2.5 rounded-full ring-2 ring-rose/60" /> Hoje
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full ring-2 ring-rose/60" /> Hoje
         </span>
       </div>
 
@@ -233,16 +233,16 @@ export function CalendarioAgendamento({
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-            <div className="mt-8 border-t border-rose/10 pt-6">
-              <p className="mb-4 flex items-center justify-center gap-2 text-center text-sm text-clay/60">
-                <Clock3 className="h-4 w-4 text-rose" />
+            <div className="mt-5 border-t border-rose/10 pt-4">
+              <p className="mb-3 flex items-center justify-center gap-2 text-center text-xs text-clay/60">
+                <Clock3 className="h-3.5 w-3.5 text-rose" />
                 Horários disponíveis para assinatura dos termos em{" "}
                 <span className="font-heading font-semibold text-burgundy">
                   {format(parseDataLocal(diaSelecionado), "d 'de' MMMM", { locale: ptBR })}
                 </span>
               </p>
 
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
+              <div className="mx-auto grid max-w-sm grid-cols-3 gap-1.5 sm:grid-cols-4 sm:gap-2">
                 {HORARIOS.map((h, i) => {
                   const selecionado = h === horarioSelecionado;
                   return (
@@ -251,7 +251,7 @@ export function CalendarioAgendamento({
                       onClick={() => setHorarioSelecionado(h)}
                       style={{ animationDelay: `${i * 25}ms` }}
                       className={cn(
-                        "animate-fadeUp rounded-xl border px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                        "animate-fadeUp rounded-lg border px-2.5 py-2 text-xs font-medium transition-all duration-200",
                         selecionado
                           ? "border-burgundy bg-burgundy text-cream shadow-card"
                           : "border-rose/20 bg-white text-clay/70 hover:-translate-y-0.5 hover:border-rose hover:text-burgundy hover:shadow-sm"
@@ -270,9 +270,9 @@ export function CalendarioAgendamento({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 10 }}
                     transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                    className="mt-6 flex flex-col items-center gap-3 rounded-2xl bg-blush/50 p-5 text-center"
+                    className="mt-4 flex flex-col items-center gap-2.5 rounded-xl bg-blush/50 p-4 text-center"
                   >
-                    <p className="text-sm text-clay/70">
+                    <p className="text-xs text-clay/70">
                       Você selecionou{" "}
                       <span className="font-heading font-semibold text-burgundy">
                         {format(parseDataLocal(diaSelecionado), "d 'de' MMMM", { locale: ptBR })}
@@ -299,7 +299,7 @@ export function CalendarioAgendamento({
       </AnimatePresence>
 
       {datas.every((d) => d.vagasRestantes <= 0) && datas.length > 0 && (
-        <p className="mt-6 flex items-center justify-center gap-2 text-center text-xs text-clay/45">
+        <p className="mt-4 flex items-center justify-center gap-2 text-center text-xs text-clay/45">
           <Lock className="h-3.5 w-3.5" /> Todas as datas deste período estão com agenda lotada.
         </p>
       )}

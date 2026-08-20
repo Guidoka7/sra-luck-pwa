@@ -173,7 +173,9 @@ html.dark {
 }
 
 /* A tela de agenda se comporta como uma superfície de aplicativo no emulador.
-   Em telas maiores, a interface original mantém sua largura e espaçamento. */
+   Em telas maiores, o app fica dentro de um "cartão" de largura fixa —
+   como um app instalado — em vez de esticar os mesmos tamanhos pensados
+   para celular por toda a largura do monitor. */
 @media (max-width: 639px) {
   .mobile-app-frame {
     position: relative;
@@ -182,6 +184,22 @@ html.dark {
 
   .mobile-app-frame > * {
     position: relative;
+  }
+}
+
+@media (min-width: 640px) {
+  .client-app {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 3rem !important;
+    padding-bottom: 3rem !important;
+  }
+
+  .client-app .mobile-app-frame {
+    width: 100%;
+    max-width: 30rem; /* ~480px: largura de um app real, não de um site */
+    max-height: none;
   }
 }
 
