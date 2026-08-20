@@ -697,15 +697,7 @@ export function PrevisaoLiberacaoFinanceiraInteligente() {
             )}
           </Card>
 
-          <ResumoOrcamentoMensal
-            ano={ano}
-            mes={mes}
-            onSelecionarMes={(novoAno, novoMes) => {
-              setAno(novoAno);
-              setMes(novoMes);
-              setDataSelecionada(null);
-            }}
-          />
+          <ResumoOrcamentoMensal />
 
           {analise.cliente && (
             <div className="rounded-2xl border border-rose/10 bg-blush/20 p-4">
