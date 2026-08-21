@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 
 export async function GET() {
-  const supabase = createServerSupabaseClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const auth = createServerSupabaseClient();
+  const { data: { user } } = await auth.auth.getUser();
   if (!user) return NextResponse.json({ erro: "Não autenticado." }, { status: 401 });
 
   // A base é a tabela de clientes para que também apareçam as clientes que
   // ainda nunca acessaram o PWA. Os dispositivos entram como complemento.
+  // A tabela de monitoramento possui RLS sem políticas públicas; por isso a
+  // leitura administrativa precisa usar service_role após validar a sessão.
+  const supabase = createServiceSupabaseClient();
   const [{ data: clientes, error: erroClientes }, { data: dispositivosBrutos, error: erroDispositivos }] = await Promise.all([
     supabase.from("clientes").select("id, nome_completo, cpf, ativo").eq("ativo", true).order("nome_completo", { ascending: true }),
     supabase.from("cliente_app_devices").select(`
