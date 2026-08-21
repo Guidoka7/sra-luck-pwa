@@ -43,7 +43,7 @@ export default function LoginClientePage() {
             <Button type="submit" loading={loading} className="mt-2 w-full">Entrar</Button>
           </form>
         </Card>
-        <p className="mt-6 text-center text-xs text-clay/40">Seus dados de acesso foram cadastrados pela nossa equipe.<br />Em caso de dúvida, fale com a clínica.</p>
+        <p className="mt-6 text-center text-xs text-clay/40">Seus dados de acesso foram cadastrados pela nossa equipe.<br />Em caso de dúvida, fale conosco.</p>
       </div>
     </main>
   );
