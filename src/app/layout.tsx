@@ -21,8 +21,11 @@ export const metadata: Metadata = {
   description: "Agenda exclusiva de crédito programado.",
   manifest: "/simulador-iphone.webmanifest",
   icons: {
-    icon: "/icons/sra-luck-app-gold.svg",
-    apple: "/icons/sra-luck-app-gold.svg",
+    icon: [
+      { url: "/icons/sra-luck-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/sra-luck-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: { url: "/icons/sra-luck-192.png", sizes: "192x192", type: "image/png" },
   },
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Sra. Luck" },
 };
