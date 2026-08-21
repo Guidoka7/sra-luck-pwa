@@ -3,10 +3,15 @@ import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/s
 import { enviarWebPushParaCliente } from "@/lib/webPush";
 import { formatarDataLonga } from "@/lib/utils";
 
-// Canal do Supabase Realtime (Broadcast) por cliente. O app da cliente e o
-// simulador de iPhone escutam nesse mesmo canal pra receber a notificação
-// na hora, sem precisar de refresh — ver CentralNotificacoes.tsx e
-// public/simulador-iphone.html.
+function adicionarDias(dataIso: string | null, dias: number): string | null {
+  if (!dataIso) return null;
+  const [ano, mes, dia] = dataIso.split("-").map(Number);
+  if (!ano || !mes || !dia) return null;
+  const data = new Date(Date.UTC(ano, mes - 1, dia));
+  data.setUTCDate(data.getUTCDate() + dias);
+  return data.toISOString().slice(0, 10);
+}
+
 function canalNotificacoesCliente(clienteId: string) {
   return `notificacoes-cliente:${clienteId}`;
 }
@@ -16,29 +21,41 @@ const ACOES_PREVISAO = [
   "alterou_previsao_liberacao_financeira",
 ] as const;
 
-// Define (ou edita) a previsão de liberação financeira de um agendamento —
-// a data informada à cliente, no ato da assinatura dos termos, de quando a
-// empresa fará o pagamento da cirurgia dela.
+// Define (ou edita) a previsão de liberação financeira. A sugestão padrão
+// exibida no painel é sempre 90 dias corridos após a assinatura dos termos;
+// o admin pode confirmar essa sugestão ou registrar uma nova data solicitada.
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ erro: "Não autenticado." }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
-  const { previsaoLiberacaoFinanceira } = body as { previsaoLiberacaoFinanceira?: string | null };
+  const campoFoiEnviado = Object.prototype.hasOwnProperty.call(body, "previsaoLiberacaoFinanceira");
+  const previsaoRecebida = body.previsaoLiberacaoFinanceira as string | null | undefined;
 
   const { data: agendamento } = await supabase
     .from("agendamentos")
-    .select("id, cliente_id, previsao_liberacao_financeira, clientes(nome_completo)")
+    .select("id, cliente_id, previsao_liberacao_financeira, clientes(nome_completo), datas(data)")
     .eq("id", params.id)
     .single();
 
   if (!agendamento) return NextResponse.json({ erro: "Agendamento não encontrado." }, { status: 404 });
 
-  // Guardamos o valor anterior antes de sobrescrever — é isso que permite
-  // registrar "data anterior → nova data" na auditoria, e não só o estado final.
+  const dataTermos = (agendamento as any).datas?.data ?? null;
+  const previsaoSugerida = adicionarDias(dataTermos, 90);
   const dataAnterior = (agendamento as any).previsao_liberacao_financeira ?? null;
-  const dataNova = previsaoLiberacaoFinanceira || null;
+
+  // Se a chamada não informar uma data, usamos a regra automática de 90 dias.
+  // Se informar, permitimos alteração manual — necessário para solicitações
+  // excepcionais de mudança de data.
+  const dataNova = campoFoiEnviado ? (previsaoRecebida || null) : previsaoSugerida;
+
+  if (!dataNova) {
+    return NextResponse.json(
+      { erro: "Não foi possível calcular a previsão: a assinatura dos termos ainda não possui uma data." },
+      { status: 400 }
+    );
+  }
 
   const { data, error } = await supabase
     .from("agendamentos")
@@ -50,6 +67,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
 
   const alteradoEm = new Date().toISOString();
+  const alterouRegraPadrao = Boolean(previsaoSugerida && dataNova !== previsaoSugerida);
 
   await supabase.from("logs_alteracoes").insert({
     usuario: user.email ?? "admin",
@@ -58,15 +76,16 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     entidade_id: params.id,
     detalhes: {
       cliente: (agendamento as any).clientes?.nome_completo,
+      data_termos: dataTermos,
+      regra_padrao_dias: 90,
+      data_sugerida_90_dias: previsaoSugerida,
       data_anterior: dataAnterior,
       data_nova: dataNova,
+      alteracao_manual: alterouRegraPadrao,
       alterado_em: alteradoEm,
     },
   });
 
-  // Notificação automática pra cliente na central de notificações do app —
-  // só quando de fato houve uma data nova definida (não dispara ao limpar
-  // uma previsão, nem quando o valor salvo é igual ao anterior).
   if (dataNova && dataNova !== dataAnterior) {
     const dataFormatada = formatarDataLonga(dataNova);
     const clienteId = (agendamento as any).cliente_id as string;
@@ -100,13 +119,6 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       });
     }
 
-    // Publica no canal Realtime (Broadcast) da cliente pra quem estiver com
-    // o app aberto — ou o simulador de iPhone escutando esse cliente_id —
-    // ver a Dynamic Island/notificação aparecer na hora, sem refresh. Usa
-    // o client service_role: broadcast não depende de sessão nem de RLS, e
-    // assim funciona mesmo que a inserção acima já tenha usado a sessão do
-    // admin. Uma falha aqui não deve derrubar o cadastro da previsão em si
-    // (a notificação já foi salva e aparecerá no próximo polling/login).
     if (!erroNotificacao && notificacao) {
       try {
         await serviceClient.channel(canalNotificacoesCliente(clienteId)).send({
@@ -117,6 +129,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       } catch (erro) {
         console.error("Falha ao publicar notificação em tempo real:", erro);
       }
+
       let push = { enviadas: 0, falhas: 0, removidas: 0 };
       try {
         push = await enviarWebPushParaCliente(serviceClient, clienteId, {
@@ -139,12 +152,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
   }
 
-  return NextResponse.json({ agendamento: data, dataAnterior, dataNova, alteradoEm });
+  return NextResponse.json({
+    agendamento: data,
+    dataAnterior,
+    dataNova,
+    dataTermos,
+    previsaoSugerida,
+    alteracaoManual: alterouRegraPadrao,
+    alteradoEm,
+  });
 }
 
-// Histórico de cadastro/alteração da previsão de liberação financeira desse
-// agendamento — usado no painel do admin para mostrar "data anterior, nova
-// data e quando foi alterado" sem precisar de uma tela de auditoria à parte.
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
