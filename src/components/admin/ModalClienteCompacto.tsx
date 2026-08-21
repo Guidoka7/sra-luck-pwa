@@ -9,7 +9,7 @@ import { Input, Label, Select, Textarea } from "@/components/ui/Input";
 import { formatarCpf } from "@/lib/cpf";
 import { desmascararMoeda, formatarMoeda, mascararMoedaInput } from "@/lib/utils";
 import type { Boleto, Cliente, LogAlteracao, QuantidadeParcelas } from "@/types/database";
-import { QUANTIDADE_PARCELAS_OPCOES, STATUS_BOLETO_LABEL } from "@/types/database";
+import { QUANTIDADE_PARCELAS_OPCOES, STATUS_BOLETO_LABEL, TAXA_ADMINISTRATIVA_PADRAO } from "@/types/database";
 
 function Section({ title, icon: Icon, children }: { title: string; icon: React.ComponentType<{ className?: string }>; children: React.ReactNode }) {
   return <section className="rounded-2xl border border-rose/10 bg-white/[0.035] p-3.5 sm:p-4"><div className="mb-3 flex items-center gap-2"><Icon className="h-3.5 w-3.5 text-rose" /><h3 className="text-[0.66rem] font-semibold uppercase tracking-[0.16em] text-rose">{title}</h3></div>{children}</section>;
@@ -26,12 +26,10 @@ export function ModalClienteCompacto({ cliente, onClose, onSalvo }: { cliente: C
   const [email, setEmail] = useState(cliente?.email ?? "");
   const [procedimento, setProcedimento] = useState(cliente?.procedimento ?? "");
   const [carta, setCarta] = useState(cliente ? moeda(cliente.valor_contrato) : "");
-  const [taxa, setTaxa] = useState(cliente?.taxa_administrativa_percentual != null ? String(cliente.taxa_administrativa_percentual).replace(".", ",") : "0");
-  const [ativo, setAtivo] = useState(cliente?.ativo ?? true);
-  const [observacoes, setObservacoes] = useState(cliente?.observacoes_internas ?? "");
   const [boletos, setBoletos] = useState<Boleto[]>([]);
   const [carregandoBoletos, setCarregandoBoletos] = useState(Boolean(cliente));
   const [quantidade, setQuantidade] = useState<QuantidadeParcelas>((cliente?.quantidade_parcelas ?? 12) as QuantidadeParcelas);
+  const [taxa, setTaxa] = useState(cliente?.taxa_administrativa_percentual != null ? String(cliente.taxa_administrativa_percentual).replace(".", ",") : String(TAXA_ADMINISTRATIVA_PADRAO[(cliente?.quantidade_parcelas ?? 12) as QuantidadeParcelas]).replace(".", ","));
   const [vencimento, setVencimento] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [gerando, setGerando] = useState(false);
@@ -41,6 +39,8 @@ export function ModalClienteCompacto({ cliente, onClose, onSalvo }: { cliente: C
   const [historico, setHistorico] = useState<LogAlteracao[]>([]);
   const [mostrarHistorico, setMostrarHistorico] = useState(false);
   const [confirmarExclusao, setConfirmarExclusao] = useState(false);
+  const [ativo, setAtivo] = useState(cliente?.ativo ?? true);
+  const [observacoes, setObservacoes] = useState(cliente?.observacoes_internas ?? "");
 
   const cartaNumero = Number(desmascararMoeda(carta)) || 0;
   const taxaNumero = Number(taxa.replace(",", ".")) || 0;
@@ -162,14 +162,14 @@ export function ModalClienteCompacto({ cliente, onClose, onSalvo }: { cliente: C
         <Section title="Parcelamento" icon={Receipt}>
           {carregandoBoletos ? <p className="py-2 text-xs text-pearl/40">Carregando parcelas…</p> : <>
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-              <div><Label htmlFor="mc-qtd">Plano</Label><Select id="mc-qtd" value={quantidade} onChange={(e) => setQuantidade(Number(e.target.value) as QuantidadeParcelas)}>{QUANTIDADE_PARCELAS_OPCOES.map((n) => <option key={n} value={n}>{n}x</option>)}</Select></div>
+              <div><Label htmlFor="mc-qtd">Plano</Label><Select id="mc-qtd" value={quantidade} onChange={(e) => { const novoPlano = Number(e.target.value) as QuantidadeParcelas; setQuantidade(novoPlano); setTaxa(String(TAXA_ADMINISTRATIVA_PADRAO[novoPlano]).replace(".", ",")); }}>{QUANTIDADE_PARCELAS_OPCOES.map((n) => <option key={n} value={n}>{n}x</option>)}</Select></div>
               <div><Label htmlFor="mc-taxa">Taxa adm.</Label><Input id="mc-taxa" value={taxa} onChange={(e) => setTaxa(e.target.value)} inputMode="decimal" /></div>
-              <div className="col-span-2 rounded-xl bg-white/[0.045] px-3 py-2"><p className="text-[0.58rem] uppercase tracking-label text-pearl/35">Parcela automática</p><p className="mt-0.5 text-sm font-semibold text-rose">{formatarMoeda(parcelaSugerida)}</p><p className="text-[0.58rem] text-pearl/35">Total parcelado: {formatarMoeda(custoTotal)}</p></div>
+              <div className="col-span-2 rounded-xl bg-white/[0.045] px-3 py-2"><p className="text-[0.58rem] uppercase tracking-label text-pearl/35">Parcela automática</p><p className="mt-0.5 text-sm font-semibold text-rose">{formatarMoeda(parcelaSugerida)}</p><p className="text-[0.58rem] text-pearl/35">Taxa aplicada: {taxaNumero}% · Total parcelado: {formatarMoeda(custoTotal)}</p></div>
             </div>
             <div className="mt-2.5 flex flex-wrap items-center gap-2">
               {!boletos.length && editando && <Input type="date" value={vencimento} onChange={(e) => setVencimento(e.target.value)} className="w-auto" />}
               {editando && boletos.length > 0 ? <Button type="button" size="sm" loading={ajustando} onClick={ajustarParcelamento}><WalletCards className="h-3.5 w-3.5" /> Aplicar às abertas</Button> : editando ? <Button type="button" size="sm" loading={gerando} onClick={gerarBoletos}>Gerar parcelas</Button> : null}
-              <span className="text-[0.62rem] text-pearl/35">A carta preenche a sugestão automaticamente; cada parcela aberta pode ser ajustada individualmente.</span>
+              <span className="text-[0.62rem] text-pearl/35">A carta preenche a sugestão automaticamente; a taxa padrão acompanha o plano escolhido.</span>
             </div>
             {boletos.length > 0 && <>
               <div className="mt-3 flex items-center justify-between rounded-xl bg-white/[0.035] px-3 py-2 text-[0.68rem]"><span className="text-pearl/45">{pagas} pagas · {abertas} em aberto</span><span className="font-semibold text-rose">{Math.round((pagas / boletos.length) * 1000) / 10}%</span></div>
