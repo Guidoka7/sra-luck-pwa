@@ -2,6 +2,15 @@
 -- Nunca usa 9001/10000 como numeração temporária.
 -- A reorganização ocorre dentro de uma única transação PostgreSQL.
 
+-- Dependências obrigatórias da gestão de parcelas.
+-- Esta parte precisa vir ANTES das funções que referenciam as colunas.
+alter table boletos add column if not exists suspensa boolean not null default false;
+alter table boletos add column if not exists suspensa_em timestamptz;
+alter table boletos add column if not exists suspensa_por text;
+
+create index if not exists idx_boletos_cliente_numero on boletos(cliente_id, numero_parcela);
+create index if not exists idx_boletos_suspensa on boletos(cliente_id, suspensa) where suspensa = true;
+
 create or replace function reorganizar_parcelas_cliente(
   p_cliente_id uuid,
   p_excluir_id uuid default null,
@@ -24,7 +33,6 @@ begin
     raise exception 'Cliente não encontrada';
   end if;
 
-  -- Bloqueia o contrato durante toda a reorganização.
   perform 1 from clientes where id = p_cliente_id for update;
 
   if p_excluir_id is not null then
@@ -54,8 +62,6 @@ begin
     raise exception 'O contrato deve possuir entre 1 e 240 parcelas';
   end if;
 
-  -- Primeiro tira as parcelas abertas da faixa normal usando números negativos.
-  -- Isso evita qualquer colisão com a constraint UNIQUE(cliente_id, numero_parcela).
   v_idx := 0;
   for v_boleto in
     select id from boletos
@@ -66,7 +72,6 @@ begin
     update boletos set numero_parcela = -v_idx, total_parcelas = v_total where id = v_boleto.id;
   end loop;
 
-  -- A parcela suspensa vai para o final das abertas; as demais permanecem na ordem.
   v_data_base := coalesce(
     (select min(data_vencimento) from boletos where cliente_id = p_cliente_id and status <> 'pago'),
     current_date
@@ -107,7 +112,6 @@ end;
 $$;
 
 -- Corrige dados já contaminados pelo bug 9001/10000.
--- A correção é feita por cliente, preservando parcelas pagas e a ordem existente.
 do $$
 declare
   v_cliente uuid;
