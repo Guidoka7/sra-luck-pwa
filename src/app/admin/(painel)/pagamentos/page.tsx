@@ -1,19 +1,10 @@
 "use client";
-import { fetchInstant, refreshInstant, invalidateInstantCache, getInstantCache } from "@/lib/instantCache";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { CheckCircle2, ExternalLink, ReceiptText, Search, X, AlertTriangle, Clock3, WalletCards } from "lucide-react";
 import { toast } from "sonner";
-import {
-  CheckCircle2,
-  CheckSquare,
-  ChevronDown,
-  ExternalLink,
-  Search,
-  Square,
-  X,
-  XCircle,
-} from "lucide-react";
+import { fetchInstant, getInstantCache, refreshInstant } from "@/lib/instantCache";
 import { PageHeader, Panel, SectionHeading, StatusPill } from "@/components/admin/ExecutiveUI";
 import { Portal } from "@/components/ui/Portal";
 import { Button } from "@/components/ui/Button";
@@ -31,15 +22,39 @@ const STATUS_TONE: Record<StatusBoleto, "neutral" | "success" | "alert" | "gold"
   rejeitado: "alert",
 };
 
+// Parâmetros iniciais editáveis na conferência. Eles não são gravados como
+// regra global: o admin pode ajustar o cálculo para cada validação.
+const DEFAULT_MULTA = 2;
+const DEFAULT_JUROS_DIA = 0.033;
+
 function formatarData(data: string | null) {
   if (!data) return "—";
   const [ano, mes, dia] = data.split("-").map(Number);
   return new Date(ano, mes - 1, dia).toLocaleDateString("pt-BR");
 }
 
+function diasEmAtraso(data: string | null) {
+  if (!data) return 0;
+  const [ano, mes, dia] = data.split("-").map(Number);
+  const vencimento = new Date(ano, mes - 1, dia);
+  vencimento.setHours(0, 0, 0, 0);
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.floor((hoje.getTime() - vencimento.getTime()) / 86400000));
+}
+
+function calcularValorAtualizado(valor: number, dias: number, multaPercentual: number, jurosDiaPercentual: number, descontoPercentual: number) {
+  if (dias <= 0) return { multa: 0, juros: 0, desconto: 0, total: valor };
+  const multa = valor * (multaPercentual / 100);
+  const juros = valor * (jurosDiaPercentual / 100) * dias;
+  const subtotal = valor + multa + juros;
+  const desconto = subtotal * (descontoPercentual / 100);
+  return { multa, juros, desconto, total: Math.max(0, subtotal - desconto) };
+}
+
 export default function PagamentosPage() {
   return (
-    <Suspense fallback={<SkeletonRows count={4} />}>
+    <Suspense fallback={<SkeletonRows count={5} />}>
       <PagamentosConteudo />
     </Suspense>
   );
@@ -49,14 +64,11 @@ function PagamentosConteudo() {
   const searchParams = useSearchParams();
   const clienteIdFiltro = searchParams.get("cliente_id");
   const statusInicial = searchParams.get("status");
-
   const [boletos, setBoletos] = useState<Boleto[]>([]);
   const [carregando, setCarregando] = useState(true);
-  const [filtroStatus, setFiltroStatus] = useState<string>(statusInicial ?? "todos");
+  const [filtroStatus, setFiltroStatus] = useState(statusInicial ?? "pendente_confirmacao");
   const [busca, setBusca] = useState("");
   const [boletoAtivo, setBoletoAtivo] = useState<Boleto | null>(null);
-  const [clientesAbertos, setClientesAbertos] = useState<Set<string>>(new Set());
-  const [pagasAbertas, setPagasAbertas] = useState<Set<string>>(new Set());
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
   const [processandoLote, setProcessandoLote] = useState(false);
 
@@ -66,12 +78,19 @@ function PagamentosConteudo() {
     if (clienteIdFiltro) params.set("cliente_id", clienteIdFiltro);
     const url = `/api/admin/boletos?${params.toString()}`;
     const cached = !force ? getInstantCache<{ boletos?: Boleto[] }>(url) : null;
-    if (cached) { setBoletos(cached.boletos ?? []); setCarregando(false); } else setCarregando(true);
+    if (cached) {
+      setBoletos(cached.boletos ?? []);
+      setCarregando(false);
+    } else setCarregando(true);
     try {
       const data = force ? await refreshInstant<{ boletos?: Boleto[] }>(url) : await fetchInstant<{ boletos?: Boleto[] }>(url);
       setBoletos(data.boletos ?? []);
       setSelecionados(new Set());
-    } finally { setCarregando(false); }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível carregar os pagamentos.");
+    } finally {
+      setCarregando(false);
+    }
   }
 
   useEffect(() => {
@@ -81,579 +100,254 @@ function PagamentosConteudo() {
 
   const boletosFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
-    if (!termo) return boletos;
-    return boletos.filter(
-      (b) =>
-        b.clientes?.nome_completo.toLowerCase().includes(termo) ||
-        b.clientes?.cpf.includes(termo.replace(/\D/g, ""))
+    const lista = !termo ? boletos : boletos.filter((b) =>
+      b.clientes?.nome_completo.toLowerCase().includes(termo) || b.clientes?.cpf.includes(termo.replace(/\D/g, ""))
     );
+    return [...lista].sort((a, b) => {
+      const atrasoA = diasEmAtraso(a.data_vencimento);
+      const atrasoB = diasEmAtraso(b.data_vencimento);
+      if (atrasoB !== atrasoA) return atrasoB - atrasoA;
+      return Number(a.numero_parcela) - Number(b.numero_parcela);
+    });
   }, [boletos, busca]);
 
-  // Agrupa as parcelas por cliente, separando não pagas (com opção de seleção
-  // em lote) das pagas (recolhidas por padrão). Clientes com mais parcelas em
-  // aberto aparecem primeiro.
   const grupos = useMemo(() => {
-    const mapa = new Map<
-      string,
-      { clienteId: string; nome: string; cpf: string; naoPagas: Boleto[]; pagas: Boleto[] }
-    >();
-
-    for (const b of boletosFiltrados) {
-      const clienteId = b.cliente_id;
-      if (!mapa.has(clienteId)) {
-        mapa.set(clienteId, {
-          clienteId,
-          nome: b.clientes?.nome_completo ?? "Cliente",
-          cpf: b.clientes?.cpf ?? "",
-          naoPagas: [],
-          pagas: [],
+    const mapa = new Map<string, { clienteId: string; nome: string; cpf: string; parcelas: Boleto[] }>();
+    for (const boleto of boletosFiltrados) {
+      if (!mapa.has(boleto.cliente_id)) {
+        mapa.set(boleto.cliente_id, {
+          clienteId: boleto.cliente_id,
+          nome: boleto.clientes?.nome_completo ?? "Cliente",
+          cpf: boleto.clientes?.cpf ?? "",
+          parcelas: [],
         });
       }
-      const grupo = mapa.get(clienteId)!;
-      if (b.status === "pago") grupo.pagas.push(b);
-      else grupo.naoPagas.push(b);
+      mapa.get(boleto.cliente_id)!.parcelas.push(boleto);
     }
-
-    // Garante que as parcelas de cada cliente fiquem sempre em ordem
-    // numérica crescente (1, 2, 3... até a última), independentemente
-    // da ordem em que foram criadas/importadas no banco.
-    for (const grupo of mapa.values()) {
-      const ordenarParcelas = (a: Boleto, b: Boleto) => {
-        const numeroA = Number(a.numero_parcela) || 0;
-        const numeroB = Number(b.numero_parcela) || 0;
-        if (numeroA !== numeroB) return numeroA - numeroB;
-        return String(a.data_vencimento ?? "").localeCompare(String(b.data_vencimento ?? ""));
-      };
-      grupo.naoPagas.sort(ordenarParcelas);
-      grupo.pagas.sort(ordenarParcelas);
-    }
-
-    // Prioridade: clientes com parcela(s) aguardando confirmação aparecem
-    // sempre primeiro (mesmo com o filtro "todos" selecionado), depois quem
-    // tem mais parcelas em aberto, depois ordem alfabética.
     return Array.from(mapa.values()).sort((a, b) => {
-      const aAguardando = a.naoPagas.filter((p) => p.status === "pendente_confirmacao").length;
-      const bAguardando = b.naoPagas.filter((p) => p.status === "pendente_confirmacao").length;
-      if (bAguardando !== aAguardando) return bAguardando - aAguardando;
-      if (b.naoPagas.length !== a.naoPagas.length) return b.naoPagas.length - a.naoPagas.length;
+      const aguardandoA = a.parcelas.filter((p) => p.status === "pendente_confirmacao").length;
+      const aguardandoB = b.parcelas.filter((p) => p.status === "pendente_confirmacao").length;
+      if (aguardandoB !== aguardandoA) return aguardandoB - aguardandoA;
       return a.nome.localeCompare(b.nome, "pt-BR");
     });
   }, [boletosFiltrados]);
 
-  function alternarCliente(clienteId: string) {
-    setClientesAbertos((atual) => {
-      const novo = new Set(atual);
-      if (novo.has(clienteId)) novo.delete(clienteId);
-      else novo.add(clienteId);
-      return novo;
-    });
-  }
-
-  function alternarPagas(clienteId: string) {
-    setPagasAbertas((atual) => {
-      const novo = new Set(atual);
-      if (novo.has(clienteId)) novo.delete(clienteId);
-      else novo.add(clienteId);
-      return novo;
-    });
-  }
-
   function alternarSelecionado(id: string) {
     setSelecionados((atual) => {
       const novo = new Set(atual);
-      if (novo.has(id)) novo.delete(id);
-      else novo.add(id);
-      return novo;
-    });
-  }
-
-  function alternarSelecionarTodos(ids: string[]) {
-    setSelecionados((atual) => {
-      const todosSelecionados = ids.every((id) => atual.has(id));
-      const novo = new Set(atual);
-      if (todosSelecionados) ids.forEach((id) => novo.delete(id));
-      else ids.forEach((id) => novo.add(id));
+      novo.has(id) ? novo.delete(id) : novo.add(id);
       return novo;
     });
   }
 
   async function marcarSelecionadosComoPago() {
-    if (selecionados.size === 0) return;
+    if (!selecionados.size) return;
     setProcessandoLote(true);
-    const ids = Array.from(selecionados);
-    let sucesso = 0;
-    let falhas = 0;
     try {
       const res = await fetch("/api/admin/boletos/lote", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids, acao: "confirmar" }),
+        body: JSON.stringify({ ids: Array.from(selecionados), acao: "confirmar" }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.erro ?? "Falha ao processar as parcelas.");
-      sucesso = Number(data.total ?? 0);
-      falhas = ids.length - sucesso;
+      if (!res.ok) throw new Error(data.erro ?? "Falha ao confirmar pagamentos.");
+      toast.success(`${Number(data.total ?? 0)} pagamento(s) confirmado(s).`);
+      await carregar(true);
     } catch (error) {
-      falhas = ids.length;
-      toast.error(error instanceof Error ? error.message : "Falha ao processar as parcelas.");
+      toast.error(error instanceof Error ? error.message : "Falha ao confirmar pagamentos.");
+    } finally {
+      setProcessandoLote(false);
     }
-    if (sucesso > 0) toast.success(`${sucesso} parcela${sucesso > 1 ? "s" : ""} marcada${sucesso > 1 ? "s" : ""} como paga${sucesso > 1 ? "s" : ""}.`);
-    if (falhas > 0) toast.error(`${falhas} parcela${falhas > 1 ? "s" : ""} não pôde${falhas > 1 ? "m" : ""} ser confirmada${falhas > 1 ? "s" : ""}.`);
-    setProcessandoLote(false);
-    carregar();
   }
 
   async function editarValor(boleto: Boleto) {
     const atual = boleto.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const digitado = window.prompt(
-      `Novo valor da parcela ${boleto.numero_parcela}/${boleto.total_parcelas} (R$):`,
-      atual
-    );
-    if (digitado === null) return; // cancelou
-
-    const normalizado = digitado.trim().replace(/\./g, "").replace(",", ".");
-    const valorNumero = Number(normalizado);
-    if (!Number.isFinite(valorNumero) || valorNumero <= 0) {
-      toast.error("Valor inválido.");
-      return;
-    }
-
+    const digitado = window.prompt(`Novo valor da parcela ${boleto.numero_parcela}/${boleto.total_parcelas} (R$):`, atual);
+    if (digitado === null) return;
+    const valor = Number(digitado.trim().replace(/\./g, "").replace(",", "."));
+    if (!Number.isFinite(valor) || valor <= 0) return toast.error("Valor inválido.");
     const res = await fetch(`/api/admin/boletos/${boleto.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ valor: valorNumero }),
+      body: JSON.stringify({ valor }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      toast.error(data.erro ?? "Não foi possível atualizar o valor.");
-      return;
+      return toast.error(data.erro ?? "Não foi possível atualizar o valor.");
     }
     toast.success("Valor da parcela atualizado.");
-    carregar();
+    carregar(true);
   }
 
   const pendentes = boletos.filter((b) => b.status === "pendente_confirmacao").length;
+  const vencidas = boletos.filter((b) => b.status !== "pago" && diasEmAtraso(b.data_vencimento) > 0).length;
 
   return (
-    <div className="space-y-6 pb-8">
+    <div className="space-y-5 pb-8">
       <PageHeader
         eyebrow="Gestão"
         title="Pagamentos"
-        description={
-          pendentes > 0
-            ? `${pendentes} comprovante${pendentes > 1 ? "s" : ""} aguardando sua confirmação.`
-            : "Controle de parcelas: o que já entrou e o que ainda falta cobrar."
-        }
+        description={pendentes > 0 ? `${pendentes} comprovante${pendentes > 1 ? "s" : ""} aguardando confirmação.` : "Revise os pagamentos e confirme os comprovantes."}
       />
 
-      <Panel className="p-5">
-        <SectionHeading title="Parcelas por cliente" description="Busque por cliente, filtre por status e selecione parcelas em lote." />
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+        <Resumo label="Aguardando confirmação" valor={pendentes} destaque />
+        <Resumo label="Parcelas vencidas" valor={vencidas} alerta={vencidas > 0} />
+        <Resumo label="Exibindo" valor={boletosFiltrados.length} />
+      </div>
 
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[220px]">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-clay/30" />
-            <Input
-              placeholder="Buscar por nome ou CPF da cliente…"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              className="py-2.5 pl-10 text-sm"
-            />
+      <Panel className="p-4 sm:p-5">
+        <SectionHeading title="Pagamentos" description="As parcelas aparecem abertas por padrão; clique apenas para validar o comprovante." />
+        <div className="mb-4 flex flex-wrap items-center gap-2.5">
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-clay/30" />
+            <Input placeholder="Buscar cliente ou CPF…" value={busca} onChange={(e) => setBusca(e.target.value)} className="pl-10" />
           </div>
-          <Select
-            value={filtroStatus}
-            onChange={(e) => setFiltroStatus(e.target.value)}
-            className="w-auto py-2.5 text-sm"
-          >
-            <option value="todos">Status: todos</option>
-            {Object.entries(STATUS_BOLETO_LABEL).map(([valor, label]) => (
-              <option key={valor} value={valor}>
-                {label}
-              </option>
-            ))}
+          <Select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)} className="w-auto">
+            <option value="pendente_confirmacao">Aguardando confirmação</option>
+            <option value="nao_pago">Não pagos</option>
+            <option value="pago">Pagos</option>
+            <option value="rejeitado">Rejeitados</option>
+            <option value="todos">Todos</option>
           </Select>
         </div>
 
         {selecionados.size > 0 && (
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-burgundy/15 bg-burgundy/[0.06] px-4 py-3 animate-fadeIn">
-            <p className="text-xs font-medium text-burgundy">
-              {selecionados.size} parcela{selecionados.size > 1 ? "s" : ""} selecionada{selecionados.size > 1 ? "s" : ""}
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setSelecionados(new Set())}
-                disabled={processandoLote}
-                className="flex items-center gap-1 rounded-full px-3 py-1.5 text-xs text-clay/55 hover:text-burgundy disabled:opacity-50"
-              >
-                <X className="h-3.5 w-3.5" /> Limpar
-              </button>
-              <Button size="sm" loading={processandoLote} onClick={marcarSelecionadosComoPago}>
-                <CheckCircle2 className="h-3.5 w-3.5" /> Marcar como pagas
-              </Button>
-            </div>
+          <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-burgundy/15 bg-burgundy/[0.06] px-3.5 py-2.5">
+            <span className="text-xs font-medium text-burgundy">{selecionados.size} selecionada(s)</span>
+            <Button size="sm" loading={processandoLote} onClick={marcarSelecionadosComoPago}><CheckCircle2 className="h-3.5 w-3.5" /> Confirmar selecionadas</Button>
           </div>
         )}
 
-        {carregando ? (
-          <SkeletonRows count={4} />
-        ) : grupos.length === 0 ? (
-          <div className="rounded-[20px] border border-dashed border-rose/25 bg-blush/20 p-9 text-center text-xs text-clay/45">
-            Nenhuma parcela encontrada com esses filtros.
-          </div>
+        {carregando ? <SkeletonRows count={5} /> : grupos.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-rose/20 bg-blush/15 p-8 text-center text-xs text-clay/45">Nenhum pagamento encontrado.</div>
         ) : (
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             {grupos.map((grupo) => (
-              <div className="render-when-visible" key={grupo.clienteId}>
-                <ClienteGrupo
-                  grupo={grupo}
-                  aberto={clientesAbertos.has(grupo.clienteId)}
-                  pagasAberto={pagasAbertas.has(grupo.clienteId)}
-                  selecionados={selecionados}
-                  onToggleAberto={() => alternarCliente(grupo.clienteId)}
-                  onTogglePagas={() => alternarPagas(grupo.clienteId)}
-                  onToggleSelecionado={alternarSelecionado}
-                  onSelecionarTodos={alternarSelecionarTodos}
-                  onAbrirModal={setBoletoAtivo}
-                  onEditarValor={editarValor}
-                />
-              </div>
+              <ClientePagamentos key={grupo.clienteId} grupo={grupo} selecionados={selecionados} onSelecionar={alternarSelecionado} onAbrir={setBoletoAtivo} onEditarValor={editarValor} />
             ))}
           </div>
         )}
       </Panel>
 
-      {boletoAtivo && (
-        <ModalRevisao
-          boleto={boletoAtivo}
-          onClose={() => setBoletoAtivo(null)}
-          onResolvido={() => {
-            setBoletoAtivo(null);
-            carregar();
-          }}
-        />
-      )}
+      {boletoAtivo && <ModalValidarComprovante boleto={boletoAtivo} onClose={() => setBoletoAtivo(null)} onResolvido={() => { setBoletoAtivo(null); carregar(true); }} />}
     </div>
   );
 }
 
-type GrupoCliente = {
-  clienteId: string;
-  nome: string;
-  cpf: string;
-  naoPagas: Boleto[];
-  pagas: Boleto[];
-};
-
-function ClienteGrupo({
-  grupo,
-  aberto,
-  pagasAberto,
-  selecionados,
-  onToggleAberto,
-  onTogglePagas,
-  onToggleSelecionado,
-  onSelecionarTodos,
-  onAbrirModal,
-  onEditarValor,
-}: {
-  grupo: GrupoCliente;
-  aberto: boolean;
-  pagasAberto: boolean;
-  selecionados: Set<string>;
-  onToggleAberto: () => void;
-  onTogglePagas: () => void;
-  onToggleSelecionado: (id: string) => void;
-  onSelecionarTodos: (ids: string[]) => void;
-  onAbrirModal: (boleto: Boleto) => void;
-  onEditarValor: (boleto: Boleto) => void;
-}) {
-  const total = grupo.naoPagas.length + grupo.pagas.length;
-  const idsSelecionaveis = grupo.naoPagas.filter((b) => b.status === "nao_pago").map((b) => b.id);
-  const todosSelecionados = idsSelecionaveis.length > 0 && idsSelecionaveis.every((id) => selecionados.has(id));
-
-  const iniciais = grupo.nome
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((parte) => parte[0]?.toUpperCase())
-    .join("");
-
+function Resumo({ label, valor, destaque, alerta }: { label: string; valor: number; destaque?: boolean; alerta?: boolean }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-rose/10 bg-white/60">
-      <button
-        type="button"
-        onClick={onToggleAberto}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-blush/25"
-      >
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-burgundy/10 text-[0.65rem] font-semibold text-burgundy">
-            {iniciais || "?"}
-          </span>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-burgundy">{grupo.nome}</p>
-            <p className="text-xs text-clay/40">{grupo.cpf ? formatarCpf(grupo.cpf) : ""}</p>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {grupo.pagas.length > 0 && (
-            <span className="rounded-full bg-success/10 px-2.5 py-1 text-[0.7rem] font-medium text-success">
-              {grupo.pagas.length} paga{grupo.pagas.length > 1 ? "s" : ""}
-            </span>
-          )}
-          <span className="hidden text-xs text-clay/35 sm:inline">{total} parcela{total > 1 ? "s" : ""}</span>
-          <ChevronDown className={cn("h-4 w-4 text-clay/40 transition-transform", aberto && "rotate-180")} />
-        </div>
-      </button>
-
-      {aberto && (
-        <div className="border-t border-rose/10 bg-white/40 px-4 py-3">
-          {grupo.naoPagas.length > 0 && (
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-[0.65rem] font-semibold uppercase tracking-label text-burgundy/45">
-                  Não pagas
-                </span>
-                {idsSelecionaveis.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => onSelecionarTodos(idsSelecionaveis)}
-                    className="flex items-center gap-1.5 text-[0.7rem] text-burgundy/60 hover:text-burgundy"
-                  >
-                    {todosSelecionados ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
-                    Selecionar todas
-                  </button>
-                )}
-              </div>
-              <div className="overflow-hidden rounded-xl border border-rose/10">
-                <table className="w-full text-left text-[13px]">
-                  <tbody>
-                    {grupo.naoPagas.map((b) => {
-                      const selecionavel = b.status === "nao_pago";
-                      return (
-                        <tr key={b.id} className="border-b border-rose/5 last:border-0 hover:bg-blush/20">
-                          <td className="w-8 px-3 py-2.5">
-                            {selecionavel ? (
-                              <input
-                                type="checkbox"
-                                checked={selecionados.has(b.id)}
-                                onChange={() => onToggleSelecionado(b.id)}
-                                className="h-4 w-4 rounded accent-burgundy"
-                              />
-                            ) : null}
-                          </td>
-                          <td className="px-2 py-2.5 text-clay/70">
-                            {b.numero_parcela}/{b.total_parcelas}
-                          </td>
-                          <td className="px-2 py-2.5 text-clay/70">{formatarData(b.data_vencimento)}</td>
-                          <td className="px-2 py-2.5 text-clay/70">
-                            <button
-                              type="button"
-                              onClick={() => onEditarValor(b)}
-                              className="underline decoration-dotted decoration-clay/30 underline-offset-2 hover:text-burgundy hover:decoration-burgundy"
-                              title="Editar valor da parcela"
-                            >
-                              {formatarMoeda(b.valor)}
-                            </button>
-                          </td>
-                          <td className="px-2 py-2.5">
-                            <StatusPill tone={STATUS_TONE[b.status]}>{STATUS_BOLETO_LABEL[b.status]}</StatusPill>
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {b.comprovante_url && (
-                                <a
-                                  href={`/api/admin/boletos/${b.id}/comprovante`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-1 rounded-full border border-rose/15 px-2.5 py-1 text-[0.7rem] text-burgundy/70 hover:bg-blush/50"
-                                >
-                                  <ExternalLink className="h-3 w-3" /> Ver
-                                </a>
-                              )}
-                              {b.status === "pendente_confirmacao" && (
-                                <button
-                                  onClick={() => onAbrirModal(b)}
-                                  className="rounded-full bg-burgundy px-2.5 py-1 text-[0.7rem] text-pearl hover:bg-burgundy-light"
-                                >
-                                  Revisar
-                                </button>
-                              )}
-                              {(b.status === "nao_pago" || b.status === "rejeitado") && (
-                                <button
-                                  onClick={() => onAbrirModal(b)}
-                                  className="rounded-full border border-rose/15 px-2.5 py-1 text-[0.7rem] text-burgundy/70 hover:bg-blush/50"
-                                >
-                                  Marcar pago
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {grupo.pagas.length > 0 && (
-            <div className={grupo.naoPagas.length > 0 ? "mt-3" : ""}>
-              <button
-                type="button"
-                onClick={onTogglePagas}
-                className="flex items-center gap-1.5 text-[0.7rem] font-medium text-success hover:text-success/80"
-              >
-                <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", pagasAberto && "rotate-180")} />
-                {grupo.pagas.length} parcela{grupo.pagas.length > 1 ? "s" : ""} paga{grupo.pagas.length > 1 ? "s" : ""}
-              </button>
-
-              {pagasAberto && (
-                <div className="mt-2 overflow-hidden rounded-xl border border-rose/10">
-                  <table className="w-full text-left text-[13px]">
-                    <tbody>
-                      {grupo.pagas.map((b) => (
-                        <tr key={b.id} className="border-b border-rose/5 last:border-0 hover:bg-blush/20">
-                          <td className="px-3 py-2.5 text-clay/70">
-                            {b.numero_parcela}/{b.total_parcelas}
-                          </td>
-                          <td className="px-2 py-2.5 text-clay/70">Pago em {formatarData(b.data_pagamento)}</td>
-                          <td className="px-2 py-2.5 text-clay/70">
-                            <button
-                              type="button"
-                              onClick={() => onEditarValor(b)}
-                              className="underline decoration-dotted decoration-clay/30 underline-offset-2 hover:text-burgundy hover:decoration-burgundy"
-                              title="Editar valor da parcela"
-                            >
-                              {formatarMoeda(b.valor)}
-                            </button>
-                          </td>
-                          <td className="px-2 py-2.5">
-                            <StatusPill tone={STATUS_TONE[b.status]}>{STATUS_BOLETO_LABEL[b.status]}</StatusPill>
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {b.comprovante_url && (
-                                <a
-                                  href={`/api/admin/boletos/${b.id}/comprovante`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-1 rounded-full border border-rose/15 px-2.5 py-1 text-[0.7rem] text-burgundy/70 hover:bg-blush/50"
-                                >
-                                  <ExternalLink className="h-3 w-3" /> Ver
-                                </a>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+    <div className={cn("rounded-2xl border px-3 py-3", destaque ? "border-gold/25 bg-gold/5" : alerta ? "border-alert/20 bg-alert/5" : "border-white/10 bg-white/[0.025]")}>
+      <p className="text-[0.58rem] uppercase tracking-[0.14em] text-clay/40">{label}</p>
+      <p className={cn("mt-1 text-lg font-semibold", destaque ? "text-gold" : alerta ? "text-alert" : "text-burgundy")}>{valor}</p>
     </div>
   );
 }
 
-function ModalRevisao({
-  boleto,
-  onClose,
-  onResolvido,
-}: {
-  boleto: Boleto;
-  onClose: () => void;
-  onResolvido: () => void;
-}) {
+type GrupoCliente = { clienteId: string; nome: string; cpf: string; parcelas: Boleto[] };
+
+function ClientePagamentos({ grupo, selecionados, onSelecionar, onAbrir, onEditarValor }: { grupo: GrupoCliente; selecionados: Set<string>; onSelecionar: (id: string) => void; onAbrir: (b: Boleto) => void; onEditarValor: (b: Boleto) => void }) {
+  const aguardando = grupo.parcelas.filter((p) => p.status === "pendente_confirmacao").length;
+  return (
+    <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02]">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/8 px-3.5 py-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-burgundy">{grupo.nome}</p>
+          <p className="text-[0.62rem] text-clay/40">CPF {formatarCpf(grupo.cpf)} · {grupo.parcelas.length} parcela(s)</p>
+        </div>
+        {aguardando > 0 && <span className="rounded-full bg-gold/10 px-2.5 py-1 text-[0.58rem] font-semibold text-gold">{aguardando} aguardando</span>}
+      </div>
+
+      <div className="divide-y divide-white/7">
+        {grupo.parcelas.map((boleto) => {
+          const atraso = diasEmAtraso(boleto.data_vencimento);
+          const vencida = boleto.status !== "pago" && atraso > 0;
+          const aguardandoConfirmacao = boleto.status === "pendente_confirmacao";
+          return (
+            <div key={boleto.id} className={cn("px-3.5 py-3", vencida && "bg-alert/[0.035]", aguardandoConfirmacao && "bg-gold/[0.035]")}>
+              <div className="flex flex-wrap items-center gap-2.5">
+                {aguardandoConfirmacao && <input type="checkbox" checked={selecionados.has(boleto.id)} onChange={() => onSelecionar(boleto.id)} className="h-4 w-4 accent-burgundy" aria-label={`Selecionar parcela ${boleto.numero_parcela}`} />}
+                <div className="flex min-w-[74px] items-center gap-2"><ReceiptText className="h-3.5 w-3.5 text-burgundy/45" /><span className="text-xs font-semibold text-burgundy">{boleto.numero_parcela}/{boleto.total_parcelas}</span></div>
+                <div className="min-w-[100px] text-[0.66rem] text-clay/50">Vence {formatarData(boleto.data_vencimento)}</div>
+                <div className="ml-auto text-right"><p className="text-sm font-bold text-burgundy">{formatarMoeda(boleto.valor)}</p>{vencida && <p className="flex items-center justify-end gap-1 text-[0.58rem] font-semibold text-alert"><AlertTriangle className="h-3 w-3" /> Vencida há {atraso} dia{atraso === 1 ? "" : "s"}</p>}</div>
+                <StatusPill tone={STATUS_TONE[boleto.status]}>{STATUS_BOLETO_LABEL[boleto.status]}</StatusPill>
+              </div>
+
+              {aguardandoConfirmacao && <div className="mt-2.5 grid gap-2 rounded-xl border border-gold/15 bg-gold/[0.035] p-2.5 sm:grid-cols-[1fr_auto] sm:items-center"><div><p className="text-[0.62rem] font-semibold text-gold">Comprovante enviado · confira o valor antes de validar</p><p className="mt-0.5 text-[0.58rem] text-clay/45">{boleto.comprovante_url ? "Comprovante disponível para conferência." : "A cliente marcou o pagamento, mas não há comprovante anexado."}</p></div><Button size="sm" onClick={() => onAbrir(boleto)}><ReceiptText className="h-3.5 w-3.5" /> Validar comprovante</Button></div>}
+
+              {vencida && boleto.status !== "pendente_confirmacao" && <div className="mt-2 rounded-xl border border-alert/15 bg-alert/[0.035] px-2.5 py-2 text-[0.6rem] text-alert/80">Esta parcela está vencida. Ao receber o pagamento, confira o valor atualizado com multa, juros por dia e eventual desconto antes de confirmar.</div>}
+
+              <div className="mt-2 flex justify-end gap-1.5">
+                {boleto.status !== "pago" && <button type="button" onClick={() => onEditarValor(boleto)} className="rounded-lg px-2.5 py-1.5 text-[0.58rem] text-burgundy/55 hover:bg-blush hover:text-burgundy">Editar valor</button>}
+                {boleto.status !== "pendente_confirmacao" && boleto.comprovante_url && <button type="button" onClick={() => onAbrir(boleto)} className="rounded-lg px-2.5 py-1.5 text-[0.58rem] text-burgundy/55 hover:bg-blush hover:text-burgundy">Ver comprovante</button>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ModalValidarComprovante({ boleto, onClose, onResolvido }: { boleto: Boleto; onClose: () => void; onResolvido: () => void }) {
+  const [multa, setMulta] = useState(String(DEFAULT_MULTA).replace(".", ","));
+  const [jurosDia, setJurosDia] = useState(String(DEFAULT_JUROS_DIA).replace(".", ","));
+  const [desconto, setDesconto] = useState("0");
+  const [valorComprovante, setValorComprovante] = useState("");
   const [observacoes, setObservacoes] = useState("");
-  const [processando, setProcessando] = useState<"confirmar" | "rejeitar" | null>(null);
+  const [processando, setProcessando] = useState(false);
+
+  const dias = diasEmAtraso(boleto.data_vencimento);
+  const calculo = calcularValorAtualizado(Number(boleto.valor), dias, Number(multa.replace(",", ".")) || 0, Number(jurosDia.replace(",", ".")) || 0, Number(desconto.replace(",", ".")) || 0);
+  const valorPago = Number(valorComprovante.replace(/\./g, "").replace(",", "."));
+  const temValorPago = Number.isFinite(valorPago) && valorComprovante.trim() !== "";
+  const diferenca = temValorPago ? valorPago - calculo.total : null;
+  const confere = diferenca !== null && Math.abs(diferenca) < 0.01;
 
   async function resolver(acao: "confirmar" | "rejeitar") {
-    setProcessando(acao);
+    if (acao === "confirmar" && boleto.status === "pendente_confirmacao" && (!boleto.comprovante_url || !temValorPago || !confere)) {
+      toast.error("Confira o comprovante e informe o valor pago. O valor precisa bater com o valor atualizado.");
+      return;
+    }
+    setProcessando(true);
     try {
       const res = await fetch(`/api/admin/boletos/${boleto.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ acao, observacoes }),
+        body: JSON.stringify({ acao, observacoes: observacoes || undefined }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.erro ?? "Não foi possível processar.");
-        return;
-      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.erro ?? "Não foi possível atualizar o pagamento.");
       toast.success(acao === "confirmar" ? "Pagamento confirmado." : "Comprovante rejeitado.");
       onResolvido();
-    } catch {
-      toast.error("Erro de conexão. Tente novamente.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível atualizar o pagamento.");
     } finally {
-      setProcessando(null);
+      setProcessando(false);
     }
   }
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-40 flex items-center justify-center bg-burgundy-dark/40 px-6 py-8 backdrop-blur-sm animate-fadeIn">
-        <Panel className="w-full max-w-md p-8 animate-scaleIn">
-        <h2 className="text-xl text-burgundy">
-          {boleto.clientes?.nome_completo} — Parcela {boleto.numero_parcela}/{boleto.total_parcelas}
-        </h2>
-        <p className="mt-1 text-sm text-clay/55">{formatarMoeda(boleto.valor)}</p>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-burgundy-dark/55 p-3 backdrop-blur-md">
+        <div className="max-h-[94vh] w-full max-w-2xl overflow-y-auto rounded-[24px] border border-white/10 bg-[#1b181b] p-4 text-pearl shadow-2xl sm:p-5">
+          <div className="flex items-start justify-between gap-3 border-b border-white/8 pb-3"><div><p className="text-[0.62rem] uppercase tracking-[0.16em] text-gold">Validação financeira</p><h2 className="mt-1 text-lg font-semibold text-rose">Parcela {boleto.numero_parcela}/{boleto.total_parcelas}</h2><p className="text-xs text-pearl/45">{boleto.clientes?.nome_completo ?? "Cliente"} · vencimento {formatarData(boleto.data_vencimento)}</p></div><button onClick={onClose} className="rounded-full p-2 text-pearl/35 hover:bg-white/5 hover:text-pearl" aria-label="Fechar"><X className="h-4 w-4" /></button></div>
 
-        {boleto.comprovante_url ? (
-          <a
-            href={`/api/admin/boletos/${boleto.id}/comprovante`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-4 flex items-center justify-center gap-2 rounded-2xl border border-rose/20 bg-blush/30 px-4 py-3 text-sm text-burgundy hover:bg-blush/50"
-          >
-            <ExternalLink className="h-4 w-4" /> Ver comprovante enviado
-          </a>
-        ) : (
-          <p className="mt-4 rounded-2xl bg-blush/30 px-4 py-3 text-xs text-clay/55">
-            Nenhum comprovante enviado pela cliente. Você pode marcar como paga manualmente se recebeu a confirmação por outro meio.
-          </p>
-        )}
+          {boleto.comprovante_url ? <a href={boleto.comprovante_url} target="_blank" rel="noreferrer" className="mt-4 flex items-center justify-between rounded-xl border border-rose/15 bg-rose/[0.05] px-3 py-3 text-xs text-rose hover:bg-rose/[0.09]"><span className="flex items-center gap-2"><ReceiptText className="h-4 w-4" /> Abrir comprovante para conferência</span><ExternalLink className="h-4 w-4" /></a> : <div className="mt-4 rounded-xl border border-alert/20 bg-alert/[0.05] px-3 py-3 text-xs text-alert">Nenhum comprovante foi anexado a esta parcela.</div>}
 
-        <div className="mt-4">
-          <Textarea
-            placeholder="Observações (opcional — visível no histórico interno)"
-            value={observacoes}
-            onChange={(e) => setObservacoes(e.target.value)}
-          />
+          <div className="mt-3 grid gap-2 sm:grid-cols-3"><ValorBox label="Valor original" valor={formatarMoeda(boleto.valor)} /><ValorBox label="Dias em atraso" valor={`${dias} dia${dias === 1 ? "" : "s"}`} alerta={dias > 0} /><ValorBox label="Total para quitar hoje" valor={formatarMoeda(calculo.total)} destaque /></div>
+
+          {dias > 0 ? <div className="mt-3 rounded-2xl border border-alert/15 bg-alert/[0.035] p-3.5"><div className="mb-3 flex items-center gap-2 text-xs font-semibold text-alert"><Clock3 className="h-4 w-4" /> Atualização por atraso</div><div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3"><div><label className="mb-1 block text-[0.58rem] uppercase tracking-[0.12em] text-pearl/35">Multa (%)</label><Input value={multa} onChange={(e) => setMulta(e.target.value)} inputMode="decimal" /></div><div><label className="mb-1 block text-[0.58rem] uppercase tracking-[0.12em] text-pearl/35">Juros por dia (%)</label><Input value={jurosDia} onChange={(e) => setJurosDia(e.target.value)} inputMode="decimal" /></div><div><label className="mb-1 block text-[0.58rem] uppercase tracking-[0.12em] text-pearl/35">Desconto (%)</label><Input value={desconto} onChange={(e) => setDesconto(e.target.value)} inputMode="decimal" /></div></div><div className="mt-3 grid grid-cols-3 gap-2 text-[0.62rem]"><div className="rounded-xl bg-white/[0.035] p-2"><p className="text-pearl/35">Multa</p><p className="mt-0.5 font-semibold">{formatarMoeda(calculo.multa)}</p></div><div className="rounded-xl bg-white/[0.035] p-2"><p className="text-pearl/35">Juros</p><p className="mt-0.5 font-semibold">{formatarMoeda(calculo.juros)}</p></div><div className="rounded-xl bg-white/[0.035] p-2"><p className="text-pearl/35">Desconto</p><p className="mt-0.5 font-semibold text-success">-{formatarMoeda(calculo.desconto)}</p></div></div></div> : <div className="mt-3 rounded-xl border border-success/15 bg-success/[0.035] px-3 py-2.5 text-xs text-success">Pagamento dentro do prazo: o valor de referência é {formatarMoeda(boleto.valor)}.</div>}
+
+          <div className="mt-3 rounded-2xl border border-white/8 bg-white/[0.025] p-3.5"><div className="mb-2 flex items-center gap-2 text-xs font-semibold text-pearl"><WalletCards className="h-4 w-4 text-rose" /> Conferência do comprovante</div><label className="mb-1 block text-[0.58rem] uppercase tracking-[0.12em] text-pearl/35">Valor que aparece no comprovante</label><Input value={valorComprovante} onChange={(e) => setValorComprovante(e.target.value)} placeholder="R$ 0,00" inputMode="decimal" />{temValorPago && <div className={cn("mt-2 rounded-xl px-3 py-2.5 text-xs", confere ? "bg-success/10 text-success" : "bg-alert/10 text-alert")}>{confere ? "✓ Valor do comprovante confere com o valor que deve ser pago." : `Diferença: ${formatarMoeda(Math.abs(diferenca ?? 0))}. Confira antes de confirmar.`}</div>}<Textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} className="mt-2.5" placeholder="Observação da conferência (opcional)…" /></div>
+
+          <div className="mt-4 flex flex-wrap justify-end gap-2"><Button type="button" variant="ghost" onClick={onClose}>Cancelar</Button><Button type="button" variant="danger" loading={processando} onClick={() => resolver("rejeitar")}>Rejeitar</Button><Button type="button" loading={processando} onClick={() => resolver("confirmar")}><CheckCircle2 className="h-3.5 w-3.5" /> Confirmar pagamento</Button></div>
         </div>
-
-        <div className="mt-5 flex gap-3">
-          {boleto.comprovante_url && (
-            <Button
-              variant="danger"
-              loading={processando === "rejeitar"}
-              disabled={processando !== null}
-              onClick={() => resolver("rejeitar")}
-              className="flex-1"
-            >
-              <XCircle className="h-4 w-4" /> Rejeitar
-            </Button>
-          )}
-          <Button
-            loading={processando === "confirmar"}
-            disabled={processando !== null}
-            onClick={() => resolver("confirmar")}
-            className="flex-1"
-          >
-            <CheckCircle2 className="h-4 w-4" /> Confirmar pagamento
-          </Button>
-        </div>
-        <button
-          onClick={onClose}
-          disabled={processando !== null}
-          className="mt-3 w-full text-center text-xs text-clay/45 hover:text-burgundy"
-        >
-          Cancelar
-        </button>
-      </Panel>
       </div>
     </Portal>
   );
+}
+
+function ValorBox({ label, valor, alerta, destaque }: { label: string; valor: string; alerta?: boolean; destaque?: boolean }) {
+  return <div className={cn("rounded-xl border p-3", destaque ? "border-rose/20 bg-rose/[0.06]" : "border-white/8 bg-white/[0.025]")}><p className="text-[0.56rem] uppercase tracking-[0.13em] text-pearl/35">{label}</p><p className={cn("mt-1 text-sm font-bold", destaque ? "text-rose" : alerta ? "text-alert" : "text-pearl")}>{valor}</p></div>;
 }
