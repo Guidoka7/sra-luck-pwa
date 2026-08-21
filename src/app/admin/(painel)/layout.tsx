@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CalendarRange, Cog, LayoutDashboard, LineChart, LogOut, Menu, Receipt, Users, X } from "lucide-react";
+import { CalendarRange, Cog, LayoutDashboard, LineChart, LogOut, Menu, Receipt, Users, X, WalletCards } from "lucide-react";
 import { createClientSupabaseClient } from "@/lib/supabase/client";
 import { LogoMark, Wordmark } from "@/components/ui/Logo";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,7 @@ const NAV = [
   { href: "/admin/agenda", label: "Agenda", icon: CalendarRange, group: "Operação" },
   { href: "/admin/clientes", label: "Clientes", icon: Users, group: "Operação" },
   { href: "/admin/pagamentos", label: "Pagamentos", icon: Receipt, group: "Gestão" },
+  { href: "/admin/parcelas", label: "Parcelas", icon: WalletCards, group: "Gestão" },
   { href: "/admin/relatorios", label: "Relatórios", icon: LineChart, group: "Gestão" },
   { href: "/admin/configuracoes", label: "Configurações", icon: Cog, group: "Gestão" },
 ];
