@@ -18,7 +18,13 @@ export function CardPrevisaoLiberacao({ previsaoLiberacaoFinanceira, dataAssinat
   const assinatura = dataParts(dataAssinatura);
   const liberacao = dataParts(previsaoLiberacaoFinanceira);
   const antesDaAssinatura = Boolean(previsaoLiberacaoFinanceira && dataAssinatura > hoje);
-  const estado: EstadoJornada = previsaoLiberacaoFinanceira ? (dataAssinatura <= hoje ? "assinada" : "agendada") : "agendada";
+  const estado: EstadoJornada = antesDaAssinatura
+    ? "agendada"
+    : dataAssinatura <= hoje && previsaoLiberacaoFinanceira
+    ? "liberacao"
+    : dataAssinatura <= hoje
+    ? "assinada"
+    : "agendada";
   const CONFIG: Record<EstadoJornada, { titulo: string; icone: typeof FileSignature; status: string; tom: "gold" | "success" }> = {
     agendada: { titulo: "Próximas datas", icone: CalendarDays, status: "Agendada / Confirmada", tom: "gold" },
     assinada: { titulo: "✓ Termos assinados", icone: CheckCircle2, status: "Concluído", tom: "success" },
