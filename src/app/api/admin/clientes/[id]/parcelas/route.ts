@@ -40,7 +40,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > 240) return NextResponse.json({ erro: "A quantidade deve ser um número inteiro entre 1 e 240." }, { status: 400 });
     if (valorParcela !== null && (!Number.isFinite(valorParcela) || valorParcela <= 0)) return NextResponse.json({ erro: "Valor da parcela inválido." }, { status: 400 });
     if (!dataValida(primeiroVencimento)) return NextResponse.json({ erro: "Data de vencimento inválida." }, { status: 400 });
-
     const { data: cliente } = await supabase.from("clientes").select("id, nome_completo, quantidade_parcelas, valor_contrato, custo_total").eq("id", params.id).single();
     if (!cliente) return NextResponse.json({ erro: "Cliente não encontrada." }, { status: 404 });
     const { data: existentes } = await supabase.from("boletos").select("numero_parcela, data_vencimento").eq("cliente_id", params.id).order("numero_parcela", { ascending: false }).limit(1);
@@ -48,7 +47,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const primeiro = primeiroVencimento || existentes?.[0]?.data_vencimento || new Date().toISOString().slice(0, 10);
     const total = ultima + quantidade;
     if (total > 240) return NextResponse.json({ erro: "O contrato não pode ultrapassar 240 parcelas." }, { status: 400 });
-
     const totalBase = Number(cliente.custo_total ?? cliente.valor_contrato ?? 0);
     const valor = valorParcela ?? Number((totalBase / total).toFixed(2));
     const rows = Array.from({ length: quantidade }, (_, index) => {
@@ -72,7 +70,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const { data: atual } = await supabase.from("boletos").select("*").eq("id", boletoId).eq("cliente_id", params.id).single();
     if (!atual) return NextResponse.json({ erro: "Parcela não encontrada." }, { status: 404 });
     if (atual.status === "pago") return NextResponse.json({ erro: "Parcelas pagas não podem ser alteradas." }, { status: 400 });
-
     if (acao === "excluir") {
       const { error } = await supabase.from("boletos").delete().eq("id", boletoId);
       if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
@@ -80,7 +77,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       await avisarCliente(params.id, { tipo: "parcelamento_atualizado" });
       return NextResponse.json({ sucesso: true });
     }
-
     if (acao === "reabrir") {
       const { data, error } = await supabase.from("boletos").update({ status: "nao_pago", data_pagamento: null, observacoes: body.observacoes ?? atual.observacoes }).eq("id", boletoId).select("*").single();
       if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
@@ -88,7 +84,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       await avisarCliente(params.id, { tipo: "parcela_atualizada", parcela: atual.numero_parcela });
       return NextResponse.json({ boleto: { ...data, valor: Number(data.valor) } });
     }
-
     const valor = body.valor === undefined || body.valor === "" ? undefined : Number(body.valor);
     const dataVencimento = body.dataVencimento === undefined ? undefined : (body.dataVencimento || null);
     if (valor !== undefined && (!Number.isFinite(valor) || valor <= 0)) return NextResponse.json({ erro: "Valor inválido." }, { status: 400 });
@@ -112,16 +107,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const selecionadas = (atuais ?? []).filter((b) => ids.includes(b.id));
     if (selecionadas.length !== ids.length) return NextResponse.json({ erro: "Uma ou mais parcelas não pertencem a esta cliente." }, { status: 400 });
     if (selecionadas.some((b) => b.status === "pago")) return NextResponse.json({ erro: "Parcelas pagas nunca podem ser suspensas." }, { status: 400 });
-
     const abertas = (atuais ?? []).filter((b) => b.status !== "pago");
     const selecionadasSet = new Set(ids);
     const novaOrdem = [...abertas.filter((b) => !selecionadasSet.has(b.id)), ...abertas.filter((b) => selecionadasSet.has(b.id))];
     const dataBase = abertas.find((b) => b.data_vencimento)?.data_vencimento ?? new Date().toISOString().slice(0, 10);
     const maiorPago = Math.max(0, ...(atuais ?? []).filter((b) => b.status === "pago").map((b) => Number(b.numero_parcela)));
     const totalContrato = (atuais ?? []).length;
-
     for (const boleto of abertas) {
-      const { error: e } = await supabase.from("boletos").update({ numero_parcela: 1001 + abertas.indexOf(boleto), total_parcelas: 1000 }).eq("id", boleto.id);
+      const { error: e } = await supabase.from("boletos").update({ numero_parcela: 9001 + abertas.indexOf(boleto), total_parcelas: 10000 }).eq("id", boleto.id);
       if (e) return NextResponse.json({ erro: e.message }, { status: 500 });
     }
     const alteracoes: Array<Record<string, unknown>> = [];
