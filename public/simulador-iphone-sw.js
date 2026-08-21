@@ -1,9 +1,9 @@
-const CACHE = 'sra-luck-pwa-v6';
+const CACHE = 'sra-luck-pwa-v7';
 const SHELL = [
   '/simulador-iphone.html',
   '/simulador-iphone.webmanifest',
-  '/icons/sra-luck-192.png',
-  '/icons/sra-luck-512.png'
+  '/icons/sra-luck-app-256.png',
+  '/icons/sra-luck-notification-badge.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -27,12 +27,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
-
-  // APIs, Next.js chunks e páginas reais ficam sempre online-first.
-  // Não congelamos /agenda nem /login em cache para evitar dados antigos.
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/_next/')) {
-    return;
-  }
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/_next/')) return;
 
   if (url.pathname === '/simulador-iphone.html' || url.pathname === '/simulador-iphone.webmanifest') {
     event.respondWith(
@@ -53,8 +48,8 @@ self.addEventListener('push', (event) => {
   const title = data.title || 'Sra. Luck';
   const options = {
     body: data.body || 'Você recebeu uma nova notificação.',
-    icon: data.icon || '/icons/sra-luck-192.png',
-    badge: data.badge || '/icons/sra-luck-192.png',
+    icon: data.icon || '/icons/sra-luck-app-256.png',
+    badge: data.badge || '/icons/sra-luck-notification-badge.png',
     tag: data.tag || 'sra-luck-notificacao',
     renotify: true,
     requireInteraction: false,
@@ -69,9 +64,7 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       const existing = clients.find((client) => 'focus' in client);
-      if (existing) {
-        return existing.focus().then(() => existing.navigate(targetUrl));
-      }
+      if (existing) return existing.focus().then(() => existing.navigate(targetUrl));
       return self.clients.openWindow(targetUrl);
     })
   );
