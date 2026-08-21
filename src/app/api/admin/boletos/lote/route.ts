@@ -9,7 +9,7 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const ids = Array.isArray(body.ids) ? body.ids.filter((id: unknown): id is string => typeof id === "string" && id.length > 0) : [];
   const acao = body.acao as string | undefined;
-  const acoes = ["confirmar", "rejeitar", "reabrir", "suspender", "excluir"];
+  const acoes = ["marcar_pago", "confirmar", "rejeitar", "reabrir", "suspender", "excluir"];
   if (!ids.length || ids.length > 500) return NextResponse.json({ erro: "Selecione entre 1 e 500 parcelas." }, { status: 400 });
   if (!acao || !acoes.includes(acao)) return NextResponse.json({ erro: "Ação inválida." }, { status: 400 });
 
@@ -19,6 +19,16 @@ export async function PATCH(req: NextRequest) {
 
   if (["reabrir", "suspender", "excluir"].includes(acao) && boletos.some((b) => b.status === "pago")) {
     return NextResponse.json({ erro: "Parcelas pagas não podem ser alteradas, suspensas ou excluídas." }, { status: 400 });
+  }
+
+  if (acao === "marcar_pago") {
+    const elegiveis = boletos.filter((b) => b.status !== "pago");
+    if (!elegiveis.length) return NextResponse.json({ erro: "Nenhuma parcela aberta foi selecionada." }, { status: 400 });
+    const dataPagamento = new Date().toISOString().slice(0, 10);
+    const { data: atualizados, error } = await supabase.from("boletos").update({ status: "pago", data_pagamento: dataPagamento }).in("id", elegiveis.map((b) => b.id)).select("id, cliente_id, numero_parcela, valor, status, data_pagamento");
+    if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
+    await supabase.from("logs_alteracoes").insert(elegiveis.map((b) => ({ usuario: user.email ?? "admin", acao: "marcou_pagamento_manual", entidade: "boleto", entidade_id: b.id, detalhes: { cliente_id: b.cliente_id, numero_parcela: b.numero_parcela, valor: b.valor } })));
+    return NextResponse.json({ boletos: atualizados ?? [], total: atualizados?.length ?? 0 });
   }
 
   if (acao === "confirmar" || acao === "rejeitar") {
@@ -63,7 +73,6 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ total: idsExcluir.length });
   }
 
-  // Suspensão: mantém as parcelas pagas exatamente onde estão e reorganiza apenas as abertas.
   const selecionadosPorCliente = new Map<string, Set<string>>();
   for (const b of boletos) {
     if (!selecionadosPorCliente.has(b.cliente_id)) selecionadosPorCliente.set(b.cliente_id, new Set());
