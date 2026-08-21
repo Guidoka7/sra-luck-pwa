@@ -3,13 +3,19 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Fragment, useState } from "react";
 import { Check, Calendar, FileSignature, HeartHandshake, Sparkles } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatarDataLonga } from "@/lib/utils";
 
 export type JourneyStepStatus = "done" | "current" | "upcoming";
 export interface JourneyStep { id: string; label: string; icon: React.ElementType; status: JourneyStepStatus; }
-interface JourneyTrackerProps { percentualPagamento: number; percentualAtingido: boolean; statusRevisao: "pendente" | "aprovada" | "recusada" | null; agendada: boolean; }
+interface JourneyTrackerProps {
+  percentualPagamento: number;
+  percentualAtingido: boolean;
+  statusRevisao: "pendente" | "aprovada" | "recusada" | null;
+  agendada: boolean;
+  previsaoLiberacaoFinanceira?: string | null;
+}
 
-export function JourneyTracker({ percentualPagamento, percentualAtingido, statusRevisao, agendada }: JourneyTrackerProps) {
+export function JourneyTracker({ percentualPagamento, percentualAtingido, statusRevisao, agendada, previsaoLiberacaoFinanceira = null }: JourneyTrackerProps) {
   const agendaLiberada = statusRevisao === "aprovada";
   const [etapaAberta, setEtapaAberta] = useState("pagamento");
   const steps: JourneyStep[] = [
@@ -20,11 +26,16 @@ export function JourneyTracker({ percentualPagamento, percentualAtingido, status
   ];
   const doneCount = steps.filter((s) => s.status === "done").length;
   const totalSegmentos = steps.length - 1;
+  const dataFormatadaLiberacao = previsaoLiberacaoFinanceira ? formatarDataLonga(previsaoLiberacaoFinanceira) : null;
   const textos: Record<string, string> = {
     contratar: "Seu contrato foi iniciado. Agora, cada pagamento confirmado faz parte da sua evolução.",
     pagamento: percentualAtingido ? "Parabéns! Você atingiu o percentual de pagamento necessário." : "Cada pagamento confirmado te aproxima do percentual necessário para liberar sua agenda. Envie seus comprovantes na aba \"Meus Boletos\".",
     agendar: agendaLiberada ? "Sua agenda está liberada para escolher a assinatura dos termos cirúrgicos." : statusRevisao === "pendente" ? "Estamos realizando o levantamento financeiro dos seus pagamentos. Sua agenda será liberada em até 5 dias úteis." : statusRevisao === "recusada" ? "Encontramos uma divergência no levantamento financeiro. Fale com a nossa equipe para regularizar." : "Esta etapa será liberada quando seu percentual de pagamento for atingido.",
-    cirurgia: agendada ? "Sua assinatura está confirmada. Em breve, a equipe definirá sua data de cirurgia." : "A cirurgia é a próxima conquista depois da assinatura dos termos.",
+    cirurgia: agendada
+      ? dataFormatadaLiberacao
+        ? `Você poderá agendar sua cirurgia a partir da data prevista para liberação financeira: ${dataFormatadaLiberacao}.`
+        : "Sua assinatura está confirmada. A data prevista para liberação financeira será informada pela equipe."
+      : "A cirurgia é a próxima conquista depois da assinatura dos termos.",
   };
   const fillPercent = Math.min(100, (doneCount / totalSegmentos) * 100 + (agendaLiberada && !agendada ? 12 : 0));
   function preenchimentoDoSegmento(indice: number): number { const fracaoGlobal = fillPercent / 100; const fracaoDoSegmento = fracaoGlobal * totalSegmentos - indice; return Math.min(100, Math.max(0, fracaoDoSegmento * 100)); }
