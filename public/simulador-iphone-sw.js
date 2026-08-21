@@ -1,4 +1,4 @@
-const CACHE = 'sra-luck-pwa-v9';
+const CACHE = 'sra-luck-pwa-v10';
 const SHELL = [
   '/simulador-iphone.html',
   '/simulador-iphone.webmanifest',
