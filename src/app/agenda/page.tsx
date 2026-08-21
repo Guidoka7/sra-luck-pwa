@@ -72,6 +72,12 @@ export default function AgendaClientePage() {
     return () => { clearInterval(intervalo); document.removeEventListener("visibilitychange", aoFocarAba); window.removeEventListener("focus", aoFocarAba); };
   }, []);
 
+  useEffect(() => {
+    const supabase = createClientSupabaseClient();
+    const canalAgenda = supabase.channel("agenda-clientes").on("broadcast", { event: "datas_atualizadas" }, () => { carregar(true); }).subscribe();
+    return () => { supabase.removeChannel(canalAgenda); };
+  }, []);
+
   useEffect(() => { if (!clienteId) return; const supabase = createClientSupabaseClient(); const canal = supabase.channel(`notificacoes-cliente:${clienteId}`).on("broadcast", { event: "nova_notificacao" }, () => { carregar(true); setNotificacaoTick((t) => t + 1); }).subscribe(); return () => { supabase.removeChannel(canal); }; }, [clienteId]);
 
   async function escolherData(dataId: string) {
