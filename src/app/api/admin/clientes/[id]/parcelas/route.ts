@@ -42,8 +42,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!dataValida(primeiroVencimento)) return NextResponse.json({ erro: "Data de vencimento inválida." }, { status: 400 });
     const { data: cliente } = await supabase.from("clientes").select("id, nome_completo, quantidade_parcelas, valor_contrato, custo_total").eq("id", params.id).single();
     if (!cliente) return NextResponse.json({ erro: "Cliente não encontrada." }, { status: 404 });
-    const { data: existentes } = await supabase.from("boletos").select("numero_parcela, data_vencimento").eq("cliente_id", params.id).order("numero_parcela", { ascending: false }).limit(1);
+    const { data: existentes, error: existentesError } = await supabase.from("boletos").select("numero_parcela, data_vencimento").eq("cliente_id", params.id).order("numero_parcela", { ascending: false }).limit(1);
+    if (existentesError) return NextResponse.json({ erro: existentesError.message }, { status: 500 });
     const ultima = Number(existentes?.[0]?.numero_parcela ?? 0);
+    if (ultima < 0 || ultima > 240) return NextResponse.json({ erro: "A numeração das parcelas desta cliente está inconsistente. Execute a migration 020 antes de gerar novas parcelas." }, { status: 409 });
     const primeiro = primeiroVencimento || existentes?.[0]?.data_vencimento || new Date().toISOString().slice(0, 10);
     const total = ultima + quantidade;
     if (total > 240) return NextResponse.json({ erro: "O contrato não pode ultrapassar 240 parcelas." }, { status: 400 });
@@ -57,7 +59,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     });
     const { error } = await supabase.from("boletos").insert(rows);
     if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
-    await supabase.from("boletos").update({ total_parcelas: total }).eq("cliente_id", params.id).neq("status", "pago");
+    await supabase.from("boletos").update({ total_parcelas: total }).eq("cliente_id", params.id);
     await supabase.from("clientes").update({ quantidade_parcelas: total }).eq("id", params.id);
     await supabase.from("logs_alteracoes").insert({ usuario: user.email ?? "admin", acao: "gerou_parcelas", entidade: "clientes", entidade_id: params.id, detalhes: { quantidade_adicionada: quantidade, total_anterior: ultima, total_novo: total, valor_parcela: valor } });
     await avisarCliente(params.id, { tipo: "parcelamento_atualizado", quantidadeParcelas: total });
@@ -73,21 +75,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (acao === "excluir") {
       const { data: todas } = await supabase.from("boletos").select("*").eq("cliente_id", params.id).order("numero_parcela", { ascending: true });
       const restantes = (todas ?? []).filter((b) => b.id !== boletoId);
-      const abertasRestantes = restantes.filter((b) => b.status !== "pago");
-      const maiorPago = Math.max(0, ...restantes.filter((b) => b.status === "pago").map((b) => Number(b.numero_parcela)));
       const novoTotal = restantes.length;
-      for (const boleto of abertasRestantes) {
-        const { error: e } = await supabase.from("boletos").update({ numero_parcela: 9001 + abertasRestantes.indexOf(boleto), total_parcelas: 10000 }).eq("id", boleto.id);
-        if (e) return NextResponse.json({ erro: e.message }, { status: 500 });
-      }
       const { error: erroExcluir } = await supabase.from("boletos").delete().eq("id", boletoId);
       if (erroExcluir) return NextResponse.json({ erro: erroExcluir.message }, { status: 500 });
-      for (let i = 0; i < abertasRestantes.length; i++) {
-        const boleto = abertasRestantes[i];
-        const { error: e } = await supabase.from("boletos").update({ numero_parcela: maiorPago + i + 1, total_parcelas: novoTotal }).eq("id", boleto.id);
-        if (e) return NextResponse.json({ erro: e.message }, { status: 500 });
+      if (novoTotal > 0) {
+        const { error: erroTotal } = await supabase.from("boletos").update({ total_parcelas: novoTotal }).eq("cliente_id", params.id);
+        if (erroTotal) return NextResponse.json({ erro: erroTotal.message }, { status: 500 });
       }
-      await supabase.from("clientes").update({ quantidade_parcelas: novoTotal }).eq("id", params.id);
+      await supabase.from("clientes").update({ quantidade_parcelas: novoTotal > 0 ? novoTotal : null }).eq("id", params.id);
       await supabase.from("logs_alteracoes").insert({ usuario: user.email ?? "admin", acao: "excluiu_parcela", entidade: "clientes", entidade_id: params.id, detalhes: { parcela: atual.numero_parcela, valor: atual.valor, vencimento: atual.data_vencimento, novo_total: novoTotal } });
       await avisarCliente(params.id, { tipo: "parcelamento_atualizado", quantidadeParcelas: novoTotal });
       return NextResponse.json({ sucesso: true, totalParcelas: novoTotal });
@@ -122,30 +117,32 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const selecionadas = (atuais ?? []).filter((b) => ids.includes(b.id));
     if (selecionadas.length !== ids.length) return NextResponse.json({ erro: "Uma ou mais parcelas não pertencem a esta cliente." }, { status: 400 });
     if (selecionadas.some((b) => b.status === "pago")) return NextResponse.json({ erro: "Parcelas pagas nunca podem ser suspensas." }, { status: 400 });
-    const abertas = (atuais ?? []).filter((b) => b.status !== "pago");
-    const selecionadasSet = new Set(ids);
-    const novaOrdem = [...abertas.filter((b) => !selecionadasSet.has(b.id)), ...abertas.filter((b) => selecionadasSet.has(b.id))];
-    const dataBase = abertas.find((b) => b.data_vencimento)?.data_vencimento ?? new Date().toISOString().slice(0, 10);
-    const maiorPago = Math.max(0, ...(atuais ?? []).filter((b) => b.status === "pago").map((b) => Number(b.numero_parcela)));
-    const totalContrato = (atuais ?? []).length;
-    for (const boleto of abertas) {
-      const { error: e } = await supabase.from("boletos").update({ numero_parcela: 9001 + abertas.indexOf(boleto), total_parcelas: 10000 }).eq("id", boleto.id);
-      if (e) return NextResponse.json({ erro: e.message }, { status: 500 });
-    }
-    const alteracoes: Array<Record<string, unknown>> = [];
-    for (let i = 0; i < novaOrdem.length; i++) {
-      const boleto = novaOrdem[i];
-      const novaData = new Date(`${dataBase}T00:00:00`);
-      novaData.setMonth(novaData.getMonth() + i);
-      const suspensa = selecionadasSet.has(boleto.id);
-      const { error: e } = await supabase.from("boletos").update({ numero_parcela: maiorPago + i + 1, total_parcelas: totalContrato, data_vencimento: novaData.toISOString().slice(0, 10), suspensa, suspensa_em: suspensa ? new Date().toISOString() : boleto.suspensa_em, suspensa_por: suspensa ? (user.email ?? "admin") : boleto.suspensa_por }).eq("id", boleto.id);
-      if (e) return NextResponse.json({ erro: e.message }, { status: 500 });
-      if (suspensa) alteracoes.push({ id: boleto.id, de: boleto.numero_parcela, para: maiorPago + i + 1, novaData: novaData.toISOString().slice(0, 10) });
-    }
-    await supabase.from("clientes").update({ quantidade_parcelas: totalContrato }).eq("id", params.id);
-    await supabase.from("logs_alteracoes").insert({ usuario: user.email ?? "admin", acao: "suspendeu_parcelas", entidade: "clientes", entidade_id: params.id, detalhes: { parcelas: selecionadas.map((b) => b.numero_parcela), realocadas: alteracoes, regra: "parcelas abertas selecionadas foram movidas para o final; parcelas pagas preservadas" } });
+    const agora = new Date().toISOString();
+    const { error: erroSuspensao } = await supabase
+      .from("boletos")
+      .update({
+        suspensa: true,
+        suspensa_em: agora,
+        suspensa_por: user.email ?? "admin",
+      })
+      .in("id", ids)
+      .eq("cliente_id", params.id)
+      .neq("status", "pago");
+    if (erroSuspensao) return NextResponse.json({ erro: erroSuspensao.message }, { status: 500 });
+
+    await supabase.from("logs_alteracoes").insert({
+      usuario: user.email ?? "admin",
+      acao: "suspendeu_parcelas",
+      entidade: "clientes",
+      entidade_id: params.id,
+      detalhes: {
+        parcelas: selecionadas.map((b) => b.numero_parcela),
+        quantidade: ids.length,
+        regra: "parcelas suspensas são apenas marcadas; a numeração nunca usa faixa temporária e não é renumerada",
+      },
+    });
     await avisarCliente(params.id, { tipo: "parcelamento_atualizado", suspensas: ids.length });
-    return NextResponse.json({ sucesso: true, mensagem: `${ids.length} parcela(s) suspensa(s) e realocada(s) para o final.` });
+    return NextResponse.json({ sucesso: true, mensagem: `${ids.length} parcela(s) suspensa(s).` });
   }
 
   return NextResponse.json({ erro: "Ação inválida." }, { status: 400 });
