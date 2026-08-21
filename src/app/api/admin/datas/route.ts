@@ -1,5 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
+
+const CANAL_AGENDA_CLIENTES = "agenda-clientes";
+
+async function publicarAtualizacaoAgenda(payload: Record<string, unknown>) {
+  try {
+    const serviceClient = createServiceSupabaseClient();
+    await serviceClient.channel(CANAL_AGENDA_CLIENTES).send({
+      type: "broadcast",
+      event: "datas_atualizadas",
+      payload,
+    });
+  } catch (erro) {
+    console.error("Falha ao publicar atualização da agenda em tempo real:", erro);
+  }
+}
 
 export async function GET(req: NextRequest) {
   const supabase = createServerSupabaseClient();
@@ -36,30 +51,17 @@ export async function GET(req: NextRequest) {
       | null;
   };
 
-  const clientesPorData = new Map<
-    string,
-    { clienteId: string | null; nome: string; valor: number; criadoEm: string; statusRevisaoFinanceira: string | null }[]
-  >();
+  const clientesPorData = new Map<string, { clienteId: string | null; nome: string; valor: number; criadoEm: string; statusRevisaoFinanceira: string | null }[]>();
   for (const a of (agendamentos ?? []) as AgendamentoComCliente[]) {
     const clienteInfo = Array.isArray(a.clientes) ? a.clientes[0] : a.clientes;
     const lista = clientesPorData.get(a.data_id) ?? [];
-    lista.push({
-      clienteId: clienteInfo?.id ?? null,
-      nome: clienteInfo?.nome_completo ?? "Cliente sem nome",
-      valor: a.valor_contrato,
-      criadoEm: a.created_at,
-      statusRevisaoFinanceira: clienteInfo?.status_revisao_financeira ?? null,
-    });
+    lista.push({ clienteId: clienteInfo?.id ?? null, nome: clienteInfo?.nome_completo ?? "Cliente sem nome", valor: a.valor_contrato, criadoEm: a.created_at, statusRevisaoFinanceira: clienteInfo?.status_revisao_financeira ?? null });
     clientesPorData.set(a.data_id, lista);
   }
 
   const resultado = (datas ?? []).map((d) => {
     const clientes = clientesPorData.get(d.id) ?? [];
-    return {
-      ...d,
-      vagasOcupadas: clientes.length,
-      clientes,
-    };
+    return { ...d, vagasOcupadas: clientes.length, clientes };
   });
 
   return NextResponse.json({ datas: resultado });
@@ -75,26 +77,14 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabase
     .from("datas")
-    .upsert(
-      {
-        data: body.data,
-        vagas_totais: Number(body.vagasTotais) || 1,
-        status: "disponivel",
-      },
-      { onConflict: "data" }
-    )
+    .upsert({ data: body.data, vagas_totais: Number(body.vagasTotais) || 1, status: "disponivel" }, { onConflict: "data" })
     .select("*")
     .single();
 
   if (error) return NextResponse.json({ erro: error.message }, { status: 400 });
 
-  await supabase.from("logs_alteracoes").insert({
-    usuario: user.email ?? "admin",
-    acao: "liberou_data",
-    entidade: "datas",
-    entidade_id: data.id,
-    detalhes: { data: body.data, vagas: body.vagasTotais },
-  });
+  await supabase.from("logs_alteracoes").insert({ usuario: user.email ?? "admin", acao: "liberou_data", entidade: "datas", entidade_id: data.id, detalhes: { data: body.data, vagas: body.vagasTotais } });
+  await publicarAtualizacaoAgenda({ acao: "liberada", data: data.data, dataId: data.id });
 
   return NextResponse.json({ data });
 }
