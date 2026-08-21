@@ -24,8 +24,10 @@ export async function GET() {
   if (erroDispositivos) return NextResponse.json({ erro: erroDispositivos.message }, { status: 500 });
 
   type Device = NonNullable<typeof dispositivosBrutos>[number];
+  type Cliente = NonNullable<typeof clientes>[number];
   const dispositivos = dispositivosBrutos ?? [];
-  const clienteMapa = new Map((clientes ?? []).map((cliente) => [cliente.id, cliente]));
+  const clientesAtivos: Cliente[] = clientes ?? [];
+  const clienteMapa = new Map<string, Cliente>(clientesAtivos.map((cliente: Cliente) => [cliente.id, cliente]));
   const grupos = new Map<string, Device[]>();
 
   for (const item of dispositivos) {
@@ -51,7 +53,7 @@ export async function GET() {
     dispositivos_count: number;
   };
 
-  const resumo: Resumo[] = (clientes ?? []).map((cliente) => {
+  const resumo: Resumo[] = clientesAtivos.map((cliente: Cliente) => {
     const lista = grupos.get(cliente.id) ?? [];
     const ultimo = lista[0] ?? null;
     const primeiroAcesso = lista.reduce<string | null>((menor, item) => {
