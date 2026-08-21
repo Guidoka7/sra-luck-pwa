@@ -1,12 +1,13 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Bell, CalendarDays, Check, CreditCard, Heart, Sparkles, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bell, CalendarDays, Check, CreditCard, Heart, Sparkles, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-const STORAGE_KEY = "sra-luck-cliente-tour-v2";
+const STORAGE_KEY = "sra-luck-cliente-tour-v3";
 
+type Etapa = "inicio" | "financeiro" | "agenda" | "cirurgia";
 type Step = { id: string; title: string; text: string; icon: React.ElementType; target?: () => HTMLElement | null };
 
 function porDataTour(valor: string) {
@@ -19,29 +20,81 @@ export function ClienteTour() {
   const [indice, setIndice] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [pronto, setPronto] = useState(false);
-  const [etapa, setEtapa] = useState<"inicio" | "financeiro" | "agenda" | "cirurgia">("inicio");
+  const [etapa, setEtapa] = useState<Etapa>("inicio");
+  const [percentualContrato, setPercentualContrato] = useState(60);
+  const [parcelasNecessarias, setParcelasNecessarias] = useState<number | null>(null);
 
-  const steps = useMemo<Step[]>(() => {
-    const base: Step[] = [
-      { id: "boas-vindas", title: "Bem-vinda à sua jornada 💕", text: "Vamos te mostrar, de forma rápida, onde acompanhar cada etapa. Você continuará vendo seu sistema normalmente durante o tour.", icon: Sparkles },
-      { id: "jornada", title: "Sua jornada até a cirurgia", text: etapa === "inicio" ? "Aqui você acompanha o andamento do seu contrato e sabe exatamente em qual etapa está." : etapa === "financeiro" ? "Aqui você acompanha a evolução dos pagamentos e quando sua agenda poderá ser liberada." : etapa === "agenda" ? "Sua agenda já está liberada. Aqui você acompanha a etapa de agendamento e a assinatura dos termos." : "Aqui você acompanha as etapas já concluídas e a previsão relacionada à sua cirurgia.", icon: Heart, target: () => porDataTour("jornada") },
-    ];
+  const steps = useMemo<Step[]>(() => [
+    {
+      id: "boas-vindas",
+      title: "Bem-vinda à sua jornada 💕",
+      text: "Vamos te mostrar, de forma rápida e delicada, onde acompanhar cada etapa. Você continuará vendo seu sistema normalmente durante o tour.",
+      icon: Sparkles,
+    },
+    {
+      id: "jornada",
+      title: "Sua jornada até a cirurgia",
+      text: etapa === "financeiro"
+        ? "Aqui você acompanha o percentual das parcelas pagas e entende quando sua agenda poderá ser liberada."
+        : etapa === "agenda"
+          ? "Aqui você acompanha a evolução do seu contrato e o momento em que a agenda fica disponível para escolha."
+          : etapa === "cirurgia"
+            ? "Aqui você acompanha as etapas já concluídas e as informações relacionadas à sua assinatura e cirurgia."
+            : "Aqui você acompanha o andamento do seu contrato e sabe exatamente em qual etapa está.",
+      icon: Heart,
+      target: () => porDataTour("jornada"),
+    },
+    {
+      id: "boletos",
+      title: "Meus Boletos",
+      text: "Nesta aba você acompanha suas parcelas, pagamentos e comprovantes. É por aqui que você envia os comprovantes quando necessário.",
+      icon: CreditCard,
+      target: () => porDataTour("boletos"),
+    },
+    {
+      id: "agenda",
+      title: etapa === "agenda" ? "Sua agenda" : "Sua agenda (simulação liberada)",
+      text: etapa === "agenda"
+        ? `Sua agenda está liberada. Aqui você poderá escolher a data da assinatura dos termos. A liberação segue ${percentualContrato}% das parcelas pagas${parcelasNecessarias ? `, equivalente a ${parcelasNecessarias} parcelas` : ""}.`
+        : `Esta é uma simulação de como sua agenda ficará quando for liberada. Ao atingir ${percentualContrato}% das parcelas pagas${parcelasNecessarias ? `, equivalente a ${parcelasNecessarias} parcelas do seu contrato` : ""}, você poderá escolher a data da assinatura dos termos.`,
+      icon: CalendarDays,
+      target: () => porDataTour("agenda"),
+    },
+    {
+      id: "notificacoes",
+      title: "Fique por dentro",
+      text: "Ative as notificações para receber avisos importantes sobre pagamentos, agenda e novas etapas da sua jornada.",
+      icon: Bell,
+      target: () => porDataTour("notificacoes"),
+    },
+    {
+      id: "pronto",
+      title: "Tudo pronto ✨",
+      text: etapa === "financeiro"
+        ? `Agora você já sabe onde acompanhar seus pagamentos. Quando atingir ${percentualContrato}% das parcelas pagas${parcelasNecessarias ? ` (${parcelasNecessarias} parcelas)` : ""}, sua agenda poderá ser liberada.`
+        : "Agora é só acompanhar sua jornada. Quando surgir uma nova etapa, você encontrará tudo por aqui.",
+      icon: Check,
+    },
+  ], [etapa, percentualContrato, parcelasNecessarias]);
 
-    if (etapa === "inicio" || etapa === "financeiro") {
-      base.push({ id: "boletos", title: "Meus Boletos", text: "Nesta aba você acompanha suas parcelas, pagamentos e comprovantes. É por aqui que você envia os comprovantes quando necessário.", icon: CreditCard, target: () => porDataTour("boletos") });
-    }
-    if (etapa === "agenda") {
-      base.push({ id: "agenda", title: "Sua agenda", text: "Quando houver uma data disponível, você pode escolher aqui o dia para comparecer e assinar seus termos.", icon: CalendarDays, target: () => porDataTour("agenda") });
-    }
-    if (etapa === "cirurgia") {
-      base.push({ id: "previsao", title: "Sua previsão financeira", text: "Aqui ficará registrada a previsão de liberação financeira e as informações importantes após a assinatura dos termos.", icon: CalendarDays, target: () => porDataTour("previsao") });
-    }
-    base.push({ id: "notificacoes", title: "Fique por dentro", text: "Ative as notificações para receber avisos importantes sobre pagamentos, agenda e novas etapas da sua jornada.", icon: Bell, target: () => porDataTour("notificacoes") });
-    return base;
-  }, [etapa]);
+  function encerrar() {
+    try { localStorage.setItem(STORAGE_KEY, "concluido"); } catch (_) {}
+    setAberto(false);
+  }
 
-  function encerrar() { try { localStorage.setItem(STORAGE_KEY, "concluido"); } catch (_) {} setAberto(false); }
-  function pular() { try { localStorage.setItem(STORAGE_KEY, "pulado"); } catch (_) {} setAberto(false); }
+  function pular() {
+    try { localStorage.setItem(STORAGE_KEY, "pulado"); } catch (_) {}
+    setAberto(false);
+  }
+
+  function anterior() {
+    setIndice((v) => Math.max(0, v - 1));
+  }
+
+  function proximo() {
+    if (indice >= steps.length - 1) encerrar();
+    else setIndice((v) => v + 1);
+  }
 
   useEffect(() => {
     if (pathname !== "/agenda") return;
@@ -49,7 +102,12 @@ export function ClienteTour() {
     const iniciar = () => {
       try { if (localStorage.getItem(STORAGE_KEY)) return; } catch (_) {}
       const root = document.querySelector<HTMLElement>("[data-tour-root]");
-      setEtapa((root?.dataset.tourStage as typeof etapa | undefined) ?? "inicio");
+      setEtapa((root?.dataset.tourStage as Etapa | undefined) ?? "inicio");
+      const percentual = Number(root?.dataset.tourRequiredPercentage ?? 60);
+      const parcelas = Number(root?.dataset.tourRequiredInstallments ?? "");
+      setPercentualContrato(Number.isFinite(percentual) && percentual > 0 ? percentual : 60);
+      setParcelasNecessarias(Number.isFinite(parcelas) && parcelas > 0 ? parcelas : null);
+      setIndice(0);
       setPronto(true);
       timer = window.setTimeout(() => setAberto(true), 700);
     };
@@ -61,30 +119,44 @@ export function ClienteTour() {
     if (!aberto || !pronto) return;
     const atualizar = () => {
       const target = steps[indice]?.target?.();
-      if (target) target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
-      window.setTimeout(() => setRect(target?.getBoundingClientRect() ?? null), 120);
+      if (target && steps[indice]?.id === "boletos") {
+        target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      } else if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      }
+      window.setTimeout(() => setRect(target?.getBoundingClientRect() ?? null), 140);
     };
     atualizar();
     window.addEventListener("resize", atualizar);
     window.addEventListener("scroll", atualizar, true);
-    const timer = window.setTimeout(atualizar, 180);
+    const timer = window.setTimeout(atualizar, 220);
     return () => { clearTimeout(timer); window.removeEventListener("resize", atualizar); window.removeEventListener("scroll", atualizar, true); };
   }, [aberto, indice, pronto, steps]);
 
   if (pathname !== "/agenda" || !aberto) return null;
-  const step = steps[indice]; const Icon = step.icon; const ultimo = indice === steps.length - 1;
-  const tooltipStyle = rect ? { left: Math.max(16, Math.min(window.innerWidth - 336, rect.left + rect.width / 2 - 160)), top: Math.min(window.innerHeight - 230, Math.max(16, rect.bottom + 14)) } : { left: 16, right: 16, top: "50%", transform: "translateY(-50%)" };
+
+  const step = steps[indice];
+  const Icon = step.icon;
+  const ultimo = indice === steps.length - 1;
+  const isAgenda = step.id === "agenda" && rect;
+  const tooltipStyle = rect
+    ? isAgenda
+      ? { left: Math.max(16, Math.min(window.innerWidth - 336, rect.left + rect.width / 2 - 160)), bottom: Math.max(16, window.innerHeight - rect.top + 14) }
+      : { left: Math.max(16, Math.min(window.innerWidth - 336, rect.left + rect.width / 2 - 160)), top: Math.min(window.innerHeight - 250, Math.max(16, rect.bottom + 14)) }
+    : { left: 16, right: 16, top: "50%", transform: "translateY(-50%)" };
 
   return <AnimatePresence>
     <motion.div className="fixed inset-0 z-[100]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-      <div className="absolute inset-0 bg-[#241317]/18 backdrop-blur-[1px]" />
-      {rect && <motion.div className="pointer-events-none absolute rounded-2xl border-2 border-gold" initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: .24, ease: [0.22,1,0.36,1] }} style={{ left: rect.left - 7, top: rect.top - 7, width: rect.width + 14, height: rect.height + 14, boxShadow: "0 0 0 9999px rgba(36,19,23,.18), 0 0 0 4px rgba(201,161,90,.10), 0 0 30px rgba(201,161,90,.34)" }} />}
-      <motion.section className="absolute w-[min(320px,calc(100vw-32px))] rounded-3xl border border-gold/20 bg-white p-5 shadow-[0_30px_90px_-30px_rgba(42,15,22,.55)] dark:bg-[#202225]" style={tooltipStyle} initial={{ opacity: 0, y: 8, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: .24, ease: [0.22,1,0.36,1] }}>
+      <div className="absolute inset-0 bg-[#241317]/20 backdrop-blur-[1px]" />
+      {rect && <motion.div className="pointer-events-none absolute rounded-2xl border-2 border-gold" initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: .24, ease: [0.22,1,0.36,1] }} style={{ left: rect.left - 7, top: rect.top - 7, width: rect.width + 14, height: rect.height + 14, boxShadow: "0 0 0 9999px rgba(36,19,23,.20), 0 0 0 4px rgba(201,161,90,.10), 0 0 30px rgba(201,161,90,.38)" }} />}
+      <motion.section className="absolute w-[min(320px,calc(100vw-32px))] rounded-3xl border border-gold/20 bg-white p-5 shadow-[0_30px_90px_-30px_rgba(42,15,22,.55)] dark:bg-[#202225]" style={tooltipStyle} initial={{ opacity: 0, y: isAgenda ? -8 : 8, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: .24, ease: [0.22,1,0.36,1] }}>
+        {isAgenda && <span className="absolute bottom-[-9px] left-1/2 h-4 w-4 -translate-x-1/2 rotate-45 border-b border-r border-gold/20 bg-white dark:bg-[#202225]" />}
         <button type="button" onClick={pular} aria-label="Fechar tour" className="absolute right-3 top-3 rounded-full p-2 text-clay/35 transition-all duration-200 hover:bg-blush hover:text-burgundy active:scale-95"><X className="h-4 w-4" /></button>
-        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-blush text-burgundy"><Icon className="h-5 w-5" /></div>
+        <div className="mb-3 flex items-center justify-between pr-8"><div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blush text-burgundy"><Icon className="h-5 w-5" /></div><span className="rounded-full bg-blush/70 px-2.5 py-1 text-[0.62rem] font-bold text-clay/60">{indice + 1} de {steps.length}</span></div>
         <h2 className="pr-5 font-heading text-lg font-semibold text-burgundy dark:text-[#F4D9DC]">{step.title}</h2>
         <p className="mt-2 text-sm leading-relaxed text-clay/65 dark:text-[#D8D0D2]/70">{step.text}</p>
-        <div className="mt-5 flex items-center justify-between gap-3"><span className="text-[.62rem] font-bold uppercase tracking-[.14em] text-clay/35">{indice + 1} de {steps.length}</span><div className="flex gap-2"><button type="button" onClick={pular} className="rounded-full px-3 py-2 text-xs font-semibold text-clay/45 transition-all duration-200 hover:bg-blush hover:text-burgundy active:scale-95">Agora não</button><button type="button" onClick={() => ultimo ? encerrar() : setIndice((v) => v + 1)} className="inline-flex items-center gap-2 rounded-full bg-burgundy px-4 py-2.5 text-xs font-bold text-cream shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:scale-[.98]">{ultimo ? <><Check className="h-3.5 w-3.5" /> Começar</> : <>Próximo <ArrowRight className="h-3.5 w-3.5" /></>}</button></div></div>
+        {isAgenda && <div className="mt-3 rounded-2xl border border-gold/20 bg-cream/70 px-3 py-2.5 text-[0.72rem] leading-relaxed text-clay/70"><strong className="text-burgundy">Simulação:</strong> a agenda exibida abaixo é apenas demonstrativa. As datas disponíveis serão as definidas pela equipe no momento da liberação.</div>}
+        <div className="mt-5 flex items-center justify-between gap-2 border-t border-rose/10 pt-4"><button type="button" onClick={pular} className="rounded-full px-2 py-2 text-xs font-semibold text-clay/45 transition-all duration-200 hover:bg-blush hover:text-burgundy active:scale-95">Pular</button><div className="flex items-center gap-2"><button type="button" onClick={anterior} disabled={indice === 0} className="inline-flex items-center gap-1.5 rounded-full border border-rose/15 px-3 py-2.5 text-xs font-semibold text-burgundy transition-all duration-200 hover:bg-blush active:scale-95 disabled:pointer-events-none disabled:opacity-25"><ArrowLeft className="h-3.5 w-3.5" /> Voltar</button><button type="button" onClick={proximo} className="inline-flex items-center gap-1.5 rounded-full bg-burgundy px-4 py-2.5 text-xs font-bold text-cream shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:scale-[.98]">{ultimo ? <><Check className="h-3.5 w-3.5" /> Concluir</> : <>Próximo <ArrowRight className="h-3.5 w-3.5" /></>}</button></div></div>
       </motion.section>
     </motion.div>
   </AnimatePresence>;
