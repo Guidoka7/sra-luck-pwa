@@ -23,21 +23,34 @@ function deviceKey() {
   return value;
 }
 
+async function getPushActive() {
+  try {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return false;
+    if (Notification.permission !== "granted") return false;
+    const registration = await navigator.serviceWorker.ready;
+    return Boolean(await registration.pushManager.getSubscription());
+  } catch {
+    return false;
+  }
+}
+
 export function AppTelemetry() {
   useEffect(() => {
     let cancelado = false;
+    let enviando = false;
+
     const enviar = async () => {
+      if (cancelado || enviando) return;
+      enviando = true;
       try {
         const standalone = displayMode() === "standalone";
-        let pushActive = false;
-        if ("serviceWorker" in navigator && "PushManager" in window && Notification.permission === "granted") {
-          const reg = await navigator.serviceWorker.getRegistration("/agenda");
-          pushActive = Boolean(await reg?.pushManager.getSubscription());
-        }
+        const pushActive = await getPushActive();
         if (cancelado) return;
-        await fetch("/api/cliente/app-telemetry", {
+
+        await fetch(`/api/cliente/app-telemetry?t=${Date.now()}`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
+          cache: "no-store",
           body: JSON.stringify({
             deviceKey: deviceKey(),
             deviceType: deviceType(),
@@ -48,16 +61,27 @@ export function AppTelemetry() {
           }),
           keepalive: true,
         });
-      } catch {}
+      } catch {
+        // Telemetria nunca deve impedir o uso do aplicativo.
+      } finally {
+        enviando = false;
+      }
     };
 
     enviar();
-    const interval = window.setInterval(enviar, 5 * 60 * 1000);
+    const interval = window.setInterval(enviar, 60 * 1000);
     window.addEventListener("resize", enviar, { passive: true });
+    window.addEventListener("focus", enviar);
+    document.addEventListener("visibilitychange", enviar);
+    navigator.serviceWorker?.addEventListener("controllerchange", enviar);
+
     return () => {
       cancelado = true;
       window.clearInterval(interval);
       window.removeEventListener("resize", enviar);
+      window.removeEventListener("focus", enviar);
+      document.removeEventListener("visibilitychange", enviar);
+      navigator.serviceWorker?.removeEventListener("controllerchange", enviar);
     };
   }, []);
 
