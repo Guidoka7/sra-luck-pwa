@@ -52,7 +52,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const rows = Array.from({ length: quantidade }, (_, index) => {
       const n = ultima + index + 1;
       const base = new Date(`${primeiro}T00:00:00`);
-      base.setMonth(base.getMonth() + index + (ultima ? 1 : 0));
+      base.setMonth(base.getMonth() + (primeiroVencimento ? index : index + (ultima ? 1 : 0)));
       return { cliente_id: params.id, numero_parcela: n, total_parcelas: total, valor, data_vencimento: base.toISOString().slice(0, 10), status: "nao_pago" as const };
     });
     const { error } = await supabase.from("boletos").insert(rows);
