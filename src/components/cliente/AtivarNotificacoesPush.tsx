@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, Check, Loader2, X } from "lucide-react";
+import { Bell, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 
 function urlBase64ToUint8Array(base64String: string) {
@@ -11,10 +11,19 @@ function urlBase64ToUint8Array(base64String: string) {
   return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
 }
 
+function obterDeviceKey() {
+  const key = "sra-luck-device-key";
+  let value = localStorage.getItem(key);
+  if (!value) {
+    value = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(key, value);
+  }
+  return value;
+}
+
 async function atualizarTelemetria(pushActive: boolean) {
   try {
-    const deviceKey = localStorage.getItem("sra-luck-device-key");
-    if (!deviceKey) return;
+    const deviceKey = obterDeviceKey();
     await fetch("/api/cliente/app-telemetry", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -45,7 +54,8 @@ export function AtivarNotificacoesPush() {
         if (!raw) return false;
         const subscription = JSON.parse(raw);
         if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) return false;
-        const response = await fetch("/api/cliente/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription }) });
+        const deviceKey = obterDeviceKey();
+        const response = await fetch("/api/cliente/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription, deviceKey }) });
         if (response.ok) {
           localStorage.removeItem("sra-luck-pending-push-subscription");
           if (!cancelado) setAtivo(true);
@@ -97,7 +107,8 @@ export function AtivarNotificacoesPush() {
       if (!keyRes.ok) throw new Error("Servidor de notificações não configurado.");
       const { publicKey } = await keyRes.json();
       const subscription = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
-      const saveRes = await fetch("/api/cliente/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: subscription.toJSON() }) });
+      const deviceKey = obterDeviceKey();
+      const saveRes = await fetch("/api/cliente/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: subscription.toJSON(), deviceKey }) });
       if (!saveRes.ok) throw new Error("Não foi possível registrar este celular.");
       await atualizarTelemetria(true);
       setAtivo(true);
