@@ -68,7 +68,20 @@ export default function MonitoramentoPage() {
     } finally { setCarregando(false); }
   }
 
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => {
+    carregar();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") carregar();
+    }, 5000);
+    const atualizarAoVoltar = () => {
+      if (document.visibilityState === "visible") carregar();
+    };
+    document.addEventListener("visibilitychange", atualizarAoVoltar);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", atualizarAoVoltar);
+    };
+  }, []);
 
   const rows = useMemo(() => dados?.resumo ?? [], [dados]);
   const filtrados = useMemo(() => filtro ? rows.filter((item) => corresponde(item, filtro)) : [], [rows, filtro]);
