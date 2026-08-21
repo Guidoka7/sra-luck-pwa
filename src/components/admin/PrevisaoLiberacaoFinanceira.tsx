@@ -24,13 +24,17 @@ interface DiaComPrevisao {
   clientes: ClienteNoDia[];
 }
 
-interface SemPrevisao extends ClienteNoDia {}
+interface SemPrevisao extends ClienteNoDia {
+  previsaoSugerida: string | null;
+}
 
 interface ClienteAgenda {
   agendamentoId: string;
   clienteId: string | null;
   nome: string;
+  dataTermos: string | null;
   previsaoAtual: string | null;
+  previsaoSugerida: string | null;
 }
 
 interface Resposta {
@@ -73,9 +77,6 @@ export function PrevisaoLiberacaoFinanceira() {
   const [salvandoId, setSalvandoId] = useState<string | null>(null);
   const [datasInput, setDatasInput] = useState<Record<string, string>>({});
 
-  // Cadastro/alteração de previsão por cliente — fluxo único: seleciona a
-  // cliente, escolhe a data, salva. Serve tanto para o primeiro cadastro
-  // quanto para alterar uma data já existente.
   const [agendamentoSelecionadoId, setAgendamentoSelecionadoId] = useState("");
   const [dataFormulario, setDataFormulario] = useState("");
   const [salvandoFormulario, setSalvandoFormulario] = useState(false);
@@ -108,7 +109,7 @@ export function PrevisaoLiberacaoFinanceira() {
   function selecionarClienteFormulario(agendamentoId: string) {
     setAgendamentoSelecionadoId(agendamentoId);
     const cliente = dados?.todosClientes.find((c) => c.agendamentoId === agendamentoId);
-    setDataFormulario(cliente?.previsaoAtual ?? "");
+    setDataFormulario(cliente?.previsaoAtual ?? cliente?.previsaoSugerida ?? "");
     carregarHistorico(agendamentoId);
   }
 
@@ -134,11 +135,14 @@ export function PrevisaoLiberacaoFinanceira() {
         return;
       }
       const eraAlteracao = Boolean(resultado.dataAnterior);
+      const ehPadrao90Dias = resultado.dataNova === resultado.previsaoSugerida;
       toast.success(
         eraAlteracao
           ? `Previsão atualizada de ${formatarDataLonga(resultado.dataAnterior)} para ${formatarDataLonga(
               resultado.dataNova
             )}. A cliente já vê a mudança no app.`
+          : ehPadrao90Dias
+          ? `Previsão definida para ${formatarDataLonga(resultado.dataNova)} — 90 dias após os termos.`
           : "Previsão de liberação cadastrada. A cliente já pode ver no app."
       );
       await Promise.all([carregar(), carregarHistorico(agendamentoSelecionadoId)]);
@@ -195,11 +199,16 @@ export function PrevisaoLiberacaoFinanceira() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ previsaoLiberacaoFinanceira: novaData }),
       });
+      const resultado = await res.json();
       if (!res.ok) {
-        toast.error("Não foi possível salvar a previsão.");
+        toast.error(resultado.erro ?? "Não foi possível salvar a previsão.");
         return;
       }
-      toast.success("Previsão de liberação financeira registrada. A cliente já pode ver no app.");
+      toast.success(
+        resultado.dataNova === resultado.previsaoSugerida
+          ? `Previsão definida para ${formatarDataLonga(resultado.dataNova)} — 90 dias após os termos.`
+          : "Previsão de liberação financeira registrada. A cliente já pode ver no app."
+      );
       carregar();
     } catch {
       toast.error("Erro de conexão. Tente novamente.");
@@ -227,8 +236,7 @@ export function PrevisaoLiberacaoFinanceira() {
           <h2 className="font-heading text-base text-burgundy">Cadastrar ou alterar previsão</h2>
         </div>
         <p className="mt-1 text-xs text-clay/50">
-          Selecione a cliente, escolha a data e salve. Se a cliente já tiver uma
-          previsão, ela aparece pré-preenchida abaixo para você alterar.
+          A sugestão é preenchida automaticamente com <strong>90 dias corridos após a assinatura dos termos</strong>. Você pode alterar a data quando houver uma solicitação excepcional.
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-[1.3fr_0.9fr_auto] sm:items-end">
@@ -245,7 +253,11 @@ export function PrevisaoLiberacaoFinanceira() {
               {(dados?.todosClientes ?? []).map((c) => (
                 <option key={c.agendamentoId} value={c.agendamentoId}>
                   {c.nome}
-                  {c.previsaoAtual ? ` — previsão atual: ${formatarDataLonga(c.previsaoAtual)}` : " — sem previsão"}
+                  {c.previsaoAtual
+                    ? ` — previsão atual: ${formatarDataLonga(c.previsaoAtual)}`
+                    : c.previsaoSugerida
+                    ? ` — sugestão: ${formatarDataLonga(c.previsaoSugerida)}`
+                    : " — sem data de termos"}
                 </option>
               ))}
             </Select>
@@ -261,6 +273,14 @@ export function PrevisaoLiberacaoFinanceira() {
               onChange={(e) => setDataFormulario(e.target.value)}
               disabled={!agendamentoSelecionadoId}
             />
+            {agendamentoSelecionadoId && (() => {
+              const cliente = dados?.todosClientes.find((c) => c.agendamentoId === agendamentoSelecionadoId);
+              return cliente?.previsaoSugerida ? (
+                <p className="mt-1 text-[0.62rem] text-clay/45">
+                  Sugestão automática: {formatarDataLonga(cliente.previsaoSugerida)} (90 dias).
+                </p>
+              ) : null;
+            })()}
           </div>
           <Button
             loading={salvandoFormulario}
@@ -310,30 +330,14 @@ export function PrevisaoLiberacaoFinanceira() {
             </p>
           </div>
           <div className="flex items-center gap-1 rounded-full border border-rose/12 bg-white/90 p-1.5 shadow-card">
-            <button
-              onClick={() => mudarMes(-1)}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-burgundy transition-colors hover:bg-blush"
-              aria-label="Mês anterior"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span className="w-32 text-center text-sm font-medium text-burgundy">
-              {nomeMes(mes)} {ano}
-            </span>
-            <button
-              onClick={() => mudarMes(1)}
-              className="flex h-8 w-8 items-center justify-center rounded-full text-burgundy transition-colors hover:bg-blush"
-              aria-label="Próximo mês"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
+            <button onClick={() => mudarMes(-1)} className="flex h-8 w-8 items-center justify-center rounded-full text-burgundy transition-colors hover:bg-blush" aria-label="Mês anterior"><ChevronLeft className="h-4 w-4" /></button>
+            <span className="w-32 text-center text-sm font-medium text-burgundy">{nomeMes(mes)} {ano}</span>
+            <button onClick={() => mudarMes(1)} className="flex h-8 w-8 items-center justify-center rounded-full text-burgundy transition-colors hover:bg-blush" aria-label="Próximo mês"><ChevronRight className="h-4 w-4" /></button>
           </div>
         </div>
 
         <div className="mx-auto mt-5 max-w-md">
-          <div className="mb-1.5 grid grid-cols-7 gap-2 text-center text-[0.65rem] uppercase tracking-label text-rose">
-            {DIAS_SEMANA.map((d, i) => <span key={i}>{d}</span>)}
-          </div>
+          <div className="mb-1.5 grid grid-cols-7 gap-2 text-center text-[0.65rem] uppercase tracking-label text-rose">{DIAS_SEMANA.map((d, i) => <span key={i}>{d}</span>)}</div>
           <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
             {diasDoMes.map((dia, i) => {
               if (dia === null) return <div key={i} />;
@@ -342,123 +346,46 @@ export function PrevisaoLiberacaoFinanceira() {
               const ehHoje = iso === isoHoje;
               const selecionado = iso === dataSelecionada;
               const temPrevisao = Boolean(info);
-
               return (
-                <button
-                  key={i}
-                  onClick={() => setDataSelecionada(iso)}
-                  className={cn(
-                    "relative flex aspect-square flex-col items-center justify-center gap-0.5 rounded-xl border text-[0.72rem] transition-all duration-150",
-                    temPrevisao
-                      ? "border-gold bg-gold/15 font-bold text-burgundy hover:bg-gold/25"
-                      : "border-transparent bg-clay/5 text-clay/30 hover:bg-clay/10",
-                    ehHoje && "ring-2 ring-gold ring-offset-1",
-                    selecionado && "ring-2 ring-burgundy ring-offset-2"
-                  )}
-                >
+                <button key={i} onClick={() => setDataSelecionada(iso)} className={cn("relative flex aspect-square flex-col items-center justify-center gap-0.5 rounded-xl border text-[0.72rem] transition-all duration-150", temPrevisao ? "border-gold bg-gold/15 font-bold text-burgundy hover:bg-gold/25" : "border-transparent bg-clay/5 text-clay/30 hover:bg-clay/10", ehHoje && "ring-2 ring-gold ring-offset-1", selecionado && "ring-2 ring-burgundy ring-offset-2")}>
                   <span className="text-[0.8rem] leading-none">{dia}</span>
-                  {temPrevisao && (
-                    <span className="text-[0.5rem] leading-none opacity-80">
-                      {info!.clientes.length} cli.
-                    </span>
-                  )}
+                  {temPrevisao && <span className="text-[0.5rem] leading-none opacity-80">{info!.clientes.length} cli.</span>}
                 </button>
               );
             })}
           </div>
-
-          <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2 text-[0.7rem] text-clay/55">
-            <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-gold" /> Com previsão de pagamento
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full ring-2 ring-gold" /> Hoje
-            </span>
-          </div>
+          <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2 text-[0.7rem] text-clay/55"><span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-gold" /> Com previsão de pagamento</span><span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full ring-2 ring-gold" /> Hoje</span></div>
         </div>
       </Card>
 
-      {carregando && !dados && (
-        <p className="text-xs text-clay/40">Carregando previsões do mês…</p>
-      )}
+      {carregando && !dados && <p className="text-xs text-clay/40">Carregando previsões do mês…</p>}
 
       {dataSelecionada && (
         <Card className="p-6">
-          <h2 className="font-heading text-base text-burgundy">
-            {formatarDataLonga(dataSelecionada)}
-          </h2>
-          {!diaSelecionadoInfo || diaSelecionadoInfo.clientes.length === 0 ? (
-            <p className="mt-2 text-sm text-clay/50">Nenhuma liberação prevista para esse dia.</p>
-          ) : (
+          <h2 className="font-heading text-base text-burgundy">{formatarDataLonga(dataSelecionada)}</h2>
+          {!diaSelecionadoInfo || diaSelecionadoInfo.clientes.length === 0 ? <p className="mt-2 text-sm text-clay/50">Nenhuma liberação prevista para esse dia.</p> : (
             <div className="mt-4 space-y-2">
-              <p className="text-[0.68rem] uppercase tracking-label text-clay/40">
-                Total previsto: {formatarMoeda(diaSelecionadoInfo.valorTotal)}
-              </p>
-              {diaSelecionadoInfo.clientes.map((c) => (
-                <div
-                  key={c.agendamentoId}
-                  className="flex items-center justify-between gap-3 rounded-xl bg-blush/40 px-3.5 py-2.5"
-                >
-                  <span className="truncate text-sm font-medium text-burgundy">{c.nome}</span>
-                  <span className="shrink-0 text-sm font-semibold text-burgundy">{formatarMoeda(c.valor)}</span>
-                </div>
-              ))}
+              <p className="text-[0.68rem] uppercase tracking-label text-clay/40">Total previsto: {formatarMoeda(diaSelecionadoInfo.valorTotal)}</p>
+              {diaSelecionadoInfo.clientes.map((c) => <div key={c.agendamentoId} className="flex items-center justify-between gap-3 rounded-xl bg-blush/40 px-3.5 py-2.5"><span className="truncate text-sm font-medium text-burgundy">{c.nome}</span><span className="shrink-0 text-sm font-semibold text-burgundy">{formatarMoeda(c.valor)}</span></div>)}
             </div>
           )}
         </Card>
       )}
 
       <Card className="p-6">
-        <div className="flex items-center gap-2">
-          <CalendarClock className="h-4 w-4 text-rose" />
-          <h2 className="font-heading text-base text-burgundy">Assinaturas aguardando previsão</h2>
-        </div>
-        <p className="mt-1 text-xs text-clay/50">
-          Clientes que já assinaram os termos, mas ainda não têm uma data de previsão de liberação financeira informada.
-        </p>
+        <div className="flex items-center gap-2"><CalendarClock className="h-4 w-4 text-rose" /><h2 className="font-heading text-base text-burgundy">Assinaturas aguardando previsão</h2></div>
+        <p className="mt-1 text-xs text-clay/50">Clientes que já assinaram os termos e aguardam a confirmação da previsão de liberação financeira. O sistema já sugere 90 dias após a assinatura.</p>
 
         {dados && dados.semPrevisao.length === 0 ? (
-          <div className="mt-4 flex flex-col items-center gap-2 rounded-2xl border border-dashed border-rose/20 bg-blush/30 px-6 py-8 text-center">
-            <PiggyBank className="h-5 w-5 text-clay/30" />
-            <p className="text-sm text-clay/55">Nenhuma pendência no momento.</p>
-          </div>
+          <div className="mt-4 flex flex-col items-center gap-2 rounded-2xl border border-dashed border-rose/20 bg-blush/30 px-6 py-8 text-center"><PiggyBank className="h-5 w-5 text-clay/30" /><p className="text-sm text-clay/55">Nenhuma pendência no momento.</p></div>
         ) : (
           <div className="mt-4 space-y-3">
             {(dados?.semPrevisao ?? []).map((c) => (
-              <div
-                key={c.agendamentoId}
-                className="grid gap-3 rounded-2xl border border-rose/10 bg-blush/30 p-4 sm:grid-cols-[1.2fr_0.7fr_0.8fr_auto] sm:items-end"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-burgundy">{c.nome}</p>
-                  <p className="text-xs text-clay/45">
-                    Termos: {c.dataTermos ? formatarDataLonga(c.dataTermos) : "—"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-[0.22em] text-clay/40">Contrato</p>
-                  <p className="mt-1 text-sm text-burgundy">{formatarMoeda(c.valor)}</p>
-                </div>
-                <div>
-                  <Label htmlFor={`previsao-${c.agendamentoId}`} className="mb-1 text-[0.65rem]">
-                    Previsão de liberação
-                  </Label>
-                  <Input
-                    id={`previsao-${c.agendamentoId}`}
-                    type="date"
-                    value={datasInput[c.agendamentoId] ?? ""}
-                    onChange={(e) =>
-                      setDatasInput((atual) => ({ ...atual, [c.agendamentoId]: e.target.value }))
-                    }
-                  />
-                </div>
-                <Button
-                  size="sm"
-                  loading={salvandoId === c.agendamentoId}
-                  onClick={() => salvarPrevisao(c.agendamentoId, datasInput[c.agendamentoId] ?? "")}
-                >
-                  Salvar
-                </Button>
+              <div key={c.agendamentoId} className="grid gap-3 rounded-2xl border border-rose/10 bg-blush/30 p-4 sm:grid-cols-[1.2fr_0.7fr_0.8fr_auto] sm:items-end">
+                <div className="min-w-0"><p className="truncate text-sm font-medium text-burgundy">{c.nome}</p><p className="text-xs text-clay/45">Termos: {c.dataTermos ? formatarDataLonga(c.dataTermos) : "—"}</p><p className="mt-1 text-[0.62rem] font-medium text-gold">Sugestão automática: {c.previsaoSugerida ? formatarDataLonga(c.previsaoSugerida) : "indisponível"}</p></div>
+                <div><p className="text-xs uppercase tracking-[0.22em] text-clay/40">Contrato</p><p className="mt-1 text-sm text-burgundy">{formatarMoeda(c.valor)}</p></div>
+                <div><Label htmlFor={`previsao-${c.agendamentoId}`} className="mb-1 text-[0.65rem]">Previsão de liberação</Label><Input id={`previsao-${c.agendamentoId}`} type="date" value={datasInput[c.agendamentoId] ?? c.previsaoSugerida ?? ""} onChange={(e) => setDatasInput((atual) => ({ ...atual, [c.agendamentoId]: e.target.value }))} /></div>
+                <Button size="sm" loading={salvandoId === c.agendamentoId} onClick={() => salvarPrevisao(c.agendamentoId, datasInput[c.agendamentoId] ?? c.previsaoSugerida ?? "")}>Confirmar</Button>
               </div>
             ))}
           </div>
@@ -469,11 +396,5 @@ export function PrevisaoLiberacaoFinanceira() {
 }
 
 function ResumoPrevisao({ label, valor }: { label: string; valor: string }) {
-  return (
-    <div className="relative overflow-hidden rounded-[22px] border border-rose/10 bg-white p-4">
-      <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-gold to-transparent" />
-      <p className="text-[0.68rem] uppercase tracking-label text-clay/45">{label}</p>
-      <p className="mt-2 font-heading text-2xl text-burgundy">{valor}</p>
-    </div>
-  );
+  return <div className="relative overflow-hidden rounded-[22px] border border-rose/10 bg-white p-4"><div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-gold to-transparent" /><p className="text-[0.68rem] uppercase tracking-label text-clay/45">{label}</p><p className="mt-2 font-heading text-2xl text-burgundy">{valor}</p></div>;
 }
