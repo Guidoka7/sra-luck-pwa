@@ -3,6 +3,7 @@ import { Fraunces, Inter } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 import "./responsive-fixes.css";
+import "./client-scroll-fix.css";
 import "./light-theme-fixes.css";
 import { ThemeProvider } from "@/components/ui/ThemeProvider";
 import { PwaRegister } from "@/components/ui/PwaRegister";
