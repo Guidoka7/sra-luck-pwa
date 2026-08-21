@@ -83,8 +83,10 @@ export default function AgendaClientePage() {
   if (carregando) return <main className="flex min-h-[100dvh] items-center justify-center bg-bloom"><LogoMark className="h-10 w-10 animate-pulse" /></main>;
 
   const tourStage = agendamentoAtivo ? "cirurgia" : agendaLiberada ? "agenda" : "financeiro";
+  const percentualContrato = percentualNecessario(quantidadeParcelas);
+  const parcelasNecessarias = quantidadeParcelas ? Math.ceil((quantidadeParcelas * percentualContrato) / 100) : null;
 
-  return <main data-tour-root data-tour-stage={tourStage} className="client-app min-h-[100dvh] bg-bloom px-4 pb-[max(env(safe-area-inset-bottom),1rem)] pt-[max(env(safe-area-inset-top),0.75rem)] sm:px-6 sm:pt-6 sm:pb-8">
+  return <main data-tour-root data-tour-stage={tourStage} data-tour-required-percentage={percentualContrato} data-tour-required-installments={parcelasNecessarias ?? ""} className="client-app min-h-[100dvh] bg-bloom px-4 pb-[max(env(safe-area-inset-bottom),1rem)] pt-[max(env(safe-area-inset-top),0.75rem)] sm:px-6 sm:pt-6 sm:pb-8">
     {celebrando && <CelebracaoData data={celebrando} nome={primeiroNome(nome)} onFechar={() => { setCelebrando(null); carregar(); }} />}
     <div className="mobile-app-frame mx-auto w-full max-w-2xl sm:max-w-[30rem]">
       <header className="mb-4 flex items-center justify-between sm:mb-5"><div className="flex items-center gap-2.5"><div className="flex h-9 w-9 flex-none items-center justify-center rounded-2xl border border-white/70 bg-white/85 shadow-card dark:border-white/10 dark:bg-white/[0.055]"><LogoMark className="h-5.5 w-5.5" /></div><div><p className="text-[0.58rem] uppercase tracking-label text-rose">Bem-vinda,</p><h1 className="font-heading text-base font-semibold leading-tight text-burgundy sm:text-lg">{primeiroNome(nome)}</h1></div></div><div className="flex items-center gap-1.5"><ThemeToggle compact /><div data-tour="notificacoes" className="flex items-center"><CentralNotificacoes onAbrirAgenda={() => setAba("cirurgia")} refreshSignal={notificacaoTick} /></div><button onClick={sair} className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[0.68rem] uppercase tracking-label text-clay/40 transition-all duration-200 hover:bg-white/60 hover:text-burgundy dark:hover:bg-white/10"><LogOut className="h-3 w-3" /> Sair</button></div></header>
