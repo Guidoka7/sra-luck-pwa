@@ -1,18 +1,17 @@
 "use client";
 
 import { useEffect } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 export default function AgendaLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
 
   useEffect(() => {
-    if (searchParams.get("aba") === "liberacao") {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("aba") === "liberacao") {
       router.replace(pathname);
     }
-  }, [pathname, router, searchParams]);
+  }, [pathname, router]);
 
   return (
     <>
