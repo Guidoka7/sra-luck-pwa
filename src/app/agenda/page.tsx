@@ -37,14 +37,14 @@ export default function AgendaClientePage() {
   const [datas, setDatas] = useState<DataDisponivel[]>([]);
   const [confirmando, setConfirmando] = useState(false);
   const [celebrando, setCelebrando] = useState<string | null>(null);
-  const [podeAgendar, setPodeAgendar] = useState(true);
-  const [agendaLiberada, setAgendaLiberada] = useState(true);
+  const [podeAgendar, setPodeAgendar] = useState(false);
+  const [agendaLiberada, setAgendaLiberada] = useState(false);
   const [statusRevisao, setStatusRevisao] = useState<StatusRevisaoFinanceira | null>(null);
   const [porcentagemPagamento, setPorcentagemPagamento] = useState<number | null>(null);
   const [quantidadeParcelas, setQuantidadeParcelas] = useState<number | null>(null);
   const [config, setConfig] = useState<ConfigPublica | null>(null);
   const [destacarCardLiberacao, setDestacarCardLiberacao] = useState(false);
-  const agendaLiberadaRef = useRef(true);
+  const agendaLiberadaRef = useRef(false);
   const previsaoRef = useRef<string | null | undefined>(undefined);
 
   async function carregar(silencioso = false) {
@@ -56,8 +56,8 @@ export default function AgendaClientePage() {
     const novaPrevisao: string | null = data.agendamentoAtivo?.previsaoLiberacaoFinanceira ?? null;
     if (previsaoRef.current !== undefined && novaPrevisao !== previsaoRef.current && novaPrevisao) { toast.success(previsaoRef.current ? "📅 Sua previsão de liberação foi atualizada. Confira em \"Minha Agenda\"." : "📅 Sua previsão de liberação já está disponível em \"Minha Agenda\"."); if (!previsaoRef.current) { setDestacarCardLiberacao(true); setTimeout(() => setDestacarCardLiberacao(false), 4000); } }
     previsaoRef.current = novaPrevisao;
-    let liberou = true;
-    if (resBoletos.ok) { const boletosData = await resBoletos.json(); const temBoletos = (boletosData.boletos ?? []).length > 0; liberou = temBoletos ? Boolean(boletosData.agenda_liberada) : true; setPodeAgendar(temBoletos ? Boolean(boletosData.pode_agendar) : true); setAgendaLiberada(liberou); setStatusRevisao(temBoletos ? boletosData.status_revisao_financeira ?? null : null); setPorcentagemPagamento(temBoletos ? boletosData.porcentagem_pagamento : null); setQuantidadeParcelas(boletosData.quantidade_parcelas ?? null); } else { setPodeAgendar(true); setAgendaLiberada(true); setStatusRevisao(null); setPorcentagemPagamento(null); setQuantidadeParcelas(null); }
+    let liberou = false;
+    if (resBoletos.ok) { const boletosData = await resBoletos.json(); const temBoletos = (boletosData.boletos ?? []).length > 0; liberou = temBoletos && Boolean(boletosData.agenda_liberada); setPodeAgendar(temBoletos && Boolean(boletosData.pode_agendar)); setAgendaLiberada(liberou); setStatusRevisao(temBoletos ? boletosData.status_revisao_financeira ?? null : null); setPorcentagemPagamento(temBoletos ? boletosData.porcentagem_pagamento : null); setQuantidadeParcelas(boletosData.quantidade_parcelas ?? null); } else { setPodeAgendar(false); setAgendaLiberada(false); setStatusRevisao(null); setPorcentagemPagamento(null); setQuantidadeParcelas(null); }
     if (liberou && !agendaLiberadaRef.current) toast.success("🎉 Sua agenda foi liberada! Você já pode escolher a data da sua assinatura.");
     agendaLiberadaRef.current = liberou;
     setCarregando(false);
@@ -75,7 +75,7 @@ export default function AgendaClientePage() {
   useEffect(() => { if (!clienteId) return; const supabase = createClientSupabaseClient(); const canal = supabase.channel(`notificacoes-cliente:${clienteId}`).on("broadcast", { event: "nova_notificacao" }, () => { carregar(true); setNotificacaoTick((t) => t + 1); }).subscribe(); return () => { supabase.removeChannel(canal); }; }, [clienteId]);
 
   async function escolherData(dataId: string) {
-    if (!agendaLiberada) { if (statusRevisao === "recusada") toast.error("Encontramos uma divergência no levantamento financeiro. Fale com a nossa equipe."); else if (!podeAgendar) { const necessario = percentualNecessario(quantidadeParcelas); toast.error(`Você está em ${porcentagemPagamento}% de pagamento. São necessários ${necessario}% para liberar sua agenda — continue enviando seus comprovantes na aba \"Meus Boletos\".`); } else toast.error("Seu levantamento financeiro ainda está em andamento. Toque no aviso do calendário para saber mais."); return; }
+    if (!agendaLiberada) { if (statusRevisao === "recusada") toast.error("Encontramos uma divergência no levantamento financeiro. Fale com a nossa equipe."); else if (!podeAgendar) { const necessario = percentualNecessario(quantidadeParcelas); toast.error(`Você está em ${porcentagemPagamento ?? 0}% de pagamento. São necessários ${necessario}% para liberar sua agenda — continue enviando seus comprovantes na aba \"Meus Boletos\".`); } else toast.error("Seu levantamento financeiro ainda está em andamento. Toque no aviso do calendário para saber mais."); return; }
     setConfirmando(true);
     try { const res = await fetch("/api/cliente/agendar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataId }) }); const resultado = await res.json(); if (!res.ok) { toast.error(resultado.erro ?? "Não foi possível confirmar essa data."); return; } setCelebrando(resultado.data); } catch { toast.error("Erro de conexão. Tente novamente."); } finally { setConfirmando(false); }
   }
@@ -94,7 +94,7 @@ export default function AgendaClientePage() {
       <div data-tour="jornada" className="mb-4"><JourneyTracker percentualPagamento={porcentagemPagamento ?? 0} percentualAtingido={podeAgendar} statusRevisao={statusRevisao} agendada={Boolean(agendamentoAtivo)} previsaoLiberacaoFinanceira={agendamentoAtivo?.previsaoLiberacaoFinanceira ?? null} /></div>
       <div className="mx-auto mb-4 flex w-full max-w-md gap-1 rounded-full bg-blush/70 p-1 dark:bg-white/[0.06]"><button data-tour="minha-agenda" onClick={() => setAba("cirurgia")} className={`flex-1 rounded-full px-3 py-2 text-[0.68rem] font-bold uppercase tracking-label transition-all duration-200 ${aba === "cirurgia" ? "bg-burgundy text-cream shadow-card" : "text-burgundy/60 hover:text-burgundy dark:text-pearl/55 dark:hover:text-pearl"}`}>Minha Agenda</button><button data-tour="boletos" onClick={() => setAba("boletos")} className={`flex-1 rounded-full px-3 py-2 text-[0.68rem] font-bold uppercase tracking-label transition-all duration-200 ${aba === "boletos" ? "bg-burgundy text-cream shadow-card" : "text-burgundy/60 hover:text-burgundy dark:text-pearl/55 dark:hover:text-pearl"}`}>Meus Boletos</button></div>
       {aba === "boletos" && <TabBoletos pagamento={config?.pagamento} procedimento={procedimento} />}
-      {aba === "cirurgia" && (agendamentoAtivo ? <div data-tour="previsao" className="flex flex-col gap-4 animate-fadeUp"><CardPrevisaoLiberacao previsaoLiberacaoFinanceira={agendamentoAtivo.previsaoLiberacaoFinanceira} dataAssinatura={agendamentoAtivo.data} destacar={destacarCardLiberacao} /></div> : <div className="flex flex-col gap-4"><RegrasLiberacao quantidadeParcelas={quantidadeParcelas} /><motion.div data-tour="agenda" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}><Card className="p-3.5 sm:p-4">{datas.length === 0 ? <p className="p-6 text-center text-sm text-clay/50">Ainda não há datas disponíveis no momento. Fale com a nossa equipe para saber mais.</p> : <CalendarioAgendamento datas={datas} onConfirmar={escolherData} confirmando={confirmando} bloqueado={!agendaLiberada && Boolean(statusRevisao)} />}</Card></motion.div></div>)}
+      {aba === "cirurgia" && (agendamentoAtivo ? <div data-tour="previsao" className="flex flex-col gap-4 animate-fadeUp"><CardPrevisaoLiberacao previsaoLiberacaoFinanceira={agendamentoAtivo.previsaoLiberacaoFinanceira} dataAssinatura={agendamentoAtivo.data} destacar={destacarCardLiberacao} /></div> : <div className="flex flex-col gap-4"><RegrasLiberacao quantidadeParcelas={quantidadeParcelas} /><motion.div data-tour="agenda" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}><Card className="p-3.5 sm:p-4">{datas.length === 0 ? <p className="p-6 text-center text-sm text-clay/50">Ainda não há datas disponíveis no momento. Fale com a nossa equipe para saber mais.</p> : <CalendarioAgendamento datas={datas} onConfirmar={escolherData} confirmando={confirmando} bloqueado={!agendaLiberada} />}</Card></motion.div></div>)}
     </div>
     <WhatsAppFab numero={config?.contato.whatsapp ?? null} mensagem={`Olá! Sou ${primeiroNome(nome)} e preciso de ajuda com minha agenda.`} />
   </main>;
