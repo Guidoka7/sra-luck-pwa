@@ -62,10 +62,15 @@ export default function MonitoramentoPage() {
   async function carregar() {
     setCarregando(true);
     try {
-      const res = await fetch("/api/admin/monitoramento-app", { cache: "no-store" });
+      const res = await fetch(`/api/admin/monitoramento-app?t=${Date.now()}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       if (!res.ok) throw new Error();
       setDados(await res.json());
-    } finally { setCarregando(false); }
+    } finally {
+      setCarregando(false);
+    }
   }
 
   useEffect(() => {
@@ -77,9 +82,11 @@ export default function MonitoramentoPage() {
       if (document.visibilityState === "visible") carregar();
     };
     document.addEventListener("visibilitychange", atualizarAoVoltar);
+    window.addEventListener("focus", atualizarAoVoltar);
     return () => {
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", atualizarAoVoltar);
+      window.removeEventListener("focus", atualizarAoVoltar);
     };
   }, []);
 
