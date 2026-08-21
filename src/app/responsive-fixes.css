@@ -169,6 +169,83 @@ html.dark {
 }
 
 /* =========================================================
+   RESPONSIVIDADE REAL POR DISPOSITIVO
+   DeviceRuntime grava data-device e data-display-mode no <html>.
+   O viewport continua sendo a base visual, enquanto estes seletores
+   garantem que navegador desktop, tablet, celular e PWA instalado
+   usem uma estrutura apropriada sem criar versões separadas do app.
+   ========================================================= */
+
+/* Cliente: celular/PWA mantém a experiência compacta de app. */
+html[data-device="mobile"] .client-app,
+html[data-device="mobile"][data-display-mode="standalone"] .client-app {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+html[data-device="mobile"] .client-app .mobile-app-frame,
+html[data-device="tablet"] .client-app .mobile-app-frame {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Tablet: aproveita melhor a largura sem transformar o app em desktop. */
+html[data-device="tablet"] .client-app {
+  padding-left: clamp(1rem, 3vw, 2.5rem);
+  padding-right: clamp(1rem, 3vw, 2.5rem);
+}
+
+/* Desktop: não deixar o cliente preso ao formato estreito de celular. */
+html[data-device="desktop"] .client-app {
+  padding-left: clamp(1.5rem, 4vw, 4rem);
+  padding-right: clamp(1.5rem, 4vw, 4rem);
+}
+
+html[data-device="desktop"] .client-app .mobile-app-frame {
+  width: min(100%, 1180px);
+  max-width: 1180px;
+}
+
+html[data-device="desktop"] .client-app header {
+  margin-bottom: 1.25rem;
+}
+
+html[data-device="desktop"] .client-app .client-content-grid {
+  width: 100%;
+}
+
+/* PWA instalado: respeitar notch/barras de sistema, mas sem criar
+   uma moldura falsa de telefone no conteúdo. */
+html[data-display-mode="standalone"] body {
+  min-height: 100dvh;
+}
+
+html[data-display-mode="standalone"] .client-app {
+  min-height: 100dvh;
+}
+
+/* Em touch, evitar efeitos de hover que ficam presos após um toque. */
+@media (pointer: coarse) {
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Admin em desktop: ocupa o espaço disponível; em telas menores,
+   o menu lateral já é convertido em menu móvel pelo layout. */
+html[data-device="desktop"] .admin-shell main {
+  min-width: 0;
+}
+
+html[data-device="mobile"] .admin-shell main,
+html[data-device="tablet"] .admin-shell main {
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+/* =========================================================
    ADMIN — TEMA VISUAL CONSISTENTE
    ========================================================= */
 
