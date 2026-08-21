@@ -1,9 +1,9 @@
-const CACHE = 'sra-luck-pwa-v8';
+const CACHE = 'sra-luck-pwa-v9';
 const SHELL = [
   '/simulador-iphone.html',
   '/simulador-iphone.webmanifest',
-  '/icons/sra-luck-app-256.png',
-  '/icons/sra-luck-notification-badge.png'
+  '/brand/sra-luck-mark.png',
+  '/icons/sra-luck-app-gold.svg'
 ];
 
 self.addEventListener('install', (event) => {
@@ -13,12 +13,22 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key)))).then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url); if (url.origin !== self.location.origin) return; if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/_next/')) return;
-  if (url.pathname === '/simulador-iphone.html' || url.pathname === '/simulador-iphone.webmanifest') event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => { const copy = response.clone(); caches.open(CACHE).then((cache) => cache.put(event.request, copy)); return response; })));
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/_next/')) return;
+  if (url.pathname === '/simulador-iphone.html' || url.pathname === '/simulador-iphone.webmanifest' || url.pathname === '/brand/sra-luck-mark.png' || url.pathname === '/icons/sra-luck-app-gold.svg') {
+    event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
+      const copy = response.clone();
+      caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+      return response;
+    })));
+  }
 });
 self.addEventListener('push', (event) => {
   let data = {}; try { data = event.data ? event.data.json() : {}; } catch (_) {}
-  const title = data.title || 'Sra. Luck'; const notificationIcon = '/icons/sra-luck-notification-badge.png';
+  const title = data.title || 'Sra. Luck';
+  // O símbolo é transparente ao redor, próprio para o tratamento visual do Android.
+  const notificationIcon = '/brand/sra-luck-mark.png';
   const options = { body: data.body || 'Você recebeu uma nova notificação.', icon: notificationIcon, badge: notificationIcon, tag: data.tag || 'sra-luck-notificacao', renotify: true, requireInteraction: false, data: { url: data.url || '/agenda', notificationId: data.notificationId || null } };
   event.waitUntil(self.registration.showNotification(title, options));
 });
