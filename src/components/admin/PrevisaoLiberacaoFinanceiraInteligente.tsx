@@ -12,6 +12,7 @@ import {
   DollarSign,
   Lock,
   RefreshCw,
+  Search,
   Sparkles,
   Star,
   Unlock,
@@ -19,22 +20,57 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { cn, nomeMes, formatarMoeda, formatarDataLonga } from "@/lib/utils";
-import { ResumoOrcamentoMensal } from "@/components/admin/ResumoOrcamentoMensal";
+import { cn, nomeMes, formatarMoeda } from "@/lib/utils";
 
 const DIAS_SEMANA = ["D", "S", "T", "Q", "Q", "S", "S"];
 type EstadoVisual = "verde" | "amarelo" | "vermelho" | "cinza" | "bloqueado" | "passado" | "lotada";
 interface InfoGerenciamento { id: string; status: string; }
 interface ClienteInfo { id: string; nome: string; valor: number; status: "apta" | "termos_assinados"; dataTermos: string | null; }
-interface DiaAnalise { data: string; dia: number; estado: "verde" | "amarelo" | "vermelho" | "cinza" | "passado"; vagasDisponiveis: boolean; oracamentoAntes: number; oracamentoDepois: number; ultrapassagem: number; dentroOrcamento: boolean; diasDisponibilizados: number; ocupante: { nome: string; valor: number } | null; }
+interface DiaAnalise {
+  data: string;
+  dia: number;
+  estado: "verde" | "amarelo" | "vermelho" | "cinza" | "passado";
+  vagasDisponiveis: boolean;
+  oracamentoAntes: number;
+  oracamentoDepois: number;
+  ultrapassagem: number;
+  dentroOrcamento: boolean;
+  diasDisponibilizados: number;
+  ocupante: { nome: string; valor: number } | null;
+}
 interface MelhorData { data: string; dia: number; mes: number; ano: number; oracamentoMes: number; comprometidoAntes: number; valorCliente: number; totalDepois: number; dentroOrcamento: boolean; motivo: string; }
 interface AlternativaData { data: string; dia: number; estado: "verde" | "amarelo"; oracamentoDepois: number; ultrapassagem: number; motivo: string; }
-interface DadosAnalise { cliente: ClienteInfo | null; erro?: string; orcamentoMensal: number; calendario: { ano: number; mes: number; dias: DiaAnalise[] }; melhorData: MelhorData | null; alternativas: { verdes: AlternativaData[]; amarelas: AlternativaData[] }; }
-interface Solicitacao { id: string; cliente_id: string; forma_custeio: "cartao" | "pix" | "cheques"; saldo_restante: number; taxa_cartao: number; total_com_taxa: number; status: "pendente" | "em_analise"; observacao: string | null; created_at: string; updated_at: string; clientes?: { nome_completo: string; cpf: string | null; quantidade_parcelas: number | null } | null; }
+interface DadosAnalise {
+  cliente: ClienteInfo | null;
+  erro?: string;
+  orcamentoMensal: number;
+  calendario: { ano: number; mes: number; dias: DiaAnalise[] };
+  melhorData: MelhorData | null;
+  alternativas: { verdes: AlternativaData[]; amarelas: AlternativaData[] };
+}
+interface Solicitacao {
+  id: string;
+  cliente_id: string;
+  forma_custeio: "cartao" | "pix" | "cheques";
+  saldo_restante: number;
+  taxa_cartao: number;
+  total_com_taxa: number;
+  status: "pendente" | "em_analise";
+  observacao: string | null;
+  created_at: string;
+  updated_at: string;
+  clientes?: { nome_completo: string; cpf: string | null; quantidade_parcelas: number | null } | null;
+}
 interface ClienteAgenda { agendamentoId: string; clienteId: string; nome: string; previsaoAtual: string | null; }
 
 function formaLabel(forma: Solicitacao["forma_custeio"]) {
-  return forma === "cartao" ? "Cartão" : forma === "pix" ? "Pix" : "Cheques";
+  return forma === "cartao" ? "Cartão de crédito" : forma === "pix" ? "Pix" : "Cheques";
+}
+
+function formatarDataBadge(iso: string | null) {
+  if (!iso) return null;
+  const [ano, mes, dia] = iso.split("-");
+  return `${dia}/${mes}/${ano}`;
 }
 
 export function PrevisaoLiberacaoFinanceiraInteligente() {
@@ -56,6 +92,7 @@ export function PrevisaoLiberacaoFinanceiraInteligente() {
   const [datasGerenciamento, setDatasGerenciamento] = useState<Map<string, InfoGerenciamento>>(new Map());
   const [salvandoGerenciamento, setSalvandoGerenciamento] = useState(false);
   const [agendaBloqueadaGlobal, setAgendaBloqueadaGlobal] = useState(false);
+  const [buscaCliente, setBuscaCliente] = useState("");
 
   async function carregarSolicitacoes() {
     try {
@@ -63,6 +100,8 @@ export function PrevisaoLiberacaoFinanceiraInteligente() {
       if (!res.ok) return;
       const data = await res.json();
       setSolicitacoes(data.solicitacoes ?? []);
+    } catch {
+      // Mantém os dados atuais se a atualização falhar.
     } finally {
       setCarregandoSolicitacoes(false);
     }
@@ -109,6 +148,8 @@ export function PrevisaoLiberacaoFinanceiraInteligente() {
 
       const dc = await resConfig.json();
       if (resConfig.ok) setAgendaBloqueadaGlobal(!!dc.configuracoes?.agenda_liberacao_financeira_bloqueada);
+    } catch {
+      toast.error("Não foi possível atualizar a agenda.");
     } finally {
       setCarregandoAnalise(false);
     }
@@ -116,6 +157,7 @@ export function PrevisaoLiberacaoFinanceiraInteligente() {
 
   useEffect(() => {
     carregarCalendario();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agendamentoSelecionadoId, ano, mes]);
 
   function selecionarCliente(agendamentoId: string) {
@@ -123,9 +165,9 @@ export function PrevisaoLiberacaoFinanceiraInteligente() {
     setDataSelecionada(null);
     setShowingConfirmacao(false);
     setShowingModalAmarela(false);
-    window.setTimeout(() => {
-      document.getElementById("calendario-previsao")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 80);
+    if (agendamentoId) {
+      window.setTimeout(() => document.getElementById("calendario-previsao")?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+    }
   }
 
   function selecionarSolicitacao(solicitacao: Solicitacao) {
@@ -172,8 +214,9 @@ export function PrevisaoLiberacaoFinanceiraInteligente() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ previsaoLiberacaoFinanceira: data }),
       });
+      const resultado = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error("Erro ao salvar previsão");
+        toast.error(resultado.erro ?? "Erro ao salvar previsão");
         return;
       }
       toast.success("Previsão de liberação aprovada! Cliente foi notificada.");
@@ -251,43 +294,75 @@ export function PrevisaoLiberacaoFinanceiraInteligente() {
   const infoGerenciamentoSelecionada = dataSelecionada ? datasGerenciamento.get(dataSelecionada) : undefined;
   const estadoVisualSelecionado = diaDataSelecionada ? estadoVisual(diaDataSelecionada) : null;
   const estadoExibidoSelecionado = estadoVisualSelecionado ? estadoExibido(estadoVisualSelecionado) : null;
-  const statusBadge = analise?.cliente?.status === "termos_assinados" ? "Termos assinados" : "Apta";
-  const statusBadgeColor = analise?.cliente?.status === "termos_assinados" ? "bg-success/10 text-success" : "bg-gold/18 text-burgundy";
-  const clientesAgendadas = todosClientes.filter((c) => Boolean(c.previsaoAtual)).sort((a, b) => (a.previsaoAtual ?? "").localeCompare(b.previsaoAtual ?? ""));
+  const clienteSelecionada = analise?.cliente;
+  const solicitacaoSelecionada = useMemo(
+    () => solicitacoes.find((s) => s.cliente_id === clienteSelecionada?.id),
+    [solicitacoes, clienteSelecionada?.id]
+  );
+
+  const clientesAgendadas = useMemo(
+    () => todosClientes
+      .filter((c) => Boolean(c.previsaoAtual) && (c.previsaoAtual ?? "") >= isoHoje)
+      .sort((a, b) => (a.previsaoAtual ?? "").localeCompare(b.previsaoAtual ?? "")),
+    [todosClientes, isoHoje]
+  );
+
+  const busca = buscaCliente.trim().toLocaleLowerCase("pt-BR");
+  const solicitacoesFiltradas = useMemo(
+    () => solicitacoes.filter((s) => {
+      const cliente = todosClientes.find((c) => c.clienteId === s.cliente_id);
+      const nome = s.clientes?.nome_completo ?? cliente?.nome ?? "";
+      return !busca || nome.toLocaleLowerCase("pt-BR").includes(busca);
+    }),
+    [solicitacoes, todosClientes, busca]
+  );
+  const clientesAgendadasFiltradas = useMemo(
+    () => clientesAgendadas.filter((c) => !busca || c.nome.toLocaleLowerCase("pt-BR").includes(busca)),
+    [clientesAgendadas, busca]
+  );
+
+  // O valor comprometido no mês é calculado pela própria análise do calendário.
+  // Quando há cliente selecionada, a API já exclui o valor dela para evitar dupla contagem.
+  const valorJaLiberadoMes = useMemo(() => {
+    const chave = `${ano}-${String(mes).padStart(2, "0")}`;
+    return analise?.calendario.dias.find((d) => d.data.startsWith(chave))?.oracamentoAntes ?? 0;
+  }, [analise, ano, mes]);
+
+  const valorRestante = solicitacaoSelecionada ? Number(solicitacaoSelecionada.saldo_restante) : null;
+  const custeioQuitado = valorRestante !== null && valorRestante <= 0;
 
   return (
-    <div className="animate-fadeUp space-y-4 pb-8">
-      {analise?.cliente && (
-        <Card className="border-rose/15 bg-[rgb(var(--surface-1))] p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[0.58rem] font-bold uppercase tracking-label text-rose">Cliente selecionada</p>
-              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="truncate text-sm font-bold text-burgundy">{analise.cliente.nome}</span>
-                <span className={cn("rounded-full px-2 py-0.5 text-[0.58rem] font-semibold", statusBadgeColor)}>{statusBadge}</span>
-                <span className="text-xs font-semibold text-clay/60">{formatarMoeda(analise.cliente.valor)}</span>
-              </div>
+    <div className="animate-fadeUp space-y-3 pb-8">
+      {/* O antigo card "Cliente selecionada" foi removido. O marcador financeiro ocupa essa posição. */}
+      <Card className="border-gold/20 bg-[rgb(var(--surface-1))] p-3 sm:p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <DollarSign className="h-4 w-4 shrink-0 text-gold" />
+              <p className="text-[0.58rem] font-bold uppercase tracking-label text-rose">Marcador financeiro</p>
+              {clienteSelecionada?.status === "termos_assinados" && <span className="rounded-full bg-success/10 px-2 py-0.5 text-[0.52rem] font-semibold text-success">Termos assinados</span>}
+              {clienteSelecionada?.dataTermos && <span className="rounded-full bg-[rgb(var(--surface-2))] px-2 py-0.5 text-[0.52rem] font-semibold text-clay/60">Assinatura {formatarDataBadge(clienteSelecionada.dataTermos)}</span>}
             </div>
-            <button type="button" onClick={() => selecionarCliente("")} className="rounded-full px-2.5 py-1 text-[0.62rem] font-semibold text-clay/50 transition hover:bg-white/10 hover:text-burgundy">Limpar</button>
+            {clienteSelecionada ? (
+              <div className="mt-2 flex flex-wrap items-end gap-x-5 gap-y-2">
+                <div className="min-w-[170px]"><p className="text-[0.58rem] uppercase tracking-label text-clay/45">Carta de crédito</p><p className="text-base font-bold text-burgundy">{formatarMoeda(clienteSelecionada.valor)}</p></div>
+                <div><p className="text-[0.58rem] uppercase tracking-label text-clay/45">Valor restante para quitação</p><p className={cn("text-base font-bold", custeioQuitado ? "text-success" : "text-burgundy")}>{custeioQuitado ? "Quitado" : valorRestante !== null ? formatarMoeda(valorRestante) : "—"}</p></div>
+                <div><p className="text-[0.58rem] uppercase tracking-label text-clay/45">Forma de custeio</p><p className="text-sm font-semibold text-burgundy">{solicitacaoSelecionada ? formaLabel(solicitacaoSelecionada.forma_custeio) : "—"}</p></div>
+              </div>
+            ) : (
+              <p className="mt-1 text-[0.66rem] text-clay/50">Selecione uma cliente na lista de solicitações para ver os dados financeiros.</p>
+            )}
           </div>
-        </Card>
-      )}
-
-      {analise?.melhorData && (
-        <div className="flex flex-wrap items-center gap-2.5 rounded-2xl border border-gold/25 bg-gold/10 px-4 py-3">
-          <Sparkles className="h-4 w-4 shrink-0 text-gold" />
-          <p className="min-w-0 flex-1 text-xs text-clay/70">
-            <span className="font-semibold text-burgundy">Melhor data:</span> {String(analise.melhorData.dia).padStart(2, "0")}/{String(analise.melhorData.mes).padStart(2, "0")}/{analise.melhorData.ano} — dentro do orçamento.
-          </p>
-          {(analise.melhorData.mes !== mes || analise.melhorData.ano !== ano) && (
-            <Button size="sm" variant="secondary" onClick={() => { setMes(analise.melhorData!.mes); setAno(analise.melhorData!.ano); }}>Ver mês</Button>
-          )}
+          <div className="flex flex-wrap gap-1.5">
+            <span className="rounded-full border border-gold/20 bg-gold/10 px-2.5 py-1 text-[0.58rem] font-semibold text-burgundy">Valor já liberado no mês: {formatarMoeda(valorJaLiberadoMes)}</span>
+            <span className="rounded-full border border-rose/10 bg-[rgb(var(--surface-2))] px-2.5 py-1 text-[0.58rem] font-semibold text-clay/65">Orçamento: {formatarMoeda(analise?.orcamentoMensal ?? 0)}</span>
+          </div>
         </div>
-      )}
+      </Card>
 
       {analise && (
-        <div id="calendario-previsao" className="scroll-mt-20 grid items-start gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(260px,0.5fr)]">
-          <Card className="p-4 sm:p-5">
+        <div id="calendario-previsao" className="scroll-mt-20">
+          <Card className="p-3 sm:p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
@@ -305,7 +380,7 @@ export function PrevisaoLiberacaoFinanceiraInteligente() {
               </div>
             </div>
 
-            <div className="mx-auto mt-4 w-full max-w-2xl">
+            <div className="mx-auto mt-3 w-full max-w-2xl">
               <div className="mb-2 grid grid-cols-7 gap-1.5 text-center text-[0.58rem] uppercase tracking-label text-rose">{DIAS_SEMANA.map((d, i) => <span key={i}>{d}</span>)}</div>
               <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
                 {diasDoMes.map((dia) => {
@@ -331,8 +406,7 @@ export function PrevisaoLiberacaoFinanceiraInteligente() {
                   );
                 })}
               </div>
-
-              <div className="mt-4 grid gap-1.5 text-[0.62rem] text-clay/55 sm:grid-cols-2">
+              <div className="mt-3 grid gap-1 text-[0.58rem] text-clay/55 sm:grid-cols-2">
                 <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-success" /> Verde: disponível</span>
                 <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-gold" /> Amarelo: acima do orçamento</span>
                 <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-burgundy" /> Vermelho: já ocupada</span>
@@ -340,7 +414,7 @@ export function PrevisaoLiberacaoFinanceiraInteligente() {
               </div>
 
               {dataSelecionada && diaDataSelecionada && estadoVisualSelecionado && estadoExibidoSelecionado !== "lotada" && !showingInfoOcupada && !showingModalAmarela && !showingConfirmacao && (
-                <div className="mt-4 rounded-xl border border-rose/10 bg-[rgb(var(--surface-2))] p-3">
+                <div className="mt-3 rounded-xl border border-rose/10 bg-[rgb(var(--surface-2))] p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-xs font-semibold text-burgundy">Dia selecionado · {String(diaDataSelecionada.dia).padStart(2, "0")}/{String(mes).padStart(2, "0")}/{ano}</p>
                     <div className="flex flex-wrap gap-1.5">
@@ -350,32 +424,11 @@ export function PrevisaoLiberacaoFinanceiraInteligente() {
                       {(estadoVisualSelecionado === "verde" || estadoVisualSelecionado === "amarelo") && agendamentoSelecionadoId && <Button size="sm" onClick={() => estadoVisualSelecionado === "amarelo" ? setShowingModalAmarela(true) : setShowingConfirmacao(true)}>Confirmar previsão</Button>}
                     </div>
                   </div>
-                  <p className="mt-2 text-[0.68rem] text-clay/50">
-                    {estadoVisualSelecionado === "cinza" ? "Data ainda não disponibilizada pela gestão." : estadoVisualSelecionado === "bloqueado" ? "Data bloqueada para novas liberações." : !agendamentoSelecionadoId ? "Selecione uma cliente na lista de solicitações abaixo para confirmar a previsão." : "Revise a data e confirme a previsão para a cliente."}
-                  </p>
+                  <p className="mt-2 text-[0.68rem] text-clay/50">{estadoVisualSelecionado === "cinza" ? "Data ainda não disponibilizada pela gestão." : estadoVisualSelecionado === "bloqueado" ? "Data bloqueada para novas liberações." : !agendamentoSelecionadoId ? "Selecione uma cliente na lista de solicitações abaixo para confirmar a previsão." : "Revise a data e confirme a previsão para a cliente."}</p>
                 </div>
               )}
             </div>
           </Card>
-
-          <aside className="space-y-3">
-            <Card className="p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div><p className="text-[0.58rem] font-semibold uppercase tracking-label text-rose">Marcador financeiro</p><h3 className="mt-1 font-heading text-sm text-burgundy">Carta de crédito</h3></div>
-                <DollarSign className="h-4 w-4 text-gold" />
-              </div>
-              {analise.cliente ? (
-                <div className="mt-3 rounded-xl border border-gold/20 bg-gold/10 p-3">
-                  <p className="truncate text-sm font-bold text-burgundy">{analise.cliente.nome}</p>
-                  <p className="mt-1 text-[0.58rem] uppercase tracking-label text-clay/45">Valor</p>
-                  <p className="mt-0.5 text-xl font-heading text-burgundy">{formatarMoeda(analise.cliente.valor)}</p>
-                  <div className="mt-2 flex items-center justify-between gap-2 text-[0.68rem]"><span className="text-clay/50">Após liberação</span><span className="font-semibold text-burgundy">{formatarMoeda(Math.max(0, (analise.melhorData?.comprometidoAntes ?? 0) + analise.cliente.valor))}</span></div>
-                </div>
-              ) : <div className="mt-3 rounded-xl bg-[rgb(var(--surface-2))] p-3 text-[0.68rem] leading-relaxed text-clay/55">Clique em uma solicitação abaixo para analisar a cliente.</div>}
-            </Card>
-            <ResumoOrcamentoMensal />
-            {analise.cliente && <div className="rounded-xl border border-rose/10 bg-[rgb(var(--surface-2))] p-3"><div className="flex items-end justify-between gap-3"><div><p className="text-[0.58rem] uppercase tracking-label text-rose">Orçamento do mês</p><p className="mt-0.5 text-base font-bold text-burgundy">{formatarMoeda(analise.melhorData?.comprometidoAntes ?? 0)}</p></div><span className="text-[0.58rem] text-clay/45">meta {formatarMoeda(analise.orcamentoMensal)}</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-clay/10"><div className={cn("h-full rounded-full transition-all", (analise.melhorData?.comprometidoAntes ?? 0) > analise.orcamentoMensal ? "bg-alert" : "bg-gradient-to-r from-rose to-burgundy")} style={{ width: `${Math.min(((analise.melhorData?.comprometidoAntes ?? 0) / Math.max(analise.orcamentoMensal, 1)) * 100, 100)}%` }} /></div></div>}
-          </aside>
         </div>
       )}
 
@@ -388,15 +441,20 @@ export function PrevisaoLiberacaoFinanceiraInteligente() {
           <button type="button" onClick={carregarSolicitacoes} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-rose/12 bg-[rgb(var(--surface-2))] px-2.5 text-[0.62rem] font-semibold text-burgundy transition-all hover:bg-rose/10 active:scale-95"><RefreshCw className="h-3 w-3" /> Atualizar</button>
         </div>
 
+        <div className="relative mt-3">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-clay/40" />
+          <input value={buscaCliente} onChange={(e) => setBuscaCliente(e.target.value)} placeholder="Buscar cliente pelo nome…" className="h-9 w-full rounded-xl border border-rose/10 bg-[rgb(var(--surface-2))] pl-9 pr-3 text-xs text-burgundy outline-none transition focus:border-rose/25 focus:ring-1 focus:ring-rose/15 placeholder:text-clay/35" />
+        </div>
+
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
           <div className="min-w-0 rounded-xl border border-gold/15 bg-[rgb(var(--surface-2))] p-2.5">
             <div className="flex items-center justify-between gap-2 px-1 pb-2">
               <div><p className="text-[0.58rem] font-bold uppercase tracking-label text-rose">Aguardando previsão</p><p className="mt-0.5 text-[0.62rem] text-clay/45">Clique na cliente para abrir o calendário.</p></div>
-              <span className="rounded-full bg-gold/12 px-2 py-0.5 text-[0.62rem] font-bold text-burgundy">{solicitacoes.length}</span>
+              <span className="rounded-full bg-gold/12 px-2 py-0.5 text-[0.62rem] font-bold text-burgundy">{solicitacoesFiltradas.length}</span>
             </div>
-            {carregandoSolicitacoes ? <p className="px-1 py-3 text-[0.68rem] text-clay/40">Carregando…</p> : solicitacoes.length === 0 ? <div className="rounded-lg bg-clay/5 px-3 py-3 text-[0.68rem] text-clay/45">Nenhuma solicitação aguardando previsão.</div> : (
-              <div className="grid max-h-64 gap-1.5 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                {solicitacoes.map((s) => {
+            {carregandoSolicitacoes ? <p className="px-1 py-3 text-[0.68rem] text-clay/40">Carregando…</p> : solicitacoesFiltradas.length === 0 ? <div className="rounded-lg bg-clay/5 px-3 py-3 text-[0.68rem] text-clay/45">Nenhuma solicitação aguardando previsão.</div> : (
+              <div className="grid max-h-[18rem] gap-1.5 overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin]">
+                {solicitacoesFiltradas.map((s) => {
                   const cliente = todosClientes.find((c) => c.clienteId === s.cliente_id);
                   const selecionada = cliente?.agendamentoId === agendamentoSelecionadoId;
                   return (
@@ -409,15 +467,17 @@ export function PrevisaoLiberacaoFinanceiraInteligente() {
                 })}
               </div>
             )}
+            <p className="mt-1 px-1 text-[0.52rem] text-clay/35">Exibindo até 7 por vez · role para ver mais</p>
           </div>
 
           <div className="min-w-0 rounded-xl border border-success/15 bg-[rgb(var(--surface-2))] p-2.5">
-            <div className="flex items-center justify-between gap-2 px-1 pb-2"><div><p className="text-[0.58rem] font-bold uppercase tracking-label text-success">Previsões confirmadas</p><p className="mt-0.5 text-[0.62rem] text-clay/45">Clientes já programadas para liberação.</p></div><span className="rounded-full bg-success/10 px-2 py-0.5 text-[0.62rem] font-bold text-success">{clientesAgendadas.length}</span></div>
-            {clientesAgendadas.length === 0 ? <div className="rounded-lg bg-clay/5 px-3 py-3 text-[0.68rem] text-clay/45">Nenhuma previsão confirmada.</div> : (
-              <div className="grid max-h-64 gap-1.5 overflow-y-auto pr-1 sm:grid-cols-2">
-                {clientesAgendadas.map((c) => <button key={c.agendamentoId} type="button" onClick={() => selecionarCliente(c.agendamentoId)} className="flex items-center justify-between gap-2 rounded-lg border border-success/10 bg-[rgb(var(--surface-1))] px-2.5 py-2 text-left transition-all hover:border-success/25 hover:bg-success/5 active:scale-[0.99]"><div className="min-w-0"><p className="truncate text-xs font-bold text-burgundy">{c.nome}</p><p className="mt-0.5 text-[0.58rem] text-clay/45">{c.previsaoAtual ? formatarDataLonga(c.previsaoAtual) : "—"}</p></div><CheckCircle2 className="h-4 w-4 shrink-0 text-success" /></button>)}
+            <div className="flex items-center justify-between gap-2 px-1 pb-2"><div><p className="text-[0.58rem] font-bold uppercase tracking-label text-success">Previsões confirmadas</p><p className="mt-0.5 text-[0.62rem] text-clay/45">Clientes com data de liberação definida.</p></div><span className="rounded-full bg-success/10 px-2 py-0.5 text-[0.62rem] font-bold text-success">{clientesAgendadasFiltradas.length}</span></div>
+            {clientesAgendadasFiltradas.length === 0 ? <div className="rounded-lg bg-clay/5 px-3 py-3 text-[0.68rem] text-clay/45">Nenhuma previsão confirmada.</div> : (
+              <div className="grid max-h-[18rem] gap-1.5 overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin]">
+                {clientesAgendadasFiltradas.map((c) => <button key={c.agendamentoId} type="button" onClick={() => selecionarCliente(c.agendamentoId)} className="flex items-center justify-between gap-2 rounded-lg border border-success/10 bg-[rgb(var(--surface-1))] px-2.5 py-2 text-left transition-all hover:border-success/25 hover:bg-success/5 active:scale-[0.99]"><div className="min-w-0"><p className="truncate text-xs font-bold text-burgundy">{c.nome}</p><p className="mt-0.5 text-[0.58rem] text-clay/45">Previsão: {formatarDataBadge(c.previsaoAtual)}</p></div><CheckCircle2 className="h-4 w-4 shrink-0 text-success" /></button>)}
               </div>
             )}
+            <p className="mt-1 px-1 text-[0.52rem] text-clay/35">Até 7 visíveis · após a data de liberação, sai automaticamente</p>
           </div>
         </div>
       </section>
@@ -428,9 +488,9 @@ export function PrevisaoLiberacaoFinanceiraInteligente() {
         </div>
       )}
 
-      {showingModalAmarela && dataSelecionada && diaDataSelecionada && (
+      {showingModalAmarela && dataSelecionada && diaDataSelecionada && analise && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
-          <Card className="w-full max-w-sm bg-[rgb(var(--surface-1))]"><div className="space-y-4 p-5"><div className="flex items-start gap-3"><AlertCircle className="mt-1 h-5 w-5 text-gold" /><div><h2 className="font-heading text-base text-burgundy">Atenção</h2><p className="mt-1 text-xs text-clay/70">Esta data está disponível, mas ultrapassa o orçamento mensal.</p></div></div><div className="space-y-2 rounded-xl bg-[rgb(var(--surface-2))] p-3 text-xs text-clay/70"><div className="flex justify-between"><span>Orçamento</span><span className="font-semibold">{formatarMoeda(analise!.orcamentoMensal)}</span></div><div className="flex justify-between"><span>Já comprometido</span><span className="font-semibold">{formatarMoeda(diaDataSelecionada.oracamentoAntes)}</span></div><div className="flex justify-between"><span>Carta da cliente</span><span className="font-semibold">{formatarMoeda(analise!.cliente!.valor)}</span></div><div className="border-t border-rose/10 pt-2"><div className="flex justify-between font-bold text-burgundy"><span>Novo total</span><span>{formatarMoeda(diaDataSelecionada.oracamentoDepois)}</span></div></div><div className="border-t border-rose/10 pt-2"><div className="flex justify-between text-rose"><span>Excedente</span><span className="font-bold">{formatarMoeda(diaDataSelecionada.ultrapassagem)}</span></div></div></div><div className="flex gap-2"><Button variant="secondary" size="sm" onClick={() => setShowingModalAmarela(false)} className="flex-1">Cancelar</Button><Button size="sm" loading={salvando} onClick={() => salvarPrevisao(dataSelecionada)} className="flex-1">Escolher mesmo assim</Button></div></div></Card>
+          <Card className="w-full max-w-sm bg-[rgb(var(--surface-1))]"><div className="space-y-4 p-5"><div className="flex items-start gap-3"><AlertCircle className="mt-1 h-5 w-5 text-gold" /><div><h2 className="font-heading text-base text-burgundy">Atenção</h2><p className="mt-1 text-xs text-clay/70">Esta data está disponível, mas ultrapassa o orçamento mensal.</p></div></div><div className="space-y-2 rounded-xl bg-[rgb(var(--surface-2))] p-3 text-xs text-clay/70"><div className="flex justify-between"><span>Orçamento</span><span className="font-semibold">{formatarMoeda(analise.orcamentoMensal)}</span></div><div className="flex justify-between"><span>Já comprometido</span><span className="font-semibold">{formatarMoeda(diaDataSelecionada.oracamentoAntes)}</span></div><div className="flex justify-between"><span>Carta da cliente</span><span className="font-semibold">{formatarMoeda(analise.cliente?.valor ?? 0)}</span></div><div className="border-t border-rose/10 pt-2"><div className="flex justify-between font-bold text-burgundy"><span>Novo total</span><span>{formatarMoeda(diaDataSelecionada.oracamentoDepois)}</span></div></div><div className="border-t border-rose/10 pt-2"><div className="flex justify-between text-rose"><span>Excedente</span><span className="font-bold">{formatarMoeda(diaDataSelecionada.ultrapassagem)}</span></div></div></div><div className="flex gap-2"><Button variant="secondary" size="sm" onClick={() => setShowingModalAmarela(false)} className="flex-1">Cancelar</Button><Button size="sm" loading={salvando} onClick={() => salvarPrevisao(dataSelecionada)} className="flex-1">Escolher mesmo assim</Button></div></div></Card>
         </div>
       )}
 
@@ -440,7 +500,7 @@ export function PrevisaoLiberacaoFinanceiraInteligente() {
         </div>
       )}
 
-      {carregandoAnalise && <div className="py-5 text-center text-[0.68rem] text-clay/40">Atualizando agenda…</div>}
+      {carregandoAnalise && <div className="py-4 text-center text-[0.68rem] text-clay/40">Atualizando agenda…</div>}
     </div>
   );
 }
