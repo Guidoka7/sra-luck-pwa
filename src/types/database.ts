@@ -22,6 +22,6 @@ export interface Cliente { id: string; nome_completo: string; cpf: string; data_
 export interface Boleto { id: string; cliente_id: string; numero_parcela: number; total_parcelas: number; valor: number; data_vencimento: string | null; status: StatusBoleto; comprovante_url: string | null; data_pagamento: string | null; observacoes: string | null; created_at: string; updated_at: string; clientes?: { id: string; nome_completo: string; cpf: string }; }
 export interface DataAgenda { id: string; data: string; vagas_totais: number; status: StatusData; observacoes_internas: string | null; created_at: string; updated_at: string; }
 export interface ClienteAgendadaNaData { clienteId: string | null; nome: string; valor: number; criadoEm: string; statusRevisaoFinanceira: StatusRevisaoFinanceira | null; }
-export interface DataLiberacaoFinanceira { id: string; data: string; status: StatusData; observacoes_internas: string | null; }
+export interface DataLiberacaoFinanceira { id: string; data: string; status: StatusData; observacoes_internas: string | null; created_at: string; updated_at: string; }
 export interface Agendamento { id: string; cliente_id: string; data_id: string; valor_contrato: number; status: StatusAgendamento; observacoes_internas: string | null; previsao_liberacao_financeira: string | null; created_at: string; updated_at: string; }
 export interface LogAlteracao { id: string; usuario: string; acao: string; entidade: string; entidade_id: string | null; detalhes: Record<string, unknown> | null; created_at: string; }
