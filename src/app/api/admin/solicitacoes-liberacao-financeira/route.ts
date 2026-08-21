@@ -13,7 +13,11 @@ export async function GET() {
   const user = await autenticar();
   if (!user) return NextResponse.json({ erro: "Não autenticado." }, { status: 401 });
   const supabase = createServiceSupabaseClient();
-  const { data, error } = await supabase.from("solicitacoes_liberacao_financeira").select("id, cliente_id, forma_custeio, saldo_restante, taxa_cartao, total_com_taxa, status, observacao, created_at, updated_at, clientes(nome_completo, cpf, quantidade_parcelas)").in("status", ["pendente", "em_analise"]).order("created_at", { ascending: true });
+  const { data, error } = await supabase
+    .from("solicitacoes_liberacao_financeira")
+    .select("id, cliente_id, forma_custeio, saldo_restante, taxa_cartao, total_com_taxa, status, observacao, created_at, updated_at, clientes(nome_completo, cpf, quantidade_parcelas)")
+    .in("status", ["pendente", "em_analise", "aprovada"])
+    .order("created_at", { ascending: true });
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
   return NextResponse.json({ solicitacoes: data ?? [] });
 }
