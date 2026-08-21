@@ -45,7 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="mobile-web-app-capable" content="yes" />
         <script dangerouslySetInnerHTML={{ __html: `(function(){try{var s=localStorage.getItem("sra-luck-theme");document.documentElement.classList.toggle("dark",s==="dark")}catch(e){}})()` }} />
       </head>
-      <body className="bg-cream text-clay font-sans antialiased selection:bg-burgundy selection:text-pearl">
+      <body className="bg-cream text-clay font-sans antialiased selection:bg-burgundy selection:text-pearl overflow-y-auto touch-pan-y">
         <ThemeProvider>
           <DeviceRuntime />
           <PaymentModalBackdropCloser />
