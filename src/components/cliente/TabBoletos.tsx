@@ -3,23 +3,9 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import {
-  Upload,
-  CheckCircle,
-  Clock,
-  AlertCircle,
-  Download,
-  RefreshCw,
-  ChevronDown,
-  ChevronUp,
-  WalletCards,
-  CircleDollarSign,
-  Heart,
-  FileText,
-} from "lucide-react";
+import { Upload, CheckCircle, Clock, AlertCircle, Download, ChevronDown, ChevronUp, WalletCards, CircleDollarSign, Heart, FileText, Copy, Check, QrCode, Paperclip, Sparkles, ShieldCheck } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { PixPagamento } from "@/components/cliente/PixPagamento";
 import { percentualNecessario, formatarMoeda } from "@/lib/utils";
 
 type StatusBoleto = "nao_pago" | "pago" | "pendente_confirmacao" | "rejeitado";
@@ -131,7 +117,7 @@ function ModalUploadComprovante({ aberto, boletoId, parcela, onFechado, onSucess
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm">
       <motion.div initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
-        <div className="flex items-center justify-between"><h3 className="font-heading text-lg font-semibold text-burgundy">Comprovante · Parcela {parcela}</h3><button onClick={onFechado} className="text-clay/40">×</button></div>
+        <div className="flex items-center justify-between"><div><h3 className="font-heading text-lg font-semibold text-burgundy">Já paguei · Parcela {parcela}</h3><p className="mt-1 text-xs text-clay/50">Envie o comprovante para confirmarmos seu pagamento.</p></div><button onClick={onFechado} className="text-clay/40">×</button></div>
         <label className="mt-4 block cursor-pointer rounded-xl border-2 border-dashed border-gold/30 bg-cream/30 p-5 text-center hover:border-gold/60">
           <input type="file" onChange={(e) => setArquivo(e.target.files?.[0] || null)} accept=".pdf,.jpg,.jpeg,.png" className="hidden" />
           <Upload className="mx-auto mb-2 h-7 w-7 text-gold" />
@@ -151,8 +137,8 @@ interface CardParcelaProps {
 }
 
 function CardParcela({ boleto, onAnexarClick, pagamento }: CardParcelaProps) {
-  const [acoesAbertas, setAcoesAbertas] = useState(false);
-  const [pixAberto, setPixAberto] = useState(false);
+  const [pixAberto, setPixAberto] = useState(true);
+  const [copiado, setCopiado] = useState(false);
   const vencimento = new Date(`${boleto.data_vencimento}T00:00:00`);
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
@@ -166,10 +152,21 @@ function CardParcela({ boleto, onAnexarClick, pagamento }: CardParcelaProps) {
   const temDescontoPix = isVencida && percentualDescontoPix > 0;
   const economiaPix = encargos * (percentualDescontoPix / 100);
   const valorComDescontoPix = valorAtualizado - economiaPix;
-
-  const formatarData = (data: string) => new Date(`${data}T00:00:00`).toLocaleDateString("pt-BR");
   const valorHoje = temDescontoPix ? valorComDescontoPix : isVencida ? valorAtualizado : boleto.valor;
+  const formatarData = (data: string) => new Date(`${data}T00:00:00`).toLocaleDateString("pt-BR");
   const bgClass = boleto.status === "pago" ? "bg-success/5 border-success/20" : isVencida ? "bg-alert/5 border-alert/20" : boleto.status === "pendente_confirmacao" ? "bg-gold/5 border-gold/20" : boleto.status === "rejeitado" ? "bg-alert/5 border-alert/20" : "bg-white border-clay/10";
+
+  async function copiarPix() {
+    if (!pagamento?.pixChave) return;
+    try {
+      await navigator.clipboard.writeText(pagamento.pixChave);
+      setCopiado(true);
+      toast.success("Chave PIX copiada!");
+      setTimeout(() => setCopiado(false), 2200);
+    } catch {
+      toast.error("Não foi possível copiar a chave PIX.");
+    }
+  }
 
   return (
     <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className={`rounded-2xl border ${bgClass} p-3.5 shadow-sm sm:p-4`}>
@@ -204,21 +201,35 @@ function CardParcela({ boleto, onAnexarClick, pagamento }: CardParcelaProps) {
 
       {boleto.status === "nao_pago" && (
         <>
-          <button type="button" onClick={() => setAcoesAbertas((v) => !v)} className="mt-3 flex w-full items-center justify-between rounded-xl bg-burgundy px-3.5 py-2.5 text-xs font-semibold tracking-wide text-white shadow-sm transition hover:brightness-105">
-            <span className="flex items-center gap-2"><CircleDollarSign className="h-4 w-4" /> Resolver esta parcela</span>
-            {acoesAbertas ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </button>
+          <div className="mt-3 grid grid-cols-3 gap-1.5 rounded-2xl border border-rose/15 bg-white/70 p-1.5 shadow-sm">
+            <button type="button" onClick={() => setPixAberto((v) => !v)} className={`flex min-h-[64px] flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[10px] font-semibold transition ${pixAberto ? "bg-rose/12 text-rose shadow-sm" : "text-burgundy hover:bg-cream"}`}>
+              <QrCode className="h-4 w-4" />
+              <span>Pagar via PIX</span>
+            </button>
+            {boleto.boleto_url ? <a href={`/api/cliente/boletos/${boleto.id}/arquivo`} target="_blank" rel="noopener noreferrer" className="flex min-h-[64px] flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[10px] font-semibold text-burgundy transition hover:bg-cream"><FileText className="h-4 w-4 text-clay/70" /><span>Boleto</span></a> : <span className="flex min-h-[64px] flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[10px] text-clay/30"><FileText className="h-4 w-4" /><span>Boleto</span></span>}
+            <button type="button" onClick={onAnexarClick} className="flex min-h-[64px] flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[10px] font-semibold text-burgundy transition hover:bg-cream"><Paperclip className="h-4 w-4 text-rose" /><span>Já paguei</span></button>
+          </div>
 
           <AnimatePresence initial={false}>
-            {acoesAbertas && (
+            {pixAberto && (pagamento?.pixChave || pagamento?.pixQrCodeUrl) && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                <div className="mt-2 rounded-xl border border-rose/10 bg-white/70 p-2">
-                  <div className="grid grid-cols-3 gap-2">
-                    {pagamento?.pixChave || pagamento?.pixQrCodeUrl ? <button type="button" onClick={() => setPixAberto((v) => !v)} className={`flex flex-col items-center gap-1 rounded-xl px-2 py-2.5 text-[10px] font-semibold transition ${pixAberto ? "bg-gold/15 text-burgundy" : "bg-cream text-burgundy hover:bg-gold/10"}`}><CircleDollarSign className="h-4 w-4 text-gold" />PIX</button> : <span className="flex flex-col items-center justify-center gap-1 rounded-xl bg-clay/5 px-2 py-2.5 text-[10px] text-clay/30">PIX indisponível</span>}
-                    <button type="button" onClick={onAnexarClick} className="flex flex-col items-center gap-1 rounded-xl bg-cream px-2 py-2.5 text-[10px] font-semibold text-burgundy hover:bg-rose/10"><Upload className="h-4 w-4 text-rose" />Comprovante</button>
-                    {boleto.boleto_url ? <a href={`/api/cliente/boletos/${boleto.id}/arquivo`} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-1 rounded-xl bg-cream px-2 py-2.5 text-[10px] font-semibold text-burgundy hover:bg-rose/10"><FileText className="h-4 w-4 text-rose" />Ver boleto</a> : <span className="flex flex-col items-center justify-center gap-1 rounded-xl bg-clay/5 px-2 py-2.5 text-[10px] text-clay/30">Boleto indisponível</span>}
+                <div className="mt-2 rounded-2xl border border-rose/12 bg-white/75 p-3.5">
+                  <div className="flex items-center justify-between gap-2 border-b border-clay/10 pb-2.5">
+                    <div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-rose" /><span className="text-xs font-semibold text-burgundy">Pague via PIX e economize</span></div>
+                    {temDescontoPix && <span className="rounded-full bg-success/10 px-2 py-1 text-[9px] font-semibold text-success">{percentualDescontoPix}% nos encargos</span>}
                   </div>
-                  {pixAberto && pagamento && (pagamento.pixChave || pagamento.pixQrCodeUrl) && <div className="mt-2"><PixPagamento pixChave={pagamento.pixChave} pixQrCodeUrl={pagamento.pixQrCodeUrl} desconto={temDescontoPix ? { percentual: percentualDescontoPix, economia: economiaPix, valorComDesconto: valorComDescontoPix } : null} /></div>}
+                  <div className="mt-3 space-y-2 text-xs">
+                    <div className="flex justify-between gap-3"><span className="text-clay/60">Valor original</span><span className="font-medium text-burgundy">{formatarMoeda(boleto.valor)}</span></div>
+                    {isVencida && <div className="flex justify-between gap-3"><span className="text-clay/60">Juros e multa ({diasEmAtraso} dias)</span><span className="font-medium text-burgundy">{formatarMoeda(encargos)}</span></div>}
+                    {temDescontoPix && <div className="flex justify-between gap-3"><span className="text-success">Desconto PIX ({percentualDescontoPix}%)</span><span className="font-medium text-success">− {formatarMoeda(economiaPix)}</span></div>}
+                    <div className="flex items-end justify-between gap-3 border-t border-dashed border-clay/15 pt-2.5"><span className="font-medium text-burgundy">Para pagar hoje</span><span className="font-heading text-lg font-bold text-rose">{formatarMoeda(valorHoje)}</span></div>
+                  </div>
+
+                  <div className="mt-3 flex flex-col items-center gap-3 rounded-xl bg-cream/45 p-3 sm:flex-row">
+                    {pagamento?.pixQrCodeUrl && <img src={pagamento.pixQrCodeUrl} alt="QR Code para pagamento via PIX" className="h-28 w-28 rounded-xl border border-rose/15 bg-white object-contain p-1.5 shadow-sm" />}
+                    <div className="w-full min-w-0 flex-1"><p className="text-[10px] text-clay/50">Escaneie o QR Code ou copie a chave PIX</p>{pagamento?.pixChave && <button type="button" onClick={copiarPix} className="mt-2 flex w-full items-center justify-between gap-2 rounded-xl border border-clay/12 bg-white px-3 py-2.5 text-xs font-medium text-burgundy shadow-sm"><span className="truncate">{pagamento.pixChave}</span>{copiado ? <Check className="h-4 w-4 flex-none text-success" /> : <Copy className="h-4 w-4 flex-none text-rose" />}</button>}</div>
+                  </div>
+                  <div className="mt-2.5 flex items-center gap-2 rounded-xl bg-rose/5 px-3 py-2 text-[10px] text-clay/55"><ShieldCheck className="h-3.5 w-3.5 flex-none text-rose" /> Após o pagamento, toque em <strong className="text-burgundy">Já paguei</strong> e envie o comprovante.</div>
                 </div>
               </motion.div>
             )}
