@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-// Agenda paralela à agenda de termos cirúrgicos: mostra, por dia, quanto a
-// empresa previu pagar (liberação financeira) às clientes que assinaram os
-// termos e já receberam uma data de previsão. Também lista as assinaturas
-// confirmadas que AINDA NÃO têm uma previsão definida — pra o admin
-// preencher assim que informar a cliente no dia da assinatura.
+/**
+ * Regra padrão do negócio: a previsão de liberação financeira é 90 dias
+ * corridos após a data escolhida para assinatura dos termos.
+ *
+ * A sugestão é automática no painel, mas continua editável pelo admin para
+ * atender alterações solicitadas pela cliente. A data efetivamente salva é
+ * a que o admin confirmar.
+ */
+function adicionarDias(dataIso: string | null, dias: number): string | null {
+  if (!dataIso) return null;
+  const [ano, mes, dia] = dataIso.split("-").map(Number);
+  if (!ano || !mes || !dia) return null;
+  const data = new Date(Date.UTC(ano, mes - 1, dia));
+  data.setUTCDate(data.getUTCDate() + dias);
+  return data.toISOString().slice(0, 10);
+}
+
 export async function GET(req: NextRequest) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -42,12 +54,15 @@ export async function GET(req: NextRequest) {
   };
 
   const comPrevisaoNoMes = new Map<string, Linha[]>();
-  const semPrevisao: (Linha & { previsaoSugerida: null })[] = [];
-  // Lista completa de clientes com assinatura confirmada — independentemente
-  // de já terem ou não uma previsão — para o seletor de "cadastrar/alterar
-  // previsão" no admin. Cadastro e alteração usam o mesmo fluxo: se a
-  // cliente já tem uma data, ela aparece pré-preenchida para edição.
-  const todosClientes: { agendamentoId: string; clienteId: string | null; nome: string; previsaoAtual: string | null }[] = [];
+  const semPrevisao: (Linha & { previsaoSugerida: string | null })[] = [];
+  const todosClientes: {
+    agendamentoId: string;
+    clienteId: string | null;
+    nome: string;
+    dataTermos: string | null;
+    previsaoAtual: string | null;
+    previsaoSugerida: string | null;
+  }[] = [];
   let totalPrevistoMes = 0;
 
   for (const item of agendamentos ?? []) {
@@ -58,20 +73,24 @@ export async function GET(req: NextRequest) {
       valor: Number(item.valor_contrato),
       dataTermos: (item as any).datas?.data ?? null,
     };
+    const previsaoAtual = (item.previsao_liberacao_financeira as string | null) ?? null;
+    const previsaoSugerida = adicionarDias(linha.dataTermos, 90);
 
     todosClientes.push({
       agendamentoId: linha.agendamentoId,
       clienteId: linha.clienteId,
       nome: linha.nome,
-      previsaoAtual: (item.previsao_liberacao_financeira as string | null) ?? null,
+      dataTermos: linha.dataTermos,
+      previsaoAtual,
+      previsaoSugerida,
     });
 
-    if (!item.previsao_liberacao_financeira) {
-      semPrevisao.push({ ...linha, previsaoSugerida: null });
+    if (!previsaoAtual) {
+      semPrevisao.push({ ...linha, previsaoSugerida });
       continue;
     }
 
-    const data = item.previsao_liberacao_financeira as string;
+    const data = previsaoAtual;
     if (data >= inicioMes && data < proximoMes) {
       totalPrevistoMes += linha.valor;
       const lista = comPrevisaoNoMes.get(data) ?? [];
@@ -81,6 +100,7 @@ export async function GET(req: NextRequest) {
   }
 
   todosClientes.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  semPrevisao.sort((a, b) => (a.dataTermos ?? "").localeCompare(b.dataTermos ?? ""));
 
   const diasComPrevisao = Array.from(comPrevisaoNoMes.entries())
     .map(([data, clientes]) => ({
@@ -89,10 +109,6 @@ export async function GET(req: NextRequest) {
       clientes,
     }))
     .sort((a, b) => a.data.localeCompare(b.data));
-
-  // Assinaturas aguardando previsão, ordenadas pela data dos termos (mais
-  // antigas primeiro — são as mais urgentes de preencher).
-  semPrevisao.sort((a, b) => (a.dataTermos ?? "").localeCompare(b.dataTermos ?? ""));
 
   return NextResponse.json({
     meta: config?.meta_orcamento_mensal ?? 100000,
