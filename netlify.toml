@@ -1,11 +1,13 @@
 [build]
   command = "npm run build"
+  publish = ".next"
 
-# O Netlify detecta Next.js automaticamente e usa o Next Runtime
-# (@netlify/plugin-nextjs) para rodar SSR, middleware e API routes
-# como Netlify Functions/Edge Functions — dentro do plano Free.
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
+[build.environment]
+  NODE_VERSION = "22"
+
+# Next.js 14+ usa o runtime OpenNext/Next.js da Netlify automaticamente.
+# Não fixamos @netlify/plugin-nextjs aqui para permitir que a Netlify
+# mantenha o adapter atualizado e compatível com a versão do Next.js.
 
 [[headers]]
   for = "/simulador-iphone-sw.js"
