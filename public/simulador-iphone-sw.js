@@ -1,9 +1,10 @@
-const CACHE = 'sra-luck-pwa-v10';
+const CACHE = 'sra-luck-pwa-v11';
 const SHELL = [
   '/simulador-iphone.html',
   '/simulador-iphone.webmanifest',
   '/brand/sra-luck-mark.png',
-  '/icons/sra-luck-app-gold.svg'
+  '/icons/sra-luck-192.png',
+  '/icons/sra-luck-512.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -16,7 +17,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/_next/')) return;
-  if (url.pathname === '/simulador-iphone.html' || url.pathname === '/simulador-iphone.webmanifest' || url.pathname === '/brand/sra-luck-mark.png' || url.pathname === '/icons/sra-luck-app-gold.svg') {
+  if (url.pathname === '/simulador-iphone.html' || url.pathname === '/simulador-iphone.webmanifest' || url.pathname === '/brand/sra-luck-mark.png' || url.pathname === '/icons/sra-luck-192.png' || url.pathname === '/icons/sra-luck-512.png') {
     event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request).then((response) => {
       const copy = response.clone();
       caches.open(CACHE).then((cache) => cache.put(event.request, copy));
@@ -27,7 +28,6 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('push', (event) => {
   let data = {}; try { data = event.data ? event.data.json() : {}; } catch (_) {}
   const title = data.title || 'Sra. Luck';
-  // O símbolo é transparente ao redor, próprio para o tratamento visual do Android.
   const notificationIcon = '/brand/sra-luck-mark.png';
   const options = { body: data.body || 'Você recebeu uma nova notificação.', icon: notificationIcon, badge: notificationIcon, tag: data.tag || 'sra-luck-notificacao', renotify: true, requireInteraction: false, data: { url: data.url || '/agenda', notificationId: data.notificationId || null } };
   event.waitUntil(self.registration.showNotification(title, options));
