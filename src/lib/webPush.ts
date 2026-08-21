@@ -1,7 +1,7 @@
 import webpush from "web-push";
 
 let configurado = false;
-const NOTIFICATION_ICON = "/icons/sra-luck-notification-badge.png";
+const NOTIFICATION_ICON = "/brand/sra-luck-mark.png";
 
 function configurarVapid() {
   if (configurado) return;
