@@ -8,13 +8,12 @@ export function PwaRegister() {
   const pathname = usePathname();
 
   useEffect(() => {
-    // O PWA é exclusivo da experiência da cliente. Admin e demais páginas
-    // continuam sendo web normal, mesmo quando acessadas no celular.
     if (!pathname?.startsWith("/agenda")) return;
     if (!("serviceWorker" in navigator)) return;
 
     navigator.serviceWorker
-      .register("/simulador-iphone-sw.js", { scope: "/agenda" })
+      .register("/simulador-iphone-sw.js", { scope: "/agenda", updateViaCache: "none" })
+      .then((registration) => registration.update().catch(() => {}))
       .catch(() => {});
   }, [pathname]);
 
