@@ -71,11 +71,26 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!atual) return NextResponse.json({ erro: "Parcela não encontrada." }, { status: 404 });
     if (atual.status === "pago") return NextResponse.json({ erro: "Parcelas pagas não podem ser alteradas." }, { status: 400 });
     if (acao === "excluir") {
-      const { error } = await supabase.from("boletos").delete().eq("id", boletoId);
-      if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
-      await supabase.from("logs_alteracoes").insert({ usuario: user.email ?? "admin", acao: "excluiu_parcela", entidade: "clientes", entidade_id: params.id, detalhes: { parcela: atual.numero_parcela, valor: atual.valor, vencimento: atual.data_vencimento } });
-      await avisarCliente(params.id, { tipo: "parcelamento_atualizado" });
-      return NextResponse.json({ sucesso: true });
+      const { data: todas } = await supabase.from("boletos").select("*").eq("cliente_id", params.id).order("numero_parcela", { ascending: true });
+      const restantes = (todas ?? []).filter((b) => b.id !== boletoId);
+      const abertasRestantes = restantes.filter((b) => b.status !== "pago");
+      const maiorPago = Math.max(0, ...restantes.filter((b) => b.status === "pago").map((b) => Number(b.numero_parcela)));
+      const novoTotal = restantes.length;
+      for (const boleto of abertasRestantes) {
+        const { error: e } = await supabase.from("boletos").update({ numero_parcela: 9001 + abertasRestantes.indexOf(boleto), total_parcelas: 10000 }).eq("id", boleto.id);
+        if (e) return NextResponse.json({ erro: e.message }, { status: 500 });
+      }
+      const { error: erroExcluir } = await supabase.from("boletos").delete().eq("id", boletoId);
+      if (erroExcluir) return NextResponse.json({ erro: erroExcluir.message }, { status: 500 });
+      for (let i = 0; i < abertasRestantes.length; i++) {
+        const boleto = abertasRestantes[i];
+        const { error: e } = await supabase.from("boletos").update({ numero_parcela: maiorPago + i + 1, total_parcelas: novoTotal }).eq("id", boleto.id);
+        if (e) return NextResponse.json({ erro: e.message }, { status: 500 });
+      }
+      await supabase.from("clientes").update({ quantidade_parcelas: novoTotal }).eq("id", params.id);
+      await supabase.from("logs_alteracoes").insert({ usuario: user.email ?? "admin", acao: "excluiu_parcela", entidade: "clientes", entidade_id: params.id, detalhes: { parcela: atual.numero_parcela, valor: atual.valor, vencimento: atual.data_vencimento, novo_total: novoTotal } });
+      await avisarCliente(params.id, { tipo: "parcelamento_atualizado", quantidadeParcelas: novoTotal });
+      return NextResponse.json({ sucesso: true, totalParcelas: novoTotal });
     }
     if (acao === "reabrir") {
       const { data, error } = await supabase.from("boletos").update({ status: "nao_pago", data_pagamento: null, observacoes: body.observacoes ?? atual.observacoes }).eq("id", boletoId).select("*").single();
