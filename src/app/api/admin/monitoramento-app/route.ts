@@ -6,8 +6,8 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ erro: "Não autenticado." }, { status: 401 });
 
-  // O monitoramento precisa enxergar também quem ainda nunca abriu o PWA.
-  // Por isso a lista-base é a tabela de clientes e os dispositivos entram como complemento.
+  // A base é a tabela de clientes para que também apareçam as clientes que
+  // ainda nunca acessaram o PWA. Os dispositivos entram como complemento.
   const [{ data: clientes, error: erroClientes }, { data: dispositivosBrutos, error: erroDispositivos }] = await Promise.all([
     supabase.from("clientes").select("id, nome_completo, cpf, ativo").eq("ativo", true).order("nome_completo", { ascending: true }),
     supabase.from("cliente_app_devices").select(`
@@ -23,15 +23,13 @@ export async function GET() {
   type Device = NonNullable<typeof dispositivosBrutos>[number];
   const dispositivos = dispositivosBrutos ?? [];
   const clienteMapa = new Map((clientes ?? []).map((cliente) => [cliente.id, cliente]));
+  const grupos = new Map<string, Device[]>();
 
-  // Um resumo por cliente usa o dispositivo com acesso mais recente.
-  const porCliente = new Map<string, Device>();
   for (const item of dispositivos) {
     if (!clienteMapa.has(item.cliente_id)) continue;
-    const atual = porCliente.get(item.cliente_id);
-    if (!atual || new Date(item.last_access_at).getTime() > new Date(atual.last_access_at).getTime()) {
-      porCliente.set(item.cliente_id, item);
-    }
+    const lista = grupos.get(item.cliente_id) ?? [];
+    lista.push(item);
+    grupos.set(item.cliente_id, lista);
   }
 
   type Resumo = {
@@ -47,23 +45,42 @@ export async function GET() {
     last_access_at: string | null;
     pwa_installed_at: string | null;
     notifications_activated_at: string | null;
+    dispositivos_count: number;
   };
 
   const resumo: Resumo[] = (clientes ?? []).map((cliente) => {
-    const item = porCliente.get(cliente.id);
+    const lista = grupos.get(cliente.id) ?? [];
+    const ultimo = lista[0] ?? null;
+    const primeiroAcesso = lista.reduce<string | null>((menor, item) => {
+      if (!item.first_access_at) return menor;
+      if (!menor || new Date(item.first_access_at).getTime() < new Date(menor).getTime()) return item.first_access_at;
+      return menor;
+    }, null);
+    const ultimoAcesso = lista.reduce<string | null>((maior, item) => {
+      if (!item.last_access_at) return maior;
+      if (!maior || new Date(item.last_access_at).getTime() > new Date(maior).getTime()) return item.last_access_at;
+      return maior;
+    }, null);
+    const pwaInstalado = lista.some((item) => item.is_pwa_installed);
+    const notificacoesAtivas = lista.some((item) => item.notification_permission === "granted" && item.push_active);
+    const notificacoesBloqueadas = !notificacoesAtivas && lista.some((item) => item.notification_permission === "denied");
+    const pwaInstaladoAt = lista.filter((item) => item.pwa_installed_at).sort((a, b) => new Date(a.pwa_installed_at!).getTime() - new Date(b.pwa_installed_at!).getTime())[0]?.pwa_installed_at ?? null;
+    const notificacoesAtivadasAt = lista.filter((item) => item.notifications_activated_at).sort((a, b) => new Date(a.notifications_activated_at!).getTime() - new Date(b.notifications_activated_at!).getTime())[0]?.notifications_activated_at ?? null;
+
     return {
       cliente_id: cliente.id,
       cliente,
-      device_key: item?.device_key ?? null,
-      device_type: item?.device_type ?? null,
-      display_mode: item?.display_mode ?? null,
-      is_pwa_installed: Boolean(item?.is_pwa_installed),
-      notification_permission: item?.notification_permission ?? "default",
-      push_active: Boolean(item?.push_active),
-      first_access_at: item?.first_access_at ?? null,
-      last_access_at: item?.last_access_at ?? null,
-      pwa_installed_at: item?.pwa_installed_at ?? null,
-      notifications_activated_at: item?.notifications_activated_at ?? null,
+      device_key: ultimo?.device_key ?? null,
+      device_type: ultimo?.device_type ?? null,
+      display_mode: ultimo?.display_mode ?? null,
+      is_pwa_installed: pwaInstalado,
+      notification_permission: notificacoesBloqueadas ? "denied" : notificacoesAtivas ? "granted" : "default",
+      push_active: notificacoesAtivas,
+      first_access_at: primeiroAcesso,
+      last_access_at: ultimoAcesso,
+      pwa_installed_at: pwaInstaladoAt,
+      notifications_activated_at: notificacoesAtivadasAt,
+      dispositivos_count: lista.length,
     };
   });
 
