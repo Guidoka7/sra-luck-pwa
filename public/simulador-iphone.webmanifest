@@ -12,7 +12,8 @@
   "background_color": "#fbf7f4",
   "theme_color": "#7A2632",
   "icons": [
-    {"src":"/icons/sra-luck-app-256.png","sizes":"256x256","type":"image/png","purpose":"any"}
+    {"src":"/brand/sra-luck-mark.png","sizes":"640x640","type":"image/png","purpose":"any"},
+    {"src":"/icons/sra-luck-app-gold.svg","sizes":"512x512","type":"image/svg+xml","purpose":"maskable"}
   ],
   "prefer_related_applications": false
 }
