@@ -7,6 +7,7 @@ import "./light-theme-fixes.css";
 import { ThemeProvider } from "@/components/ui/ThemeProvider";
 import { PwaRegister } from "@/components/ui/PwaRegister";
 import { DeviceRuntime } from "@/components/ui/DeviceRuntime";
+import { PaymentModalBackdropCloser } from "@/components/ui/PaymentModalBackdropCloser";
 import { AppTelemetry } from "@/components/cliente/AppTelemetry";
 import { ClienteTour } from "@/components/cliente/ClienteTour";
 
@@ -19,6 +20,10 @@ export const metadata: Metadata = {
   title: "Sra. Luck — Cirurgia Programada",
   description: "Agenda exclusiva de crédito programado.",
   manifest: "/simulador-iphone.webmanifest",
+  icons: {
+    icon: "/icons/sra-luck-app-gold.svg",
+    apple: "/icons/sra-luck-app-gold.svg",
+  },
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Sra. Luck" },
 };
 
@@ -40,6 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-cream text-clay font-sans antialiased selection:bg-burgundy selection:text-pearl">
         <ThemeProvider>
           <DeviceRuntime />
+          <PaymentModalBackdropCloser />
           <PwaRegister />
           <AppTelemetry />
           {children}
