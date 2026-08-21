@@ -25,76 +25,18 @@ export function ClienteTour() {
   const [parcelasNecessarias, setParcelasNecessarias] = useState<number | null>(null);
 
   const steps = useMemo<Step[]>(() => [
-    {
-      id: "boas-vindas",
-      title: "Bem-vinda à sua jornada 💕",
-      text: "Vamos te mostrar, de forma rápida e delicada, onde acompanhar cada etapa. Você continuará vendo seu sistema normalmente durante o tour.",
-      icon: Sparkles,
-    },
-    {
-      id: "jornada",
-      title: "Sua jornada até a cirurgia",
-      text: etapa === "financeiro"
-        ? "Aqui você acompanha o percentual das parcelas pagas e entende quando sua agenda poderá ser liberada."
-        : etapa === "agenda"
-          ? "Aqui você acompanha a evolução do seu contrato e o momento em que a agenda fica disponível para escolha."
-          : etapa === "cirurgia"
-            ? "Aqui você acompanha as etapas já concluídas e as informações relacionadas à sua assinatura e cirurgia."
-            : "Aqui você acompanha o andamento do seu contrato e sabe exatamente em qual etapa está.",
-      icon: Heart,
-      target: () => porDataTour("jornada"),
-    },
-    {
-      id: "boletos",
-      title: "Meus Boletos",
-      text: "Nesta aba você acompanha suas parcelas, pagamentos e comprovantes. É por aqui que você envia os comprovantes quando necessário.",
-      icon: CreditCard,
-      target: () => porDataTour("boletos"),
-    },
-    {
-      id: "agenda",
-      title: etapa === "agenda" ? "Sua agenda" : "Sua agenda (simulação liberada)",
-      text: etapa === "agenda"
-        ? `Sua agenda está liberada. Aqui você poderá escolher a data da assinatura dos termos. A liberação segue ${percentualContrato}% das parcelas pagas${parcelasNecessarias ? `, equivalente a ${parcelasNecessarias} parcelas` : ""}.`
-        : `Esta é uma simulação de como sua agenda ficará quando for liberada. Ao atingir ${percentualContrato}% das parcelas pagas${parcelasNecessarias ? `, equivalente a ${parcelasNecessarias} parcelas do seu contrato` : ""}, você poderá escolher a data da assinatura dos termos.`,
-      icon: CalendarDays,
-      target: () => porDataTour("agenda"),
-    },
-    {
-      id: "notificacoes",
-      title: "Fique por dentro",
-      text: "Ative as notificações para receber avisos importantes sobre pagamentos, agenda e novas etapas da sua jornada.",
-      icon: Bell,
-      target: () => porDataTour("notificacoes"),
-    },
-    {
-      id: "pronto",
-      title: "Tudo pronto ✨",
-      text: etapa === "financeiro"
-        ? `Agora você já sabe onde acompanhar seus pagamentos. Quando atingir ${percentualContrato}% das parcelas pagas${parcelasNecessarias ? ` (${parcelasNecessarias} parcelas)` : ""}, sua agenda poderá ser liberada.`
-        : "Agora é só acompanhar sua jornada. Quando surgir uma nova etapa, você encontrará tudo por aqui.",
-      icon: Check,
-    },
+    { id: "boas-vindas", title: "Bem-vinda à sua jornada 💕", text: "Vamos te mostrar, de forma rápida e delicada, onde acompanhar cada etapa. Você continuará vendo seu sistema normalmente durante o tour.", icon: Sparkles },
+    { id: "jornada", title: "Sua jornada até a cirurgia", text: etapa === "financeiro" ? "Aqui você acompanha o percentual das parcelas pagas e entende quando sua agenda poderá ser liberada." : etapa === "agenda" ? "Aqui você acompanha a evolução do seu contrato e o momento em que a agenda fica disponível para escolha." : etapa === "cirurgia" ? "Aqui você acompanha as etapas já concluídas e as informações relacionadas à sua assinatura e cirurgia." : "Aqui você acompanha o andamento do seu contrato e sabe exatamente em qual etapa está.", icon: Heart, target: () => porDataTour("jornada") },
+    { id: "boletos", title: "Meus Boletos", text: "Nesta aba você acompanha suas parcelas, pagamentos e comprovantes. É por aqui que você envia os comprovantes quando necessário.", icon: CreditCard, target: () => porDataTour("boletos") },
+    { id: "agenda", title: etapa === "cirurgia" ? "Sua próxima etapa" : etapa === "agenda" ? "Sua agenda" : "Sua agenda (simulação liberada)", text: etapa === "cirurgia" ? "Sua assinatura já foi agendada. Aqui você acompanha as informações da próxima etapa da sua jornada." : etapa === "agenda" ? `Sua agenda está liberada. Aqui você poderá escolher a data da assinatura dos termos. A liberação segue ${percentualContrato}% das parcelas pagas${parcelasNecessarias ? `, equivalente a ${parcelasNecessarias} parcelas` : ""}.` : `Esta é uma simulação de como sua agenda ficará quando for liberada. Ao atingir ${percentualContrato}% das parcelas pagas${parcelasNecessarias ? `, equivalente a ${parcelasNecessarias} parcelas do seu contrato` : ""}, você poderá escolher a data da assinatura dos termos.`, icon: CalendarDays, target: () => porDataTour(etapa === "cirurgia" ? "previsao" : "agenda") },
+    { id: "notificacoes", title: "Fique por dentro", text: "Ative as notificações para receber avisos importantes sobre pagamentos, agenda e novas etapas da sua jornada.", icon: Bell, target: () => porDataTour("notificacoes") },
+    { id: "pronto", title: "Tudo pronto ✨", text: etapa === "financeiro" ? `Agora você já sabe onde acompanhar seus pagamentos. Quando atingir ${percentualContrato}% das parcelas pagas${parcelasNecessarias ? ` (${parcelasNecessarias} parcelas)` : ""}, sua agenda poderá ser liberada.` : "Agora é só acompanhar sua jornada. Quando surgir uma nova etapa, você encontrará tudo por aqui.", icon: Check },
   ], [etapa, percentualContrato, parcelasNecessarias]);
 
-  function encerrar() {
-    try { localStorage.setItem(STORAGE_KEY, "concluido"); } catch (_) {}
-    setAberto(false);
-  }
-
-  function pular() {
-    try { localStorage.setItem(STORAGE_KEY, "pulado"); } catch (_) {}
-    setAberto(false);
-  }
-
-  function anterior() {
-    setIndice((v) => Math.max(0, v - 1));
-  }
-
-  function proximo() {
-    if (indice >= steps.length - 1) encerrar();
-    else setIndice((v) => v + 1);
-  }
+  function encerrar() { try { localStorage.setItem(STORAGE_KEY, "concluido"); } catch (_) {} setAberto(false); }
+  function pular() { try { localStorage.setItem(STORAGE_KEY, "pulado"); } catch (_) {} setAberto(false); }
+  function anterior() { setIndice((v) => Math.max(0, v - 1)); }
+  function proximo() { if (indice >= steps.length - 1) encerrar(); else setIndice((v) => v + 1); }
 
   useEffect(() => {
     if (pathname !== "/agenda") return;
@@ -107,9 +49,7 @@ export function ClienteTour() {
       const parcelas = Number(root?.dataset.tourRequiredInstallments ?? "");
       setPercentualContrato(Number.isFinite(percentual) && percentual > 0 ? percentual : 60);
       setParcelasNecessarias(Number.isFinite(parcelas) && parcelas > 0 ? parcelas : null);
-      setIndice(0);
-      setPronto(true);
-      timer = window.setTimeout(() => setAberto(true), 700);
+      setIndice(0); setPronto(true); timer = window.setTimeout(() => setAberto(true), 700);
     };
     timer = window.setTimeout(iniciar, 250);
     return () => { if (timer) window.clearTimeout(timer); };
@@ -117,33 +57,23 @@ export function ClienteTour() {
 
   useEffect(() => {
     if (!aberto || !pronto) return;
-    const atualizar = () => {
+    const id = steps[indice]?.id;
+    if (id === "boletos") porDataTour("boletos")?.click();
+    if (id === "agenda" && etapa !== "cirurgia") porDataTour("minha-agenda")?.click();
+    const timer = window.setTimeout(() => {
       const target = steps[indice]?.target?.();
-      if (target && steps[indice]?.id === "boletos") {
-        target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
-      } else if (target) {
-        target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
-      }
-      window.setTimeout(() => setRect(target?.getBoundingClientRect() ?? null), 140);
-    };
-    atualizar();
-    window.addEventListener("resize", atualizar);
-    window.addEventListener("scroll", atualizar, true);
-    const timer = window.setTimeout(atualizar, 220);
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+      window.setTimeout(() => setRect(target?.getBoundingClientRect() ?? null), 160);
+    }, 80);
+    const atualizar = () => { const target = steps[indice]?.target?.(); setRect(target?.getBoundingClientRect() ?? null); };
+    window.addEventListener("resize", atualizar); window.addEventListener("scroll", atualizar, true);
     return () => { clearTimeout(timer); window.removeEventListener("resize", atualizar); window.removeEventListener("scroll", atualizar, true); };
-  }, [aberto, indice, pronto, steps]);
+  }, [aberto, indice, pronto, steps, etapa]);
 
   if (pathname !== "/agenda" || !aberto) return null;
-
-  const step = steps[indice];
-  const Icon = step.icon;
-  const ultimo = indice === steps.length - 1;
-  const isAgenda = step.id === "agenda" && rect;
-  const tooltipStyle = rect
-    ? isAgenda
-      ? { left: Math.max(16, Math.min(window.innerWidth - 336, rect.left + rect.width / 2 - 160)), bottom: Math.max(16, window.innerHeight - rect.top + 14) }
-      : { left: Math.max(16, Math.min(window.innerWidth - 336, rect.left + rect.width / 2 - 160)), top: Math.min(window.innerHeight - 250, Math.max(16, rect.bottom + 14)) }
-    : { left: 16, right: 16, top: "50%", transform: "translateY(-50%)" };
+  const step = steps[indice]; const Icon = step.icon; const ultimo = indice === steps.length - 1;
+  const isAgenda = step.id === "agenda" && rect && etapa !== "cirurgia";
+  const tooltipStyle = rect ? isAgenda ? { left: Math.max(16, Math.min(window.innerWidth - 336, rect.left + rect.width / 2 - 160)), bottom: Math.max(16, window.innerHeight - rect.top + 14) } : { left: Math.max(16, Math.min(window.innerWidth - 336, rect.left + rect.width / 2 - 160)), top: Math.min(window.innerHeight - 250, Math.max(16, rect.bottom + 14)) } : { left: 16, right: 16, top: "50%", transform: "translateY(-50%)" };
 
   return <AnimatePresence>
     <motion.div className="fixed inset-0 z-[100]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
