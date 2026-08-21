@@ -9,62 +9,36 @@ export async function POST(req: NextRequest) {
 
   const { dataId } = await req.json();
   if (!dataId) return NextResponse.json({ erro: "Escolha uma data." }, { status: 400 });
-
   const supabase = createServiceSupabaseClient();
 
-  const { data: cliente } = await supabase
-    .from("clientes")
-    .select("id, valor_contrato")
-    .eq("id", sessao.clienteId)
-    .single();
+  const { data: cliente } = await supabase.from("clientes").select("id, valor_contrato, status_revisao_financeira").eq("id", sessao.clienteId).single();
   if (!cliente) return NextResponse.json({ erro: "Cliente não encontrada." }, { status: 404 });
+  if (cliente.status_revisao_financeira !== "aprovada") return NextResponse.json({ erro: "Sua agenda ainda não está liberada para agendamento." }, { status: 409 });
 
-  const { data: jaTem } = await supabase
-    .from("agendamentos")
-    .select("id")
+  const { data: jaTem } = await supabase.from("agendamentos").select("id").eq("cliente_id", cliente.id).eq("status", "confirmado").maybeSingle();
+  if (jaTem) return NextResponse.json({ erro: "Você já tem uma data confirmada. Fale conosco para remarcar." }, { status: 409 });
+
+  const { data: dataAlvo } = await supabase.from("datas").select("id, data, vagas_totais, status").eq("id", dataId).single();
+  if (!dataAlvo || dataAlvo.status !== "disponivel") return NextResponse.json({ erro: "Essa data não está mais disponível." }, { status: 409 });
+
+  const { count } = await supabase.from("agendamentos").select("id", { count: "exact", head: true }).eq("data_id", dataId).eq("status", "confirmado");
+  if ((count ?? 0) >= dataAlvo.vagas_totais) return NextResponse.json({ erro: "As vagas dessa data acabaram de se esgotar." }, { status: 409 });
+
+  const { data: novoAgendamento, error } = await supabase.from("agendamentos").insert({
+    cliente_id: cliente.id,
+    data_id: dataId,
+    valor_contrato: cliente.valor_contrato,
+    status: "confirmado",
+  }).select("id").single();
+  if (error) return NextResponse.json({ erro: "Não foi possível confirmar sua data. Tente novamente." }, { status: 500 });
+
+  // Se a cliente já escolheu o custeio, o pedido acompanha automaticamente
+  // a data dos termos e passa a aparecer no painel para programação financeira.
+  await supabase.from("solicitacoes_liberacao_financeira")
+    .update({ agendamento_id: novoAgendamento.id })
     .eq("cliente_id", cliente.id)
-    .eq("status", "confirmado")
-    .maybeSingle();
-  if (jaTem) {
-    return NextResponse.json(
-      { erro: "Você já tem uma data confirmada. Fale com a clínica para remarcar." },
-      { status: 409 }
-    );
-  }
-
-  const { data: dataAlvo } = await supabase
-    .from("datas")
-    .select("id, data, vagas_totais, status")
-    .eq("id", dataId)
-    .single();
-  if (!dataAlvo || dataAlvo.status !== "disponivel") {
-    return NextResponse.json({ erro: "Essa data não está mais disponível." }, { status: 409 });
-  }
-
-  const { count } = await supabase
-    .from("agendamentos")
-    .select("id", { count: "exact", head: true })
-    .eq("data_id", dataId)
-    .eq("status", "confirmado");
-
-  if ((count ?? 0) >= dataAlvo.vagas_totais) {
-    return NextResponse.json({ erro: "As vagas dessa data acabaram de se esgotar." }, { status: 409 });
-  }
-
-  const { data: novoAgendamento, error } = await supabase
-    .from("agendamentos")
-    .insert({
-      cliente_id: cliente.id,
-      data_id: dataId,
-      valor_contrato: cliente.valor_contrato,
-      status: "confirmado",
-    })
-    .select("id")
-    .single();
-
-  if (error) {
-    return NextResponse.json({ erro: "Não foi possível confirmar sua data. Tente novamente." }, { status: 500 });
-  }
+    .in("status", ["pendente", "em_analise", "aprovada"])
+    .is("agendamento_id", null);
 
   return NextResponse.json({ ok: true, agendamentoId: novoAgendamento.id, data: dataAlvo.data });
 }
