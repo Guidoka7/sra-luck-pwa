@@ -329,6 +329,7 @@ export function PrevisaoLiberacaoFinanceiraInteligente() {
   }, [analise, ano, mes]);
 
   const valorRestante = solicitacaoSelecionada ? Number(solicitacaoSelecionada.saldo_restante) : null;
+  const orcamentoAtingido = Boolean(analise?.orcamentoMensal) && valorJaLiberadoMes >= (analise?.orcamentoMensal ?? 0);
   const custeioQuitado = valorRestante !== null && valorRestante <= 0;
 
   return (
@@ -353,10 +354,6 @@ export function PrevisaoLiberacaoFinanceiraInteligente() {
               <p className="mt-1 text-[0.66rem] text-clay/50">Selecione uma cliente na lista de solicitações para ver os dados financeiros.</p>
             )}
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            <span className="rounded-full border border-gold/20 bg-gold/10 px-2.5 py-1 text-[0.58rem] font-semibold text-burgundy">Valor já liberado no mês: {formatarMoeda(valorJaLiberadoMes)}</span>
-            <span className="rounded-full border border-rose/10 bg-[rgb(var(--surface-2))] px-2.5 py-1 text-[0.58rem] font-semibold text-clay/65">Orçamento: {formatarMoeda(analise?.orcamentoMensal ?? 0)}</span>
-          </div>
         </div>
       </Card>
 
@@ -378,6 +375,12 @@ export function PrevisaoLiberacaoFinanceiraInteligente() {
                 <span className="w-28 text-center text-xs font-semibold text-burgundy">{nomeMes(mes)} {ano}</span>
                 <button type="button" onClick={() => mudarMes(1)} aria-label="Próximo mês" className="flex h-7 w-7 items-center justify-center rounded-full text-burgundy transition-all hover:bg-rose/10 active:scale-90"><ChevronRight className="h-4 w-4" /></button>
               </div>
+            </div>
+
+            <div className="mt-3 flex justify-center">
+              <span className={cn("inline-flex items-center rounded-full border px-3 py-1 text-[0.62rem] font-semibold shadow-sm", orcamentoAtingido ? "border-burgundy/25 bg-burgundy/8 text-burgundy" : "border-success/25 bg-success/8 text-success")}>
+                Valor já liberado esse mês&nbsp; {formatarMoeda(valorJaLiberadoMes)}/{formatarMoeda(analise.orcamentoMensal)}
+              </span>
             </div>
 
             <div className="mx-auto mt-3 w-full max-w-2xl">
