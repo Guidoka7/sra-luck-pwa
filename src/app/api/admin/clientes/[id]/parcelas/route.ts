@@ -118,9 +118,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const { data: atuais, error } = await service.from("boletos").select("*").eq("cliente_id", params.id).order("numero_parcela", { ascending: true });
     if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
     type BoletoSelecionado = { id: string; status: string; numero_parcela: number };
-    const selecionadas = (atuais ?? []).filter((b: BoletoSelecionado) => ids.includes(b.id));
+    const selecionadas: BoletoSelecionado[] = (atuais ?? []).filter((b: BoletoSelecionado) => ids.includes(b.id));
     if (selecionadas.length !== ids.length) return NextResponse.json({ erro: "Uma ou mais parcelas não pertencem a esta cliente." }, { status: 400 });
-    if (selecionadas.some((b: BoletoSelecionado) => b.status === "pago")) return NextResponse.json({ erro: "Parcelas pagas nunca podem ser suspensas." }, { status: 400 });
+    if (selecionadas.some((b) => b.status === "pago")) return NextResponse.json({ erro: "Parcelas pagas nunca podem ser suspensas." }, { status: 400 });
     const agora = new Date().toISOString();
     const { error: erroSuspensao } = await service.from("boletos").update({ suspensa: true, suspensa_em: agora, suspensa_por: user.email ?? "admin" }).in("id", ids).eq("cliente_id", params.id).neq("status", "pago");
     if (erroSuspensao) return NextResponse.json({ erro: erroSuspensao.message }, { status: 500 });
