@@ -17,12 +17,14 @@ interface JourneyTrackerProps {
 
 export function JourneyTracker({ percentualPagamento, percentualAtingido, statusRevisao, agendada, previsaoLiberacaoFinanceira = null }: JourneyTrackerProps) {
   const agendaLiberada = statusRevisao === "aprovada";
+  const revisaoPendente = statusRevisao === "pendente";
+  const revisaoRecusada = statusRevisao === "recusada";
   const etapaAtual = useMemo(() => {
     if (!percentualAtingido) return "pagamento";
-    if (!agendaLiberada || statusRevisao === "pendente" || statusRevisao === "recusada") return "agendar";
+    if (!agendaLiberada) return "agendar";
     if (!agendada) return "agendar";
     return "cirurgia";
-  }, [percentualAtingido, agendaLiberada, statusRevisao, agendada]);
+  }, [percentualAtingido, agendaLiberada, agendada]);
   const [etapaAberta, setEtapaAberta] = useState("pagamento");
   const steps: JourneyStep[] = [
     { id: "contratar", label: "Contratar", icon: FileSignature, status: "done" },
@@ -31,13 +33,12 @@ export function JourneyTracker({ percentualPagamento, percentualAtingido, status
     { id: "cirurgia", label: "Cirurgia", icon: Sparkles, status: etapaAtual === "cirurgia" ? "current" : "upcoming" },
   ];
   const etapaVisivel = steps.some((s) => s.id === etapaAberta) ? etapaAberta : etapaAtual;
-  const doneCount = steps.filter((s) => s.status === "done").length;
   const totalSegmentos = steps.length - 1;
   const dataFormatadaLiberacao = previsaoLiberacaoFinanceira ? formatarDataLonga(previsaoLiberacaoFinanceira) : null;
   const textos: Record<string, string> = {
     contratar: "Seu contrato foi iniciado. Agora, cada pagamento confirmado faz parte da sua evolução.",
     pagamento: percentualAtingido ? "Parabéns! Você atingiu o percentual de pagamento necessário." : "Cada pagamento confirmado te aproxima do percentual necessário para liberar sua agenda. Envie seus comprovantes na aba \"Meus Boletos\".",
-    agendar: agendaLiberada ? "Sua agenda está liberada para escolher a assinatura dos termos cirúrgicos." : statusRevisao === "pendente" ? "Estamos realizando o levantamento financeiro dos seus pagamentos. Sua agenda será liberada após a confirmação." : statusRevisao === "recusada" ? "Encontramos uma divergência no levantamento financeiro. Fale com a nossa equipe para regularizar." : "Esta etapa será liberada quando seu percentual de pagamento for atingido.",
+    agendar: agendaLiberada ? "Sua agenda está liberada para escolher a assinatura dos termos cirúrgicos." : revisaoPendente ? "Estamos realizando o levantamento financeiro dos seus pagamentos. Sua agenda será liberada após a confirmação." : revisaoRecusada ? "Encontramos uma divergência no levantamento financeiro. Fale com a nossa equipe para regularizar." : "Esta etapa será liberada quando seu percentual de pagamento for atingido.",
     cirurgia: agendada ? dataFormatadaLiberacao ? `Você poderá agendar sua cirurgia a partir da data prevista para liberação financeira: ${dataFormatadaLiberacao}.` : "Sua assinatura está confirmada. A data prevista para liberação financeira será informada pela equipe." : "A cirurgia é a próxima conquista depois da assinatura dos termos.",
   };
   const indiceAtual = Math.max(0, steps.findIndex((s) => s.id === etapaAtual));
