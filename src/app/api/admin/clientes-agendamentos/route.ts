@@ -27,8 +27,7 @@ export async function GET(_req: NextRequest) {
       "id, cliente_id, valor_contrato, previsao_liberacao_financeira, clientes(id, nome_completo, status_cirurgia, status_financeiro, custeio_confirmado_em, financeiro_saldo_restante), solicitacoes_liberacao_financeira(forma_custeio, saldo_restante, status, updated_at)"
     )
     .eq("status", "confirmado")
-    .not("previsao_liberacao_financeira", "is", null)
-    .order("previsao_liberacao_financeira", { ascending: true });
+    .order("previsao_liberacao_financeira", { ascending: true, nullsFirst: true });
 
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
 
