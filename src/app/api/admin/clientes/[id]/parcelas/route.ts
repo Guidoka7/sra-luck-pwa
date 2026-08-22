@@ -117,7 +117,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     if (!ids.length) return NextResponse.json({ erro: "Selecione ao menos uma parcela em aberto." }, { status: 400 });
     const { data: atuais, error } = await service.from("boletos").select("*").eq("cliente_id", params.id).order("numero_parcela", { ascending: true });
     if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
-    const selecionadas = (atuais ?? []).filter((b) => ids.includes(b.id));
+    type BoletoSelecionado = { id: string; status: string; numero_parcela: number };
+    const selecionadas = (atuais ?? []).filter((b: BoletoSelecionado) => ids.includes(b.id));
     if (selecionadas.length !== ids.length) return NextResponse.json({ erro: "Uma ou mais parcelas não pertencem a esta cliente." }, { status: 400 });
     if (selecionadas.some((b) => b.status === "pago")) return NextResponse.json({ erro: "Parcelas pagas nunca podem ser suspensas." }, { status: 400 });
     const agora = new Date().toISOString();
