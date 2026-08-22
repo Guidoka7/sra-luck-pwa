@@ -6,14 +6,18 @@ async function autenticar() { const authClient = createServerSupabaseClient(); c
 function data90Dias(iso: string | null | undefined) { if (!iso) return null; const [ano, mes, dia] = iso.split("-").map(Number); if (!ano || !mes || !dia) return null; const d = new Date(ano, mes - 1, dia); d.setDate(d.getDate() + 90); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 async function avisarCliente(clienteId: string, mensagem: string) { try { const supabase = createServiceSupabaseClient(); await supabase.channel(`notificacoes-cliente:${clienteId}`).send({ type: "broadcast", event: "nova_notificacao", payload: { mensagem, tipo: "financeiro" } }); } catch {} }
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   const user = await autenticar(); if (!user) return NextResponse.json({ erro: "Não autenticado." }, { status: 401 });
   const supabase = createServiceSupabaseClient();
   const { data, error } = await supabase.from("solicitacoes_liberacao_financeira")
-    .select("id, cliente_id, agendamento_id, forma_custeio, saldo_restante, taxa_cartao, total_com_taxa, status, observacao, created_at, updated_at, clientes(nome_completo, cpf, quantidade_parcelas), agendamentos(datas(data))")
+    .select("id, cliente_id, agendamento_id, forma_custeio, saldo_restante, taxa_cartao, total_com_taxa, status, observacao, created_at, updated_at, clientes(nome_completo, cpf, quantidade_parcelas), agendamentos(previsao_liberacao_financeira, datas(data))")
     .in("status", ["pendente", "em_analise", "aprovada"]).order("created_at", { ascending: true });
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
-  const solicitacoes = (data ?? []).map((item: any) => { const dataTermos = item.agendamentos?.datas?.data ?? null; return { ...item, data_termos: dataTermos, previsao_sugerida: data90Dias(dataTermos) }; });
+  const solicitacoes = (data ?? [])
+    .filter((item: any) => !item.agendamentos?.previsao_liberacao_financeira)
+    .map((item: any) => { const dataTermos = item.agendamentos?.datas?.data ?? null; return { ...item, data_termos: dataTermos, previsao_sugerida: data90Dias(dataTermos) }; });
   return NextResponse.json({ solicitacoes });
 }
 
