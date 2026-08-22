@@ -1,3 +1,3 @@
 "use client";
 
-export { CicloLiberacaoFinanceira as PrevisaoLiberacaoFinanceiraInteligente } from "./CicloLiberacaoFinanceira";
+export { CicloLiberacaoFinanceiraV2 as PrevisaoLiberacaoFinanceiraInteligente } from "./CicloLiberacaoFinanceiraV2";
