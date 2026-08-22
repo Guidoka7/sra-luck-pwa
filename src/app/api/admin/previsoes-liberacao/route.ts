@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 /**
  * Regra padrão do negócio: a previsão de liberação financeira é 90 dias
  * corridos após a data escolhida para assinatura dos termos.
@@ -18,10 +21,21 @@ function adicionarDias(dataIso: string | null, dias: number): string | null {
   return data.toISOString().slice(0, 10);
 }
 
+function respostaNoStore(body: unknown, status = 200) {
+  return NextResponse.json(body, {
+    status,
+    headers: {
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    },
+  });
+}
+
 export async function GET(req: NextRequest) {
   const supabase = createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ erro: "Não autenticado." }, { status: 401 });
+  if (!user) return respostaNoStore({ erro: "Não autenticado." }, 401);
 
   const { searchParams } = new URL(req.url);
   const ano = Number(searchParams.get("ano"));
@@ -43,7 +57,7 @@ export async function GET(req: NextRequest) {
     )
     .eq("status", "confirmado");
 
-  if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
+  if (error) return respostaNoStore({ erro: error.message }, 500);
 
   type Linha = {
     agendamentoId: string;
@@ -85,6 +99,9 @@ export async function GET(req: NextRequest) {
       previsaoSugerida,
     });
 
+    // Regra da interface: enquanto não houver uma previsão efetivamente
+    // cadastrada, a cliente permanece em "Aguardando previsão". Assim que
+    // o admin confirmar uma data, ela deixa esta lista automaticamente.
     if (!previsaoAtual) {
       semPrevisao.push({ ...linha, previsaoSugerida });
       continue;
@@ -110,7 +127,7 @@ export async function GET(req: NextRequest) {
     }))
     .sort((a, b) => a.data.localeCompare(b.data));
 
-  return NextResponse.json({
+  return respostaNoStore({
     meta: config?.meta_orcamento_mensal ?? 100000,
     totalPrevistoMes,
     diasComPrevisao,
