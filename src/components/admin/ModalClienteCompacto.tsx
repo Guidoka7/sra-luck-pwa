@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, History, IdCard, Receipt, Save, Trash2, UserRound, WalletCards, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronUp, CheckCircle2, FileText, History, IdCard, Receipt, Save, Trash2, UploadCloud, UserRound, WalletCards, X } from "lucide-react";
 import { toast } from "sonner";
 import { Portal } from "@/components/ui/Portal";
 import { Button } from "@/components/ui/Button";
@@ -11,187 +11,79 @@ import { desmascararMoeda, formatarMoeda, mascararMoedaInput } from "@/lib/utils
 import type { Boleto, Cliente, LogAlteracao, QuantidadeParcelas } from "@/types/database";
 import { QUANTIDADE_PARCELAS_OPCOES, STATUS_BOLETO_LABEL, TAXA_ADMINISTRATIVA_PADRAO } from "@/types/database";
 
-function Section({ title, icon: Icon, children }: { title: string; icon: React.ComponentType<{ className?: string }>; children: React.ReactNode }) {
-  return <section className="rounded-2xl border border-rose/10 bg-white/[0.035] p-3.5 sm:p-4"><div className="mb-3 flex items-center gap-2"><Icon className="h-3.5 w-3.5 text-rose" /><h3 className="text-[0.66rem] font-semibold uppercase tracking-[0.16em] text-rose">{title}</h3></div>{children}</section>;
-}
-
+function Section({ title, icon: Icon, children }: { title: string; icon: React.ComponentType<{ className?: string }>; children: React.ReactNode }) { return <section className="rounded-2xl border border-rose/10 bg-white/[0.035] p-3.5 sm:p-4"><div className="mb-3 flex items-center gap-2"><Icon className="h-3.5 w-3.5 text-rose" /><h3 className="text-[0.66rem] font-semibold uppercase tracking-[0.16em] text-rose">{title}</h3></div>{children}</section>; }
 function moeda(v: number) { return v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
 export function ModalClienteCompacto({ cliente, onClose, onSalvo }: { cliente: Cliente | null; onClose: () => void; onSalvo: () => void }) {
   const editando = Boolean(cliente);
-  const [nome, setNome] = useState(cliente?.nome_completo ?? "");
-  const [cpf, setCpf] = useState(cliente ? formatarCpf(cliente.cpf) : "");
-  const [nascimento, setNascimento] = useState(cliente?.data_nascimento ?? "");
-  const [telefone, setTelefone] = useState(cliente?.telefone ?? "");
-  const [email, setEmail] = useState(cliente?.email ?? "");
-  const [procedimento, setProcedimento] = useState(cliente?.procedimento ?? "");
-  const [carta, setCarta] = useState(cliente ? moeda(cliente.valor_contrato) : "");
-  const [boletos, setBoletos] = useState<Boleto[]>([]);
-  const [carregandoBoletos, setCarregandoBoletos] = useState(Boolean(cliente));
-  const [quantidade, setQuantidade] = useState<QuantidadeParcelas>((cliente?.quantidade_parcelas ?? 12) as QuantidadeParcelas);
-  const [taxa, setTaxa] = useState(cliente?.taxa_administrativa_percentual != null ? String(cliente.taxa_administrativa_percentual).replace(".", ",") : String(TAXA_ADMINISTRATIVA_PADRAO[(cliente?.quantidade_parcelas ?? 12) as QuantidadeParcelas]).replace(".", ","));
-  const [vencimento, setVencimento] = useState("");
-  const [salvando, setSalvando] = useState(false);
-  const [gerando, setGerando] = useState(false);
-  const [ajustando, setAjustando] = useState(false);
-  const [editandoParcela, setEditandoParcela] = useState<string | null>(null);
-  const [mostrarTodas, setMostrarTodas] = useState(false);
-  const [historico, setHistorico] = useState<LogAlteracao[]>([]);
-  const [mostrarHistorico, setMostrarHistorico] = useState(false);
-  const [confirmarExclusao, setConfirmarExclusao] = useState(false);
-  const [ativo, setAtivo] = useState(cliente?.ativo ?? true);
-  const [observacoes, setObservacoes] = useState(cliente?.observacoes_internas ?? "");
+  const [nome, setNome] = useState(cliente?.nome_completo ?? ""); const [cpf, setCpf] = useState(cliente ? formatarCpf(cliente.cpf) : ""); const [nascimento, setNascimento] = useState(cliente?.data_nascimento ?? ""); const [telefone, setTelefone] = useState(cliente?.telefone ?? ""); const [email, setEmail] = useState(cliente?.email ?? ""); const [procedimento, setProcedimento] = useState(cliente?.procedimento ?? ""); const [carta, setCarta] = useState(cliente ? moeda(cliente.valor_contrato) : "");
+  const [boletos, setBoletos] = useState<Boleto[]>([]); const [carregandoBoletos, setCarregandoBoletos] = useState(Boolean(cliente)); const [quantidade, setQuantidade] = useState<QuantidadeParcelas>((cliente?.quantidade_parcelas ?? 12) as QuantidadeParcelas); const [taxa, setTaxa] = useState(cliente?.taxa_administrativa_percentual != null ? String(cliente.taxa_administrativa_percentual).replace(".", ",") : String(TAXA_ADMINISTRATIVA_PADRAO[(cliente?.quantidade_parcelas ?? 12) as QuantidadeParcelas]).replace(".", ","));
+  const [vencimento, setVencimento] = useState(""); const [salvando, setSalvando] = useState(false); const [gerando, setGerando] = useState(false); const [ajustando, setAjustando] = useState(false); const [enviandoCarne, setEnviandoCarne] = useState(false); const [editandoParcela, setEditandoParcela] = useState<string | null>(null); const [mostrarTodas, setMostrarTodas] = useState(false); const [historico, setHistorico] = useState<LogAlteracao[]>([]); const [mostrarHistorico, setMostrarHistorico] = useState(false); const [confirmarExclusao, setConfirmarExclusao] = useState(false); const [ativo, setAtivo] = useState(cliente?.ativo ?? true); const [observacoes, setObservacoes] = useState(cliente?.observacoes_internas ?? "");
+  const inputCarneRef = useRef<HTMLInputElement>(null);
 
-  const cartaNumero = Number(desmascararMoeda(carta)) || 0;
-  const taxaNumero = Number(taxa.replace(",", ".")) || 0;
-  const custoTotal = cartaNumero * (1 + taxaNumero / 100);
-  const parcelaSugerida = quantidade ? custoTotal / quantidade : 0;
-  const pagas = boletos.filter((b) => b.status === "pago").length;
-  const abertas = boletos.filter((b) => b.status !== "pago").length;
-  const visiveis = mostrarTodas ? boletos : boletos.slice(0, 8);
+  const cartaNumero = Number(desmascararMoeda(carta)) || 0; const taxaNumero = Number(taxa.replace(",", ".")) || 0; const custoTotal = cartaNumero * (1 + taxaNumero / 100); const parcelaSugerida = quantidade ? custoTotal / quantidade : 0; const pagas = boletos.filter((b) => b.status === "pago").length; const abertas = boletos.filter((b) => b.status !== "pago").length; const visiveis = mostrarTodas ? boletos : boletos.slice(0, 8); const carneAnexado = boletos.some((b) => Boolean(b.boleto_url));
 
   async function carregarBoletos() {
-    if (!cliente) return;
-    setCarregandoBoletos(true);
-    try {
-      const res = await fetch(`/api/admin/clientes/${cliente.id}/boletos`, { cache: "no-store" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.erro ?? "Não foi possível carregar as parcelas.");
-      setBoletos(data.boletos ?? []);
-      if (data.boletos?.[0]?.total_parcelas) setQuantidade(Number(data.boletos[0].total_parcelas) as QuantidadeParcelas);
-    } catch (e) { toast.error(e instanceof Error ? e.message : "Não foi possível carregar as parcelas."); }
-    finally { setCarregandoBoletos(false); }
+    if (!cliente) return; setCarregandoBoletos(true);
+    try { const res = await fetch(`/api/admin/clientes/${cliente.id}/boletos`, { cache: "no-store" }); const data = await res.json(); if (!res.ok) throw new Error(data.erro ?? "Não foi possível carregar as parcelas."); setBoletos(data.boletos ?? []); if (data.boletos?.[0]?.total_parcelas) setQuantidade(Number(data.boletos[0].total_parcelas) as QuantidadeParcelas); }
+    catch (e) { toast.error(e instanceof Error ? e.message : "Não foi possível carregar as parcelas."); } finally { setCarregandoBoletos(false); }
   }
   useEffect(() => { carregarBoletos(); }, [cliente?.id]);
 
   async function salvarPerfil(e: React.FormEvent) {
-    e.preventDefault();
-    if (!nome || !nascimento || cartaNumero <= 0) { toast.error("Preencha nome, nascimento e carta de crédito."); return; }
-    setSalvando(true);
-    try {
-      const res = await fetch(editando ? `/api/admin/clientes/${cliente!.id}` : "/api/admin/clientes", {
-        method: editando ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nomeCompleto: nome, cpf, dataNascimento: nascimento, telefone, email, procedimento, valorContrato: cartaNumero, taxaAdministrativaPercentual: taxaNumero, ativo, observacoes, recalcularBoletosAbertos: true }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.erro ?? "Não foi possível salvar.");
-      toast.success(editando ? "Perfil atualizado." : "Cliente cadastrada.");
-      onSalvo();
-    } catch (e) { toast.error(e instanceof Error ? e.message : "Não foi possível salvar."); }
-    finally { setSalvando(false); }
+    e.preventDefault(); if (!nome || !nascimento || cartaNumero <= 0) { toast.error("Preencha nome, nascimento e carta de crédito."); return; } setSalvando(true);
+    try { const res = await fetch(editando ? `/api/admin/clientes/${cliente!.id}` : "/api/admin/clientes", { method: editando ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nomeCompleto: nome, cpf, dataNascimento: nascimento, telefone, email, procedimento, valorContrato: cartaNumero, taxaAdministrativaPercentual: taxaNumero, ativo, observacoes, recalcularBoletosAbertos: true }) }); const data = await res.json(); if (!res.ok) throw new Error(data.erro ?? "Não foi possível salvar."); toast.success(editando ? "Perfil atualizado." : "Cliente cadastrada."); onSalvo(); }
+    catch (e) { toast.error(e instanceof Error ? e.message : "Não foi possível salvar."); } finally { setSalvando(false); }
   }
 
   async function gerarBoletos() {
-    if (!cliente) return;
-    setGerando(true);
-    try {
-      const res = await fetch(`/api/admin/clientes/${cliente.id}/boletos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantidadeParcelas: quantidade, taxaPercentual: taxaNumero, primeiroVencimento: vencimento || undefined }) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.erro ?? "Não foi possível gerar as parcelas.");
-      setBoletos(data.boletos ?? []);
-      toast.success("Parcelas geradas com os valores sugeridos.");
-    } catch (e) { toast.error(e instanceof Error ? e.message : "Erro ao gerar parcelas."); }
-    finally { setGerando(false); }
+    if (!cliente) return; setGerando(true);
+    try { const res = await fetch(`/api/admin/clientes/${cliente.id}/boletos`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantidadeParcelas: quantidade, taxaPercentual: taxaNumero, primeiroVencimento: vencimento || undefined }) }); const data = await res.json(); if (!res.ok) throw new Error(data.erro ?? "Não foi possível gerar as parcelas."); setBoletos(data.boletos ?? []); toast.success("Parcelas geradas com os valores sugeridos."); }
+    catch (e) { toast.error(e instanceof Error ? e.message : "Erro ao gerar parcelas."); } finally { setGerando(false); }
   }
-
   async function ajustarParcelamento() {
-    if (!cliente) return;
-    setAjustando(true);
-    try {
-      const res = await fetch(`/api/admin/clientes/${cliente.id}/boletos`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantidadeParcelas: quantidade, taxaPercentual: taxaNumero, recalcularAbertas: true }) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.erro ?? "Não foi possível ajustar o parcelamento.");
-      setBoletos(data.boletos ?? []);
-      toast.success("Parcelamento atualizado. A cliente verá a alteração automaticamente.");
-    } catch (e) { toast.error(e instanceof Error ? e.message : "Erro ao ajustar parcelas."); }
-    finally { setAjustando(false); }
+    if (!cliente) return; setAjustando(true);
+    try { const res = await fetch(`/api/admin/clientes/${cliente.id}/boletos`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantidadeParcelas: quantidade, taxaPercentual: taxaNumero, recalcularAbertas: true }) }); const data = await res.json(); if (!res.ok) throw new Error(data.erro ?? "Não foi possível ajustar o parcelamento."); setBoletos(data.boletos ?? []); toast.success("Parcelamento atualizado. A cliente verá a alteração automaticamente."); }
+    catch (e) { toast.error(e instanceof Error ? e.message : "Erro ao ajustar parcelas."); } finally { setAjustando(false); }
   }
-
+  async function anexarCarne(file: File | null) {
+    if (!cliente || !file) return;
+    if (file.type !== "application/pdf") { toast.error("O carnê precisa ser um PDF."); return; }
+    if (file.size > 20 * 1024 * 1024) { toast.error("O carnê pode ter no máximo 20MB."); return; }
+    setEnviandoCarne(true);
+    try {
+      const form = new FormData(); form.append("arquivo", file);
+      const res = await fetch(`/api/admin/clientes/${cliente.id}/boletos/carne`, { method: "POST", body: form });
+      const data = await res.json(); if (!res.ok) throw new Error(data.erro ?? "Não foi possível anexar o carnê.");
+      toast.success(`Carnê anexado: ${data.parcelas_atualizadas ?? boletos.length} parcela(s) atualizada(s).`); await carregarBoletos();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Erro ao anexar o carnê."); } finally { setEnviandoCarne(false); if (inputCarneRef.current) inputCarneRef.current.value = ""; }
+  }
   async function editarParcela(boleto: Boleto) {
-    const valor = window.prompt(`Novo valor da parcela ${boleto.numero_parcela}/${boleto.total_parcelas} (R$):`, moeda(boleto.valor));
-    if (valor === null) return;
-    const numero = Number(valor.replace(/\./g, "").replace(",", "."));
-    if (!Number.isFinite(numero) || numero <= 0) { toast.error("Valor inválido."); return; }
-    setEditandoParcela(boleto.id);
-    try {
-      const res = await fetch(`/api/admin/boletos/${boleto.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ valor: numero }) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.erro ?? "Não foi possível alterar a parcela.");
-      setBoletos((atual) => atual.map((b) => b.id === boleto.id ? { ...b, valor: Number(data.boleto.valor) } : b));
-      toast.success("Valor da parcela atualizado.");
-    } catch (e) { toast.error(e instanceof Error ? e.message : "Erro ao atualizar parcela."); }
-    finally { setEditandoParcela(null); }
+    const valor = window.prompt(`Novo valor da parcela ${boleto.numero_parcela}/${boleto.total_parcelas} (R$):`, moeda(boleto.valor)); if (valor === null) return;
+    const numero = Number(valor.replace(/\./g, "").replace(",", ".")); if (!Number.isFinite(numero) || numero <= 0) { toast.error("Valor inválido."); return; } setEditandoParcela(boleto.id);
+    try { const res = await fetch(`/api/admin/boletos/${boleto.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ valor: numero }) }); const data = await res.json(); if (!res.ok) throw new Error(data.erro ?? "Não foi possível alterar a parcela."); setBoletos((atual) => atual.map((b) => b.id === boleto.id ? { ...b, valor: Number(data.boleto.valor) } : b)); toast.success("Valor da parcela atualizado."); }
+    catch (e) { toast.error(e instanceof Error ? e.message : "Erro ao atualizar parcela."); } finally { setEditandoParcela(null); }
   }
+  async function carregarHistorico() { if (!cliente) return; const res = await fetch(`/api/admin/clientes/${cliente.id}`); const data = await res.json(); setHistorico(data.historico ?? []); }
+  async function excluir() { if (!cliente) return; const res = await fetch(`/api/admin/clientes/${cliente.id}`, { method: "DELETE" }); if (!res.ok) { toast.error("Não foi possível remover a cliente."); return; } toast.success("Cliente removida."); onSalvo(); }
 
-  async function carregarHistorico() {
-    if (!cliente) return;
-    const res = await fetch(`/api/admin/clientes/${cliente.id}`);
-    const data = await res.json();
-    setHistorico(data.historico ?? []);
-  }
-
-  async function excluir() {
-    if (!cliente) return;
-    const res = await fetch(`/api/admin/clientes/${cliente.id}`, { method: "DELETE" });
-    if (!res.ok) { toast.error("Não foi possível remover a cliente."); return; }
-    toast.success("Cliente removida."); onSalvo();
-  }
-
-  return <Portal><div className="fixed inset-0 z-40 flex items-center justify-center bg-burgundy-dark/55 px-2 py-3 backdrop-blur-md sm:px-5 sm:py-5">
-    <div className="flex max-h-[96vh] w-full max-w-3xl flex-col overflow-hidden rounded-[26px] border border-white/10 bg-[#1b181b] text-pearl shadow-2xl animate-scaleIn">
-      <header className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3.5 sm:px-5">
-        <div className="flex min-w-0 items-center gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose/15 text-rose"><UserRound className="h-4 w-4" /></div><div className="min-w-0"><p className="truncate font-heading text-base font-semibold text-rose sm:text-lg">{nome || "Nova cliente"}</p><p className="text-[0.64rem] uppercase tracking-[0.14em] text-pearl/40">{editando ? "Perfil da cliente" : "Cadastro rápido"}</p></div></div>
-        <button onClick={onClose} className="rounded-full p-2 text-pearl/35 hover:bg-white/5 hover:text-pearl" aria-label="Fechar"><X className="h-4 w-4" /></button>
-      </header>
-
-      <div className="overflow-y-auto p-3 sm:p-4"><form onSubmit={salvarPerfil} className="space-y-3">
-        <Section title="Identificação" icon={IdCard}><div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-          <div className="sm:col-span-2"><Label htmlFor="mc-nome">Nome completo</Label><Input id="mc-nome" value={nome} onChange={(e) => setNome(e.target.value)} required /></div>
-          <div><Label htmlFor="mc-cpf">CPF</Label><Input id="mc-cpf" value={cpf} maxLength={14} disabled={editando} onChange={(e) => setCpf(formatarCpf(e.target.value))} required /></div>
-          <div><Label htmlFor="mc-nasc">Nascimento</Label><Input id="mc-nasc" type="date" value={nascimento} disabled={editando} onChange={(e) => setNascimento(e.target.value)} required /></div>
-          <div><Label htmlFor="mc-tel">Telefone</Label><Input id="mc-tel" value={telefone} onChange={(e) => setTelefone(e.target.value)} /></div>
-          <div><Label htmlFor="mc-email">E-mail</Label><Input id="mc-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-        </div></Section>
-
-        <Section title="Procedimento e crédito" icon={WalletCards}><div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-          <div><Label htmlFor="mc-proc">Procedimento</Label><Input id="mc-proc" value={procedimento} onChange={(e) => setProcedimento(e.target.value)} placeholder="Ex.: Silicone" /></div>
-          <div><Label htmlFor="mc-carta">Carta de crédito</Label><div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-pearl/35">R$</span><Input id="mc-carta" value={carta} onChange={(e) => setCarta(mascararMoedaInput(e.target.value))} className="pl-9" inputMode="decimal" required /></div></div>
-        </div></Section>
-
-        <Section title="Parcelamento" icon={Receipt}>
-          {carregandoBoletos ? <p className="py-2 text-xs text-pearl/40">Carregando parcelas…</p> : <>
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-              <div><Label htmlFor="mc-qtd">Plano</Label><Select id="mc-qtd" value={quantidade} onChange={(e) => { const novoPlano = Number(e.target.value) as QuantidadeParcelas; setQuantidade(novoPlano); setTaxa(String(TAXA_ADMINISTRATIVA_PADRAO[novoPlano]).replace(".", ",")); }}>{QUANTIDADE_PARCELAS_OPCOES.map((n) => <option key={n} value={n}>{n}x</option>)}</Select></div>
-              <div><Label htmlFor="mc-taxa">Taxa adm.</Label><Input id="mc-taxa" value={taxa} onChange={(e) => setTaxa(e.target.value)} inputMode="decimal" /></div>
-              <div className="col-span-2 rounded-xl bg-white/[0.045] px-3 py-2"><p className="text-[0.58rem] uppercase tracking-label text-pearl/35">Parcela automática</p><p className="mt-0.5 text-sm font-semibold text-rose">{formatarMoeda(parcelaSugerida)}</p><p className="text-[0.58rem] text-pearl/35">Taxa aplicada: {taxaNumero}% · Total parcelado: {formatarMoeda(custoTotal)}</p></div>
-            </div>
-            <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              {!boletos.length && editando && <Input type="date" value={vencimento} onChange={(e) => setVencimento(e.target.value)} className="w-auto" />}
-              {editando && boletos.length > 0 ? <Button type="button" size="sm" loading={ajustando} onClick={ajustarParcelamento}><WalletCards className="h-3.5 w-3.5" /> Aplicar às abertas</Button> : editando ? <Button type="button" size="sm" loading={gerando} onClick={gerarBoletos}>Gerar parcelas</Button> : null}
-              <span className="text-[0.62rem] text-pearl/35">A carta preenche a sugestão automaticamente; a taxa padrão acompanha o plano escolhido.</span>
-            </div>
-            {boletos.length > 0 && <>
-              <div className="mt-3 flex items-center justify-between rounded-xl bg-white/[0.035] px-3 py-2 text-[0.68rem]"><span className="text-pearl/45">{pagas} pagas · {abertas} em aberto</span><span className="font-semibold text-rose">{Math.round((pagas / boletos.length) * 1000) / 10}%</span></div>
-              <div className="mt-2 overflow-hidden rounded-xl border border-white/8">{visiveis.map((b) => <div key={b.id} className="flex items-center gap-2 border-b border-white/6 px-2.5 py-2 last:border-b-0">
-                <span className="w-12 shrink-0 text-[0.66rem] font-semibold text-pearl/60">{b.numero_parcela}/{b.total_parcelas}</span>
-                <span className="min-w-0 flex-1 text-[0.62rem] text-pearl/35">{b.data_vencimento ? new Date(`${b.data_vencimento}T00:00:00`).toLocaleDateString("pt-BR") : "Sem data"}</span>
-                <span className="text-[0.68rem] font-semibold text-pearl">R$ {moeda(b.valor)}</span>
-                <span className={`hidden rounded-full px-2 py-0.5 text-[0.54rem] sm:inline ${b.status === "pago" ? "bg-success/10 text-success" : b.status === "pendente_confirmacao" ? "bg-gold/10 text-gold" : "bg-white/5 text-pearl/35"}`}>{STATUS_BOLETO_LABEL[b.status]}</span>
-                <button type="button" onClick={() => editarParcela(b)} disabled={b.status === "pago" || editandoParcela === b.id} className="rounded-lg px-2 py-1 text-[0.58rem] text-rose hover:bg-rose/10 disabled:opacity-30">{editandoParcela === b.id ? "…" : "Editar"}</button>
-              </div>)}</div>
-              {boletos.length > 8 && <button type="button" onClick={() => setMostrarTodas((v) => !v)} className="mt-2 flex items-center gap-1 text-[0.62rem] text-rose">{mostrarTodas ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}{mostrarTodas ? "Mostrar menos" : `Ver todas as ${boletos.length} parcelas`}</button>}
-            </>}
-          </>}
-        </Section>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]"><Section title="Observações internas" icon={History}><Textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Observações sobre a cliente…" /></Section><div className="flex items-center gap-2 rounded-2xl border border-white/8 bg-white/[0.025] px-3 py-2 sm:self-end"><input id="mc-ativo" type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} className="h-3.5 w-3.5" /><Label htmlFor="mc-ativo" className="mb-0 whitespace-nowrap text-xs">Cliente ativa</Label></div></div>
-
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/8 pt-3"><div className="flex items-center gap-1.5">{editando && <button type="button" onClick={() => { setMostrarHistorico((v) => !v); if (!mostrarHistorico) carregarHistorico(); }} className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[0.62rem] text-pearl/40 hover:bg-white/5 hover:text-pearl"><History className="h-3 w-3" /> Histórico</button>}{editando && <button type="button" onClick={() => setConfirmarExclusao(true)} className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[0.62rem] text-alert/70 hover:bg-alert/10"><Trash2 className="h-3 w-3" /> Remover</button>}</div><div className="flex gap-2"><Button type="button" variant="ghost" onClick={onClose}>Cancelar</Button><Button type="submit" loading={salvando}><Save className="h-3.5 w-3.5" /> {editando ? "Salvar perfil" : "Cadastrar cliente"}</Button></div></div>
-
-        {mostrarHistorico && <div className="rounded-xl border border-white/8 bg-white/[0.025] p-3 text-[0.62rem] text-pearl/45">{historico.length === 0 ? "Nenhuma alteração registrada." : historico.slice(0, 8).map((log) => <div key={log.id} className="border-b border-white/6 py-1.5 last:border-0"><span className="text-rose/70">{new Date(log.created_at).toLocaleString("pt-BR")}</span> · {log.acao.replaceAll("_", " ")}</div>)}</div>}
-        {confirmarExclusao && <div className="rounded-xl border border-alert/20 bg-alert/5 p-3 text-xs text-pearl/65"><p>Remover <strong>{nome}</strong>? Essa ação não pode ser desfeita.</p><div className="mt-2 flex gap-2"><Button type="button" variant="danger" onClick={excluir}>Sim, remover</Button><Button type="button" variant="ghost" onClick={() => setConfirmarExclusao(false)}>Cancelar</Button></div></div>}
-      </form></div>
-    </div>
-  </div></Portal>;
+  return <Portal><div className="fixed inset-0 z-40 flex items-center justify-center bg-burgundy-dark/55 px-2 py-3 backdrop-blur-md sm:px-5 sm:py-5"><div className="flex max-h-[96vh] w-full max-w-3xl flex-col overflow-hidden rounded-[26px] border border-white/10 bg-[#1b181b] text-pearl shadow-2xl animate-scaleIn">
+    <header className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3.5 sm:px-5"><div className="flex min-w-0 items-center gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose/15 text-rose"><UserRound className="h-4 w-4" /></div><div className="min-w-0"><p className="truncate font-heading text-base font-semibold text-rose sm:text-lg">{nome || "Nova cliente"}</p><p className="text-[0.64rem] uppercase tracking-[0.14em] text-pearl/40">{editando ? "Perfil da cliente" : "Cadastro rápido"}</p></div></div><button onClick={onClose} className="rounded-full p-2 text-pearl/35 hover:bg-white/5 hover:text-pearl" aria-label="Fechar"><X className="h-4 w-4" /></button></header>
+    <div className="overflow-y-auto p-3 sm:p-4"><form onSubmit={salvarPerfil} className="space-y-3">
+      <Section title="Identificação" icon={IdCard}><div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2"><div className="sm:col-span-2"><Label htmlFor="mc-nome">Nome completo</Label><Input id="mc-nome" value={nome} onChange={(e) => setNome(e.target.value)} required /></div><div><Label htmlFor="mc-cpf">CPF</Label><Input id="mc-cpf" value={cpf} maxLength={14} disabled={editando} onChange={(e) => setCpf(formatarCpf(e.target.value))} required /></div><div><Label htmlFor="mc-nasc">Nascimento</Label><Input id="mc-nasc" type="date" value={nascimento} disabled={editando} onChange={(e) => setNascimento(e.target.value)} required /></div><div><Label htmlFor="mc-tel">Telefone</Label><Input id="mc-tel" value={telefone} onChange={(e) => setTelefone(e.target.value)} /></div><div><Label htmlFor="mc-email">E-mail</Label><Input id="mc-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div></div></Section>
+      <Section title="Procedimento e crédito" icon={WalletCards}><div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2"><div><Label htmlFor="mc-proc">Procedimento</Label><Input id="mc-proc" value={procedimento} onChange={(e) => setProcedimento(e.target.value)} placeholder="Ex.: Silicone" /></div><div><Label htmlFor="mc-carta">Carta de crédito</Label><div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-pearl/35">R$</span><Input id="mc-carta" value={carta} onChange={(e) => setCarta(mascararMoedaInput(e.target.value))} className="pl-9" inputMode="decimal" required /></div></div></div></Section>
+      <Section title="Parcelamento" icon={Receipt}>
+        {carregandoBoletos ? <p className="py-2 text-xs text-pearl/40">Carregando parcelas…</p> : <>
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4"><div><Label htmlFor="mc-qtd">Plano</Label><Select id="mc-qtd" value={quantidade} onChange={(e) => { const novoPlano = Number(e.target.value) as QuantidadeParcelas; setQuantidade(novoPlano); setTaxa(String(TAXA_ADMINISTRATIVA_PADRAO[novoPlano]).replace(".", ",")); }}>{QUANTIDADE_PARCELAS_OPCOES.map((n) => <option key={n} value={n}>{n}x</option>)}</Select></div><div><Label htmlFor="mc-taxa">Taxa adm.</Label><Input id="mc-taxa" value={taxa} onChange={(e) => setTaxa(e.target.value)} inputMode="decimal" /></div><div className="col-span-2 rounded-xl bg-white/[0.045] px-3 py-2"><p className="text-[0.58rem] uppercase tracking-label text-pearl/35">Parcela automática</p><p className="mt-0.5 text-sm font-semibold text-rose">{formatarMoeda(parcelaSugerida)}</p><p className="text-[0.58rem] text-pearl/35">Taxa aplicada: {taxaNumero}% · Total parcelado: {formatarMoeda(custoTotal)}</p></div></div>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">{!boletos.length && editando && <Input type="date" value={vencimento} onChange={(e) => setVencimento(e.target.value)} className="w-auto" />}{editando && boletos.length > 0 ? <Button type="button" size="sm" loading={ajustando} onClick={ajustarParcelamento}><WalletCards className="h-3.5 w-3.5" /> Aplicar às abertas</Button> : editando ? <Button type="button" size="sm" loading={gerando} onClick={gerarBoletos}>Gerar parcelas</Button> : null}<span className="text-[0.62rem] text-pearl/35">A carta preenche a sugestão automaticamente; a taxa acompanha o plano.</span></div>
+          {editando && <div className="mt-3 rounded-xl border border-rose/10 bg-rose/[0.025] p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[0.64rem] font-semibold uppercase tracking-[0.14em] text-rose">Carnê da cliente</p><p className="mt-0.5 text-[0.58rem] text-pearl/35">Anexe o PDF completo do banco. Cada página será vinculada à parcela correspondente.</p></div><input ref={inputCarneRef} type="file" accept="application/pdf" className="hidden" onChange={(e) => anexarCarne(e.target.files?.[0] ?? null)} /><Button type="button" size="sm" loading={enviandoCarne} onClick={() => inputCarneRef.current?.click()}><UploadCloud className="h-3.5 w-3.5" /> {carneAnexado ? "Substituir carnê" : "Anexar carnê PDF"}</Button></div><div className="mt-2 flex items-center gap-2 text-[0.58rem]">{carneAnexado ? <><CheckCircle2 className="h-3.5 w-3.5 text-success" /><span className="text-success">Carnê anexado e vinculado às parcelas.</span></> : <><FileText className="h-3.5 w-3.5 text-pearl/30" /><span className="text-pearl/35">PDF até 20MB · 1 página por parcela, na mesma ordem do carnê.</span></>}</div></div>}
+          {boletos.length > 0 && <><div className="mt-3 flex items-center justify-between rounded-xl bg-white/[0.035] px-3 py-2 text-[0.68rem]"><span className="text-pearl/45">{pagas} pagas · {abertas} em aberto</span><span className="font-semibold text-rose">{Math.round((pagas / boletos.length) * 1000) / 10}%</span></div><div className="mt-2 overflow-hidden rounded-xl border border-white/8">{visiveis.map((b) => <div key={b.id} className="flex items-center gap-2 border-b border-white/6 px-2.5 py-2 last:border-b-0"><span className="w-12 shrink-0 text-[0.66rem] font-semibold text-pearl/60">{b.numero_parcela}/{b.total_parcelas}</span><span className="min-w-0 flex-1 text-[0.62rem] text-pearl/35">{b.data_vencimento ? new Date(`${b.data_vencimento}T00:00:00`).toLocaleDateString("pt-BR") : "Sem data"}</span><span className="text-[0.68rem] font-semibold text-pearl">R$ {moeda(b.valor)}</span><span className={`hidden rounded-full px-2 py-0.5 text-[0.54rem] sm:inline ${b.status === "pago" ? "bg-success/10 text-success" : b.status === "pendente_confirmacao" ? "bg-gold/10 text-gold" : "bg-white/5 text-pearl/35"}`}>{STATUS_BOLETO_LABEL[b.status]}</span><button type="button" onClick={() => editarParcela(b)} disabled={b.status === "pago" || editandoParcela === b.id} className="rounded-lg px-2 py-1 text-[0.58rem] text-rose hover:bg-rose/10 disabled:opacity-30">{editandoParcela === b.id ? "…" : "Editar"}</button></div>)}</div>{boletos.length > 8 && <button type="button" onClick={() => setMostrarTodas((v) => !v)} className="mt-2 flex items-center gap-1 text-[0.62rem] text-rose">{mostrarTodas ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}{mostrarTodas ? "Mostrar menos" : `Ver todas as ${boletos.length} parcelas`}</button>}</>}
+        </>}
+      </Section>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]"><Section title="Observações internas" icon={History}><Textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Observações sobre a cliente…" /></Section><div className="flex items-center gap-2 rounded-2xl border border-white/8 bg-white/[0.025] px-3 py-2 sm:self-end"><input id="mc-ativo" type="checkbox" checked={ativo} onChange={(e) => setAtivo(e.target.checked)} className="h-3.5 w-3.5" /><Label htmlFor="mc-ativo" className="mb-0 whitespace-nowrap text-xs">Cliente ativa</Label></div></div>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/8 pt-3"><div className="flex items-center gap-1.5">{editando && <button type="button" onClick={() => { setMostrarHistorico((v) => !v); if (!mostrarHistorico) carregarHistorico(); }} className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[0.62rem] text-pearl/40 hover:bg-white/5 hover:text-pearl"><History className="h-3 w-3" /> Histórico</button>}{editando && <button type="button" onClick={() => setConfirmarExclusao(true)} className="flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[0.62rem] text-alert/70 hover:bg-alert/10"><Trash2 className="h-3 w-3" /> Remover</button>}</div><div className="flex gap-2"><Button type="button" variant="ghost" onClick={onClose}>Cancelar</Button><Button type="submit" loading={salvando}><Save className="h-3.5 w-3.5" /> {editando ? "Salvar perfil" : "Cadastrar cliente"}</Button></div></div>
+      {mostrarHistorico && <div className="rounded-xl border border-white/8 bg-white/[0.025] p-3 text-[0.62rem] text-pearl/45">{historico.length === 0 ? "Nenhuma alteração registrada." : historico.slice(0, 8).map((log) => <div key={log.id} className="border-b border-white/6 py-1.5 last:border-0"><span className="text-rose/70">{new Date(log.created_at).toLocaleString("pt-BR")}</span> · {log.acao.replaceAll("_", " ")}</div>)}</div>}
+      {confirmarExclusao && <div className="rounded-xl border border-alert/20 bg-alert/5 p-3 text-xs text-pearl/65"><p>Remover <strong>{nome}</strong>? Essa ação não pode ser desfeita.</p><div className="mt-2 flex gap-2"><Button type="button" variant="danger" onClick={excluir}>Sim, remover</Button><Button type="button" variant="ghost" onClick={() => setConfirmarExclusao(false)}>Cancelar</Button></div></div>}
+    </form></div>
+  </div></div></Portal>;
 }
