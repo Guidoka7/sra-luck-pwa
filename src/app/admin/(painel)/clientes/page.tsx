@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Search, UserRound, LayoutGrid, List, CheckCircle2 } from "lucide-react";
-import { toast } from "sonner";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -40,13 +39,10 @@ export default function ClientesPage() {
   async function carregar(force = false) {
     const url = "/api/admin/clientes";
     const cached = !force ? getInstantCache<{ clientes?: Cliente[] }>(url) : null;
-    if (cached) { setClientes(cached.clientes ?? []); setCarregando(false); }
-    else setCarregando(true);
+    if (cached) { setClientes(cached.clientes ?? []); setCarregando(false); } else setCarregando(true);
     setErro(null);
     try {
-      const data = force
-        ? await refreshInstant<{ clientes?: Cliente[] }>(url)
-        : await fetchInstant<{ clientes?: Cliente[] }>(url);
+      const data = force ? await refreshInstant<{ clientes?: Cliente[] }>(url) : await fetchInstant<{ clientes?: Cliente[] }>(url);
       setClientes(data.clientes ?? []);
     } catch (e: any) {
       if (!cached) { setErro(e?.message ?? "Falha ao carregar clientes."); setClientes([]); }
@@ -54,45 +50,13 @@ export default function ClientesPage() {
   }
 
   useEffect(() => { carregar(); }, []);
-
-  const filtradas = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-    if (!termo) return clientes;
-    return clientes.filter((c) => c.nome_completo.toLowerCase().includes(termo) || c.cpf.includes(termo.replace(/\D/g, "")) || (c.telefone ?? "").includes(termo));
-  }, [clientes, busca]);
-
+  const filtradas = useMemo(() => { const termo = busca.trim().toLowerCase(); if (!termo) return clientes; return clientes.filter((c) => c.nome_completo.toLowerCase().includes(termo) || c.cpf.includes(termo.replace(/\D/g, "")) || (c.telefone ?? "").includes(termo)); }, [clientes, busca]);
   const fecharESalvar = () => { setModal(false); carregar(true); };
 
-  return (
-    <div className="space-y-5 pb-8">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div><p className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-rose">Gestão</p><h1 className="mt-1 text-2xl font-semibold text-burgundy sm:text-3xl">Clientes</h1><p className="mt-1 text-sm text-clay/50">Perfil, crédito e parcelas em um único espaço.</p></div>
-        <Button onClick={() => setModal(null)}><Plus className="h-4 w-4" /> Nova cliente</Button>
-      </div>
-      <Card className="flex flex-wrap items-center gap-2.5 p-3">
-        <div className="relative min-w-[220px] flex-1"><Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-clay/30" /><Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar nome, CPF ou telefone…" className="pl-10" /></div>
-        <div className="flex items-center gap-1 rounded-full border border-rose/10 bg-cream p-1"><button onClick={() => setVisualizacao("lista")} className={`rounded-full p-2 ${visualizacao === "lista" ? "bg-burgundy text-cream" : "text-clay/40"}`} aria-label="Lista"><List className="h-3.5 w-3.5" /></button><button onClick={() => setVisualizacao("cards")} className={`rounded-full p-2 ${visualizacao === "cards" ? "bg-burgundy text-cream" : "text-clay/40"}`} aria-label="Cards"><LayoutGrid className="h-3.5 w-3.5" /></button></div>
-      </Card>
-      {carregando ? <SkeletonCards count={6} /> : erro ? (
-        <Card className="p-8 text-center"><p className="text-sm text-alert">{erro}</p><Button size="sm" className="mt-3" onClick={() => carregar(true)}>Tentar novamente</Button></Card>
-      ) : filtradas.length === 0 ? <Card className="p-10 text-center text-sm text-clay/45">Nenhuma cliente encontrada.</Card> : visualizacao === "lista" ? (
-        <Card className="overflow-hidden p-0"><div className="divide-y divide-rose/5">{filtradas.map((c) => (
-          <button key={c.id} type="button" onClick={() => setModal(c)} className="grid w-full grid-cols-[minmax(0,1.5fr)_minmax(120px,.7fr)_minmax(150px,.9fr)_auto] items-center gap-3 px-4 py-3.5 text-left transition hover:bg-blush/20 sm:px-5">
-            <div className="flex min-w-0 items-center gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blush text-burgundy"><UserRound className="h-4 w-4" /></span><span className="min-w-0"><span className="block truncate text-sm font-semibold text-burgundy">{c.nome_completo}</span><span className="block text-[0.68rem] text-clay/40">{formatarCpf(c.cpf)}</span><BadgesCiclo cliente={c} /></span></div>
-            <span className="hidden text-xs text-clay/55 sm:block">{c.procedimento || "Sem procedimento"}</span>
-            <span className="text-xs text-clay/55"><span className="block">{statusPagamento(c)}</span><BadgesCiclo cliente={c} /></span>
-            <span className="text-right text-sm font-semibold text-burgundy">{formatarMoeda(c.valor_contrato)}</span>
-          </button>
-        ))}</div></Card>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">{filtradas.map((c) => (
-          <Card key={c.id} onClick={() => setModal(c)} className="cursor-pointer p-4 transition hover:-translate-y-0.5 hover:shadow-soft">
-            <div className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-blush text-burgundy"><UserRound className="h-4 w-4" /></span><div className="min-w-0"><p className="truncate text-sm font-semibold text-burgundy">{c.nome_completo}</p><p className="text-[0.68rem] text-clay/40">{formatarCpf(c.cpf)}</p><BadgesCiclo cliente={c} /></div></div>
-            <div className="mt-3 flex items-end justify-between border-t border-rose/10 pt-3"><div><p className="text-[0.58rem] uppercase tracking-label text-rose">Pagamento</p><p className="mt-1 text-xs text-clay/55">{statusPagamento(c)}</p></div><p className="text-lg font-semibold text-burgundy">{formatarMoeda(c.valor_contrato)}</p></div>
-          </Card>
-        ))}</div>
-      )}
-      {modal !== false && <ModalClienteCompacto cliente={modal} onClose={() => setModal(false)} onSalvo={fecharESalvar} />}
-    </div>
-  );
+  return <div className="space-y-5 pb-8">
+    <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-rose">Gestão</p><h1 className="mt-1 text-2xl font-semibold text-burgundy sm:text-3xl">Clientes</h1><p className="mt-1 text-sm text-clay/50">Perfil, crédito e parcelas em um único espaço.</p></div><Button onClick={() => setModal(null)}><Plus className="h-4 w-4" /> Nova cliente</Button></div>
+    <Card className="flex flex-wrap items-center gap-2.5 p-3"><div className="relative min-w-[220px] flex-1"><Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-clay/30" /><Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar nome, CPF ou telefone…" className="pl-10" /></div><div className="flex items-center gap-1 rounded-full border border-rose/10 bg-cream p-1"><button onClick={() => setVisualizacao("lista")} className={`rounded-full p-2 ${visualizacao === "lista" ? "bg-burgundy text-cream" : "text-clay/40"}`} aria-label="Lista"><List className="h-3.5 w-3.5" /></button><button onClick={() => setVisualizacao("cards")} className={`rounded-full p-2 ${visualizacao === "cards" ? "bg-burgundy text-cream" : "text-clay/40"}`} aria-label="Cards"><LayoutGrid className="h-3.5 w-3.5" /></button></div></Card>
+    {carregando ? <SkeletonCards count={6} /> : erro ? <Card className="p-8 text-center"><p className="text-sm text-alert">{erro}</p><Button size="sm" className="mt-3" onClick={() => carregar(true)}>Tentar novamente</Button></Card> : filtradas.length === 0 ? <Card className="p-10 text-center text-sm text-clay/45">Nenhuma cliente encontrada.</Card> : visualizacao === "lista" ? <Card className="overflow-hidden p-0"><div className="divide-y divide-rose/5">{filtradas.map((c) => <button key={c.id} type="button" onClick={() => setModal(c)} className="grid w-full grid-cols-[minmax(0,1.5fr)_minmax(120px,.7fr)_minmax(150px,.9fr)_auto] items-center gap-3 px-4 py-3.5 text-left transition hover:bg-blush/20 sm:px-5"><div className="flex min-w-0 items-center gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blush text-burgundy"><UserRound className="h-4 w-4" /></span><span className="min-w-0"><span className="block truncate text-sm font-semibold text-burgundy">{c.nome_completo}</span><span className="block text-[0.68rem] text-clay/40">{formatarCpf(c.cpf)}</span></span></div><span className="hidden text-xs text-clay/55 sm:block">{c.procedimento || "Sem procedimento"}</span><span className="text-xs text-clay/55"><span className="block">{statusPagamento(c)}</span><BadgesCiclo cliente={c} /></span><span className="text-right text-sm font-semibold text-burgundy">{formatarMoeda(c.valor_contrato)}</span></button>)}</div></Card> : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">{filtradas.map((c) => <Card key={c.id} onClick={() => setModal(c)} className="cursor-pointer p-4 transition hover:-translate-y-0.5 hover:shadow-soft"><div className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-blush text-burgundy"><UserRound className="h-4 w-4" /></span><div className="min-w-0"><p className="truncate text-sm font-semibold text-burgundy">{c.nome_completo}</p><p className="text-[0.68rem] text-clay/40">{formatarCpf(c.cpf)}</p><BadgesCiclo cliente={c} /></div></div><div className="mt-3 flex items-end justify-between border-t border-rose/10 pt-3"><div><p className="text-[0.58rem] uppercase tracking-label text-rose">Pagamento</p><p className="mt-1 text-xs text-clay/55">{statusPagamento(c)}</p></div><p className="text-lg font-semibold text-burgundy">{formatarMoeda(c.valor_contrato)}</p></div></Card>)}</div>}
+    {modal !== false && <ModalClienteCompacto cliente={modal} onClose={() => setModal(false)} onSalvo={fecharESalvar} />}
+  </div>;
 }
