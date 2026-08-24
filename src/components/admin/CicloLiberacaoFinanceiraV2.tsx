@@ -79,12 +79,38 @@ export function CicloLiberacaoFinanceiraV2() {
     setData(x.data);setAcaoData(datasMap.has(x.data)?"fechar":"liberar");
   }
 
-  return <div className="animate-fadeUp flex flex-col space-y-3 pb-8">
-    {/* Agenda de liberação financeira vem primeiro no DOM e não usa order CSS, garantindo o topo. */}
-    {analise&&<Card className="p-3 sm:p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div><div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-gold"/><h2 className="font-heading text-base text-burgundy">Agenda de liberação</h2></div><p className="mt-1 text-[0.68rem] text-clay/50">A sugestão do sistema é 90 dias após a assinatura dos termos.</p></div><span className={cn("rounded-full border px-2.5 py-1 text-[0.58rem] font-semibold",liberado>=orc?"border-alert/20 bg-alert/10 text-alert":"border-success/20 bg-success/10 text-success")}>Valor já liberado esse mês {formatarMoeda(liberado)}/{formatarMoeda(orc)}</span></div>
-      <div className="mt-3 flex items-center justify-between rounded-xl border border-rose/10 bg-[rgb(var(--surface-2))] p-1"><button onClick={()=>mesDelta(-1)} className="h-7 w-7 rounded-full text-burgundy"><ChevronLeft className="mx-auto h-4 w-4"/></button><span className="text-xs font-semibold text-burgundy">{nomeMes(mes)} {ano}</span><button onClick={()=>mesDelta(1)} className="h-7 w-7 rounded-full text-burgundy"><ChevronRight className="mx-auto h-4 w-4"/></button></div>
-      <div className="mx-auto mt-3 max-w-2xl"><div className="mb-2 grid grid-cols-7 text-center text-[0.58rem] uppercase tracking-label text-rose">{DIAS.map((x,i)=><span key={i}>{x}</span>)}</div><div className="grid grid-cols-7 gap-1.5 sm:gap-2">{dias.map(x=>{const sug=analise.melhorData?.data===x.data,liberada=datasMap.has(x.data);const cl=x.estado==="verde"?"border-success/30 bg-success/10 text-success":x.estado==="amarelo"?"border-gold/40 bg-gold/10 text-burgundy":x.estado==="vermelho"?"border-burgundy bg-burgundy text-cream":x.estado==="passado"?"border-transparent bg-clay/5 text-clay/20":"border-transparent bg-clay/5 text-clay/35";return <button key={x.data} disabled={x.estado==="passado"||x.estado==="vermelho"} onClick={()=>clicarDia(x)} title={x.estado==="vermelho"?"Data ocupada":liberada?"Data liberada — clique para fechar":"Data fechada — clique para liberar"} className={cn("relative flex aspect-square items-center justify-center rounded-xl border text-xs font-semibold transition",cl,!liberada&&x.estado!=="passado"&&x.estado!=="vermelho"&&"opacity-60",x.data===hoje&&"ring-2 ring-gold ring-offset-1",x.data===data&&"ring-2 ring-burgundy ring-offset-2",sug&&"ring-2 ring-gold ring-offset-2")}>{x.dia}{sug&&<Star className="absolute -right-1 -top-1 h-4 w-4 rounded-full bg-gold p-0.5 text-white"/>}{liberada&&x.estado!=="vermelho"&&<span className="absolute bottom-1 h-1 w-1 rounded-full bg-success"/>}</button>})}</div><div className="mt-3 flex flex-wrap gap-3 text-[0.56rem] text-clay/55"><span>🟢 liberada</span><span>🟡 acima do orçamento</span><span>🔴 ocupada</span><span>⚪ fechada</span></div><p className="mt-2 text-[0.58rem] text-clay/45">{selecionado?"Cliente selecionada: clique em uma data liberada para definir a previsão.":"Sem cliente selecionada: clique em uma data para liberar ou fechar."}</p></div>
+  return <div className="animate-fadeUp flex flex-col space-y-5 pb-8">
+    {analise&&<Card className="overflow-hidden p-0">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rose/10 bg-gradient-to-br from-blush/35 to-transparent px-5 py-4">
+        <div>
+          <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-gold"/><h2 className="font-heading text-base text-burgundy">Agenda de liberação</h2></div>
+          <p className="mt-1 text-xs text-clay/50">A sugestão do sistema é 90 dias após a assinatura dos termos.</p>
+        </div>
+        <span className={cn("rounded-full border px-2.5 py-1 text-[0.58rem] font-semibold",liberado>=orc?"border-alert/20 bg-alert/10 text-alert":"border-success/20 bg-success/10 text-success")}>Valor já liberado esse mês {formatarMoeda(liberado)}/{formatarMoeda(orc)}</span>
+      </div>
+      <div className="px-5 pt-4">
+        <div className="flex items-center justify-between rounded-full border border-rose/12 bg-white/80 p-1">
+          <button onClick={()=>mesDelta(-1)} className="flex h-8 w-8 items-center justify-center rounded-full text-burgundy hover:bg-blush"><ChevronLeft className="h-4 w-4"/></button>
+          <span className="w-32 text-center text-sm font-medium text-burgundy">{nomeMes(mes)} {ano}</span>
+          <button onClick={()=>mesDelta(1)} className="flex h-8 w-8 items-center justify-center rounded-full text-burgundy hover:bg-blush"><ChevronRight className="h-4 w-4"/></button>
+        </div>
+      </div>
+      <div className="p-5">
+        <div className="mx-auto w-full max-w-3xl">
+          <div className="mb-2 grid grid-cols-7 text-center">{DIAS.map((x,i)=><span key={i} className="text-[0.62rem] font-semibold uppercase tracking-label text-rose/80">{x}</span>)}</div>
+          <div className="grid grid-cols-7 gap-2 sm:gap-2.5">
+            {dias.map(x=>{const sug=analise.melhorData?.data===x.data,liberada=datasMap.has(x.data);const cl=x.estado==="verde"?"border-success/40 bg-success/10 font-semibold text-success hover:bg-success/15":x.estado==="amarelo"?"border-gold/60 bg-gold/15 font-semibold text-burgundy hover:bg-gold/25":x.estado==="vermelho"?"border-burgundy bg-burgundy font-semibold text-cream":x.estado==="passado"?"border-transparent bg-transparent text-clay/20":"border-clay/[0.08] bg-clay/[0.035] text-clay/45 hover:bg-clay/[0.07]";return <button key={x.data} disabled={x.estado==="passado"||x.estado==="vermelho"} onClick={()=>clicarDia(x)} title={x.estado==="vermelho"?"Data ocupada":liberada?"Data liberada — clique para fechar":"Data fechada — clique para liberar"} className={cn("group relative flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl border text-sm font-medium transition-all",cl,!liberada&&x.estado!=="passado"&&x.estado!=="vermelho"&&"opacity-60",x.data===hoje&&"ring-2 ring-gold/70 ring-offset-1",x.data===data&&"ring-2 ring-burgundy ring-offset-2",sug&&"ring-2 ring-gold ring-offset-2")}>{x.dia}{sug&&<Star className="absolute -right-1 -top-1 h-4 w-4 rounded-full bg-gold p-0.5 text-white"/>}{liberada&&x.estado!=="vermelho"&&<span className="absolute bottom-1 h-1.5 w-1.5 rounded-full bg-success"/>}</button>})}
+          </div>
+          <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 border-t border-rose/10 pt-4 text-[0.68rem] text-clay/55">
+            <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-success"/>Liberada</span>
+            <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-gold"/>Acima do orçamento</span>
+            <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-burgundy"/>Ocupada</span>
+            <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-clay/15"/>Fechada</span>
+            <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full ring-2 ring-gold"/>Hoje</span>
+          </div>
+          <p className="mt-3 text-[0.68rem] text-clay/45">{selecionado?"Cliente selecionada: clique em uma data liberada para definir a previsão.":"Sem cliente selecionada: clique em uma data para liberar ou fechar."}</p>
+        </div>
+      </div>
     </Card>}
 
     <section className="rounded-2xl border border-rose/12 bg-[rgb(var(--surface-1))] p-3 sm:p-4">
