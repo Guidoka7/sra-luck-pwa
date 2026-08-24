@@ -35,7 +35,7 @@ export function RevisaoFinanceiraCard() {
     finally { setCarregando(false); }
   }
   useEffect(() => { carregar(); const intervalo = setInterval(carregar, 30000); return () => clearInterval(intervalo); }, []);
-  const filtradas = useMemo(() => { const termo = busca.trim().toLocaleLowerCase("pt-BR"); return pendentes.filter((p) => !termo || p.nome.toLocaleLowerCase("pt-BR").includes(termo) || p.cpf.includes(termo.replace(/\D/g, ""))); }, [pendentes, busca]);
+  const filtradas = useMemo(() => { const termo = busca.trim().toLocaleLowerCase("pt-BR"); return pendentes.filter((p) => !termo || p.nome.toLocaleLowerCase("pt-BR").includes(termo)); }, [pendentes, busca]);
   function alterarFinanceiro(id: string, patch: Partial<{ saldo: string; taxa: string; formas: Forma[] }>) { setFinanceiro((a) => ({ ...a, [id]: { ...(a[id] ?? { saldo: "0", taxa: "5.4", formas: [] }), ...patch } })); }
   function alternarForma(id: string, forma: Forma) { const formas = financeiro[id]?.formas ?? []; alterarFinanceiro(id, { formas: formas.includes(forma) ? formas.filter((f) => f !== forma) : [...formas, forma] }); }
   async function decidir(id: string, decisao: "aprovada" | "recusada") {
@@ -61,7 +61,7 @@ export function RevisaoFinanceiraCard() {
   if (carregando) return null;
   return <Panel className="p-3.5 sm:p-4">
     <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[0.58rem] font-bold uppercase tracking-[0.2em] text-rose">Confirmação financeira</p><p className="mt-0.5 text-xs text-clay/50">Revise, escolha o custeio e libere a próxima etapa.</p></div><StatusPill tone={filtradas.length ? "rose" : "neutral"}>{filtradas.length} pendente(s)</StatusPill></div>
-    <div className="relative mt-3"><Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-clay/35" /><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar cliente…" className="h-9 w-full rounded-xl border border-rose/10 bg-[rgb(var(--surface-2))] pl-9 pr-3 text-xs text-burgundy outline-none placeholder:text-clay/35 focus:border-rose/25 focus:ring-1 focus:ring-rose/10" /></div>
+    <div className="relative mt-3"><Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-clay/35" /><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar pelo nome…" className="h-9 w-full rounded-xl border border-rose/10 bg-[rgb(var(--surface-2))] pl-9 pr-3 text-xs text-burgundy outline-none placeholder:text-clay/35 focus:border-rose/25 focus:ring-1 focus:ring-rose/10" /></div>
     {filtradas.length === 0 ? <div className="mt-3 rounded-xl border border-dashed border-rose/15 bg-blush/15 px-4 py-5 text-center"><ShieldCheck className="mx-auto h-5 w-5 text-clay/25" /><p className="mt-1 text-xs text-clay/50">Nenhuma cliente aguardando confirmação financeira.</p></div> : <div className="mt-3 max-h-[28rem] space-y-1.5 overflow-y-auto overscroll-contain pr-1 [scrollbar-width:thin]">
       {filtradas.map((c) => {
         const config = financeiro[c.id] ?? { saldo: String(c.saldoRestanteEstimado ?? 0), taxa: "5.4", formas: [] as Forma[] };
