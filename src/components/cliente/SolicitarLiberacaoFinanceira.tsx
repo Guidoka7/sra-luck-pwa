@@ -11,6 +11,20 @@ interface Financeiro { saldoRestante: number | null; taxaCartao: number; totalCo
 interface Solicitacao { id: string; forma_custeio: FormaCusteio; saldo_restante: number; taxa_cartao: number; total_com_taxa: number; status: string; observacao: string | null; }
 
 function formatarMoeda(valor: number) { return valor.toLocaleString("pt-BR", { style:"currency", currency:"BRL" }); }
+function dataLocalISO(date: Date) { return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`; }
+const TEST_CLOCK_KEY = "sra-luck-test-date";
+function hojeDaAplicacao() {
+  if (typeof window !== "undefined") {
+    const teste = window.localStorage.getItem(TEST_CLOCK_KEY);
+    if (teste && /^\d{4}-\d{2}-\d{2}$/.test(teste)) return teste;
+  }
+  return dataLocalISO(new Date());
+}
+function diferencaEmDias(dataISO: string, hojeISO: string) {
+  const [y,m,d] = dataISO.split("-").map(Number); const [hy,hm,hd] = hojeISO.split("-").map(Number);
+  if (![y,m,d,hy,hm,hd].every(Number.isFinite)) return null;
+  return Math.round((Date.UTC(y,m-1,d)-Date.UTC(hy,hm-1,hd))/86400000);
+}
 const FORMAS: Array<{ id: FormaCusteio; titulo: string; descricao: string }> = [
   { id:"cartao", titulo:"Cartão de crédito", descricao:"taxa configurada no contrato" },
   { id:"pix", titulo:"PIX", descricao:"sem taxa adicional" },
@@ -21,6 +35,8 @@ const FORMAS: Array<{ id: FormaCusteio; titulo: string; descricao: string }> = [
 export function SolicitarLiberacaoFinanceira({ ativo = true }: Props) {
   const [financeiro,setFinanceiro] = useState<Financeiro>({ saldoRestante:null, taxaCartao:5.4, totalComTaxa:null, formasCusteio:[] });
   const [solicitacao,setSolicitacao] = useState<Solicitacao|null>(null);
+  const [dataAssinaturaTermos,setDataAssinaturaTermos] = useState<string|null>(null);
+  const [hoje,setHoje] = useState(hojeDaAplicacao);
   const [modalAberto,setModalAberto] = useState(false);
   const [formaCusteio,setFormaCusteio] = useState<FormaCusteio|null>(null);
   const [enviando,setEnviando] = useState(false);
@@ -31,11 +47,22 @@ export function SolicitarLiberacaoFinanceira({ ativo = true }: Props) {
     let montado = true;
     async function carregar() {
       try {
-        const res = await fetch("/api/cliente/solicitacao-liberacao-financeira", { cache:"no-store" });
-        if (!res.ok || !montado) return;
-        const data = await res.json();
-        setFinanceiro(data.financeiro ?? financeiro);
-        setSolicitacao(data.solicitacao ?? null);
+        const [financeiroRes, agendaRes] = await Promise.all([
+          fetch("/api/cliente/solicitacao-liberacao-financeira", { cache:"no-store" }),
+          fetch("/api/cliente/agenda", { cache:"no-store" }),
+        ]);
+        if (!montado) return;
+        if (financeiroRes.ok) {
+          const data = await financeiroRes.json();
+          setFinanceiro(data.financeiro ?? { saldoRestante:null, taxaCartao:5.4, totalComTaxa:null, formasCusteio:[] });
+          setSolicitacao(data.solicitacao ?? null);
+        }
+        if (agendaRes.ok) {
+          const data = await agendaRes.json();
+          const agenda = data.agendamentoAtivo ?? data.agendamentoConcluido ?? null;
+          setDataAssinaturaTermos(agenda?.data ?? null);
+        }
+        setHoje(hojeDaAplicacao());
       } catch {}
     }
     void carregar();
@@ -66,6 +93,8 @@ export function SolicitarLiberacaoFinanceira({ ativo = true }: Props) {
   const status = String(solicitacao?.status ?? "").toLowerCase();
   const recusada = status.includes("recus");
   const aprovada = status.includes("aprov");
+  const diasParaAssinatura = dataAssinaturaTermos ? diferencaEmDias(dataAssinaturaTermos, hoje) : null;
+  const ocultarPagamentoConfirmado = aprovada && diasParaAssinatura !== null && diasParaAssinatura <= 0;
   const statusTitulo = recusada ? "Solicitação recusada" : aprovada ? "Pagamento confirmado" : "Aguardando validação";
   const statusDescricao = recusada
     ? solicitacao?.observacao ?? "Nossa equipe registrou uma observação sobre a solicitação."
@@ -74,48 +103,19 @@ export function SolicitarLiberacaoFinanceira({ ativo = true }: Props) {
       : "Sua escolha foi registrada e está em análise pela equipe financeira.";
 
   return <>
-    <section className={cn(
-      "mb-4 overflow-hidden rounded-2xl border shadow-[0_14px_40px_-28px_rgba(0,0,0,.35)]",
-      recusada ? "border-alert/15 bg-alert/[0.045]" : "border-success/15 bg-success/[0.045]"
-    )}>
+    {!ocultarPagamentoConfirmado && <section className={cn("mb-4 overflow-hidden rounded-2xl border shadow-[0_14px_40px_-28px_rgba(0,0,0,.35)]", recusada ? "border-alert/15 bg-alert/[0.045]" : "border-success/15 bg-success/[0.045]")}>
       <div className="flex items-center gap-2.5 px-3 py-2.5 sm:px-3.5 sm:py-3">
-        <span className={cn(
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
-          recusada ? "bg-alert/10 text-alert" : "bg-success/10 text-success"
-        )}>
+        <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", recusada ? "bg-alert/10 text-alert" : "bg-success/10 text-success")}>
           {solicitacao ? <CheckCircle2 className="h-4 w-4" /> : <FileCheck2 className="h-4 w-4" />}
         </span>
-
         <div className="min-w-0 flex-1">
-          <p className={cn(
-            "text-[0.58rem] font-semibold uppercase tracking-[0.14em]",
-            recusada ? "text-alert" : "text-success"
-          )}>
-            {solicitacao ? statusTitulo : "Liberação financeira"}
-          </p>
-          <p className="mt-0.5 text-[0.68rem] leading-[1.35] text-clay/60">
-            {solicitacao ? statusDescricao : "Informe como será realizado o pagamento do saldo restante."}
-          </p>
+          <p className={cn("text-[0.58rem] font-semibold uppercase tracking-[0.14em]", recusada ? "text-alert" : "text-success")}>{solicitacao ? statusTitulo : "Liberação financeira"}</p>
+          <p className="mt-0.5 text-[0.68rem] leading-[1.35] text-clay/60">{solicitacao ? statusDescricao : "Informe como será realizado o pagamento do saldo restante."}</p>
         </div>
-
-        {solicitacao && (
-          <span className={cn(
-            "hidden shrink-0 rounded-lg border px-2.5 py-1.5 text-[0.56rem] font-bold uppercase tracking-[0.1em] sm:inline-flex",
-            aprovada ? "border-success/15 bg-success/10 text-success" : recusada ? "border-alert/15 bg-alert/10 text-alert" : "border-rose/15 bg-rose/10 text-rose"
-          )}>
-            {aprovada ? "Pagamento confirmado" : recusada ? "Recusado" : "Em análise"}
-          </span>
-        )}
-
-        {!solicitacao && (
-          <button type="button" onClick={abrirModal} className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-burgundy px-2.5 py-2 text-[0.56rem] font-bold uppercase tracking-[0.1em] text-cream shadow-card transition hover:bg-burgundy-dark sm:px-3 sm:text-[0.6rem]">
-            <CreditCard className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">SOLICITAR</span>
-            <span className="sm:hidden">SOLICITAR</span>
-          </button>
-        )}
+        {solicitacao && <span className={cn("hidden shrink-0 rounded-lg border px-2.5 py-1.5 text-[0.56rem] font-bold uppercase tracking-[0.1em] sm:inline-flex", aprovada ? "border-success/15 bg-success/10 text-success" : recusada ? "border-alert/15 bg-alert/10 text-alert" : "border-rose/15 bg-rose/10 text-rose")}>{aprovada ? "Pagamento confirmado" : recusada ? "Recusado" : "Em análise"}</span>}
+        {!solicitacao && <button type="button" onClick={abrirModal} className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-burgundy px-2.5 py-2 text-[0.56rem] font-bold uppercase tracking-[0.1em] text-cream shadow-card transition hover:bg-burgundy-dark sm:px-3 sm:text-[0.6rem]"><CreditCard className="h-3.5 w-3.5" /><span>SOLICITAR</span></button>}
       </div>
-    </section>
+    </section>}
 
     <AnimatePresence>
       {modalAberto && <motion.div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onMouseDown={e=>{if(e.target===e.currentTarget&&!enviando)setModalAberto(false)}}>
