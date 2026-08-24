@@ -64,20 +64,56 @@ export function SolicitarLiberacaoFinanceira({ ativo = true }: Props) {
 
   if (!ativo) return null;
   const status = String(solicitacao?.status ?? "").toLowerCase();
-  const statusTitulo = status.includes("recus") ? "Solicitação recusada" : status.includes("aprov") ? "Forma de custeio confirmada" : "Aguardando validação";
-  const statusDescricao = status.includes("recus")
+  const recusada = status.includes("recus");
+  const aprovada = status.includes("aprov");
+  const statusTitulo = recusada ? "Solicitação recusada" : aprovada ? "Financeiro confirmado" : "Aguardando validação";
+  const statusDescricao = recusada
     ? solicitacao?.observacao ?? "Nossa equipe registrou uma observação sobre a solicitação."
-    : status.includes("aprov")
-      ? "Sua forma de custeio foi confirmada pela equipe. A previsão de liberação será definida após a confirmação da data dos termos."
+    : aprovada
+      ? "No ato da assinatura dos termos, o valor restante deverá ser custeado."
       : "Sua escolha foi registrada e está em análise pela equipe financeira.";
 
   return <>
-    <section className="mb-4 overflow-hidden rounded-2xl border border-success/15 bg-success/[0.045] shadow-[0_14px_40px_-28px_rgba(0,0,0,.35)]">
-      <div className="flex flex-wrap items-center gap-3 px-3.5 py-3.5 sm:px-4">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success">{solicitacao ? <CheckCircle2 className="h-4 w-4" /> : <FileCheck2 className="h-4 w-4" />}</span>
-        <div className="min-w-0 flex-1"><p className="text-[0.6rem] font-semibold uppercase tracking-[0.16em] text-success">Financeiro confirmado</p><h3 className="mt-0.5 font-heading text-base font-semibold text-burgundy sm:text-lg">{solicitacao ? statusTitulo : "Solicite a liberação financeira"}</h3><p className="mt-0.5 text-[0.68rem] leading-4 text-clay/55">{solicitacao ? statusDescricao : "Sua data de assinatura já está agendada. Informe agora como será realizado o custeio do saldo restante."}</p></div>
-        {!solicitacao && <button type="button" onClick={abrirModal} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-burgundy px-3.5 py-2.5 text-[0.62rem] font-bold uppercase tracking-[0.12em] text-cream shadow-card transition hover:bg-burgundy-dark"><CreditCard className="h-3.5 w-3.5" /> Solicitar liberação financeira</button>}
-        {solicitacao && <span className="inline-flex shrink-0 items-center rounded-xl border border-success/15 bg-success/10 px-3.5 py-2.5 text-[0.62rem] font-bold uppercase tracking-[0.12em] text-success">{status.includes("aprov") ? "Custeio confirmado" : "Em análise"}</span>}
+    <section className={cn(
+      "mb-4 overflow-hidden rounded-2xl border shadow-[0_14px_40px_-28px_rgba(0,0,0,.35)]",
+      recusada ? "border-alert/15 bg-alert/[0.045]" : "border-success/15 bg-success/[0.045]"
+    )}>
+      <div className="flex items-center gap-2.5 px-3 py-2.5 sm:px-3.5 sm:py-3">
+        <span className={cn(
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+          recusada ? "bg-alert/10 text-alert" : "bg-success/10 text-success"
+        )}>
+          {solicitacao ? <CheckCircle2 className="h-4 w-4" /> : <FileCheck2 className="h-4 w-4" />}
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <p className={cn(
+            "text-[0.58rem] font-semibold uppercase tracking-[0.14em]",
+            recusada ? "text-alert" : "text-success"
+          )}>
+            {solicitacao ? statusTitulo : "Liberação financeira"}
+          </p>
+          <p className="mt-0.5 text-[0.68rem] leading-[1.35] text-clay/60">
+            {solicitacao ? statusDescricao : "Informe como será realizado o custeio do saldo restante."}
+          </p>
+        </div>
+
+        {solicitacao && (
+          <span className={cn(
+            "hidden shrink-0 rounded-lg border px-2.5 py-1.5 text-[0.56rem] font-bold uppercase tracking-[0.1em] sm:inline-flex",
+            aprovada ? "border-success/15 bg-success/10 text-success" : recusada ? "border-alert/15 bg-alert/10 text-alert" : "border-rose/15 bg-rose/10 text-rose"
+          )}>
+            {aprovada ? "Custeio confirmado" : recusada ? "Recusado" : "Em análise"}
+          </span>
+        )}
+
+        {!solicitacao && (
+          <button type="button" onClick={abrirModal} className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-burgundy px-2.5 py-2 text-[0.56rem] font-bold uppercase tracking-[0.1em] text-cream shadow-card transition hover:bg-burgundy-dark sm:px-3 sm:text-[0.6rem]">
+            <CreditCard className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Solicitar custeio</span>
+            <span className="sm:hidden">Custeio</span>
+          </button>
+        )}
       </div>
     </section>
 
