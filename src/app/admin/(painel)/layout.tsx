@@ -11,6 +11,7 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { fetchInstant } from "@/lib/instantCache";
 import { AdminCompactStyles } from "@/components/ui/Card";
 import { AdminCompactLists } from "@/components/admin/AdminCompactLists";
+import { CalendarioTesteTempo } from "@/components/admin/CalendarioTesteTempo";
 
 const NAV = [
   { href: "/admin/visao-geral", label: "Visão Geral", icon: LayoutDashboard, group: "Operação" },
@@ -60,6 +61,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="admin-shell admin-compact min-h-screen bg-bloom">
       <AdminCompactStyles />
       <AdminCompactLists />
+      <CalendarioTesteTempo />
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top_left,rgba(173,104,107,0.12),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(122,38,50,0.08),transparent_22%),linear-gradient(180deg,rgba(255,255,255,0.55),rgba(255,255,255,0.92))]" />
       <div className="relative flex items-center justify-between border-b border-white/60 bg-white/80 px-3 py-2 shadow-sm backdrop-blur-xl lg:hidden">
         <div className="min-w-0"><Wordmark maxWidth={125} /></div>
