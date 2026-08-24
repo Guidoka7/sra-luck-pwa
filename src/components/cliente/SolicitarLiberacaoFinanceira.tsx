@@ -156,7 +156,7 @@ export function SolicitarLiberacaoFinanceira({ ativo = true }: Props) {
           <div className="mt-3 grid gap-2">
             {formasDisponiveis.map((forma) => <button key={forma.id} type="button" onClick={() => setFormaCusteio(forma.id)} className={cn("flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition", formaCusteio === forma.id ? "border-burgundy bg-burgundy text-cream" : "border-rose/15 bg-white text-clay/70 hover:border-rose dark:bg-white/[0.035]")}>
               <span className="min-w-0"><span className={cn("block text-[0.72rem] font-semibold", formaCusteio === forma.id ? "text-cream" : "text-burgundy")}>{forma.titulo}</span><span className={cn("block text-[0.6rem]", formaCusteio === forma.id ? "text-cream/70" : "text-clay/50")}>{forma.descricao}</span></span>
-              <span className={cn("h-3.5 w-3.5 shrink-0 rounded-full border", formaCusteio === forma.id ? "border-cream bg-cream shadow-[inset_0_0_0_3px_theme(colors.burgundy)]" : "border-clay/25")} />
+              <span className={cn("h-3.5 w-3.5 shrink-0 rounded-full border", formaCusteio === forma.id ? "border-cream bg-cream" : "border-clay/25")} />
             </button>)}
           </div>
 
