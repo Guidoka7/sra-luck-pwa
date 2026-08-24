@@ -10,6 +10,7 @@ import { Input, Label } from "@/components/ui/Input";
 import { PageHeader } from "@/components/admin/ExecutiveUI";
 import { PrevisaoLiberacaoFinanceiraInteligente } from "@/components/admin/PrevisaoLiberacaoFinanceiraInteligente";
 import { RevisaoFinanceiraCard } from "@/components/admin/RevisaoFinanceiraCard";
+import { createClientSupabaseClient } from "@/lib/supabase/client";
 import { cn, nomeMes } from "@/lib/utils";
 import type { ClienteAgendadaNaData, DataAgenda } from "@/types/database";
 
@@ -40,6 +41,13 @@ function AgendaAdminConteudo() {
 
   async function carregar(force=false) { const url=`/api/admin/datas?ano=${ano}&mes=${mes}`; setCarregando(true); try { const res=await fetch(url,{cache:"no-store"}); const data=await res.json(); setDatas(data.datas ?? []); } finally { setCarregando(false); } }
   useEffect(()=>{ carregar(); },[ano,mes]);
+  useEffect(()=>{
+    const supabase = createClientSupabaseClient();
+    const canal = supabase.channel("agenda-clientes-admin")
+      .on("broadcast", { event: "datas_atualizadas" }, () => { carregar(true); })
+      .subscribe();
+    return () => { supabase.removeChannel(canal); };
+  },[ano,mes]);
   useEffect(()=>{ let ativo=true; fetch("/api/admin/configuracoes",{cache:"no-store"}).then(r=>r.json()).then(d=>{ if(ativo) setAgendaLiberacaoBloqueada(Boolean(d.configuracoes?.agenda_liberacao_financeira_bloqueada)); }).catch(()=>{}); return ()=>{ativo=false}; },[]);
   function mudarMes(delta:number){ let m=mes+delta,a=ano; if(m>12){m=1;a++;} if(m<1){m=12;a--;} setMes(m);setAno(a);setDataSelecionada(null); }
   const diasDoMes=useMemo(()=>{const primeiro=new Date(ano,mes-1,1);const total=new Date(ano,mes,0).getDate();const arr:(number|null)[]=Array(primeiro.getDay()).fill(null);for(let d=1;d<=total;d++)arr.push(d);return arr;},[ano,mes]);
