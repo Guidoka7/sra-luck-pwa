@@ -56,16 +56,16 @@ export function JourneyTracker({ percentualPagamento, percentualAtingido, status
       <div className="pointer-events-none absolute -right-14 -top-14 h-40 w-40 rounded-full bg-gold/10 blur-2xl"/>
       <div className="relative mb-3 flex items-baseline justify-between gap-3"><h2 className="font-heading text-[.8rem] font-semibold text-burgundy sm:text-sm dark:text-[#F4D9DC]">Sua jornada até a cirurgia</h2><span className="rounded-full bg-gold/10 px-2 py-1 text-[.6rem] font-semibold uppercase tracking-label text-gold">{etapaAtual==="cirurgia"?"Próxima etapa":etapaAtual==="agendar"?"Etapa atual":"Em andamento"}</span></div>
       <div className="relative z-10 mx-auto flex max-w-md items-center justify-between gap-1">{steps.map((step,index)=><div key={step.id} className="flex min-w-0 flex-1 items-center">
-        <button type="button" aria-current={step.id===etapaAtual?"step":undefined} onClick={()=>setEtapaAberta(step.id)} className={cn("relative z-10 mx-auto flex min-w-0 flex-col items-center gap-1 rounded-xl px-1.5 py-1 text-center transition-all hover:bg-gold/5",step.id===etapaAtual&&"bg-gold/10")}>
+        <button type="button" aria-current={step.id===etapaAtual?"step":undefined} onClick={()=>setEtapaAberta(step.id)} className="relative z-10 mx-auto flex min-w-0 flex-col items-center gap-1 px-1.5 py-1 text-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-gold/60">
           <span className={cn("relative flex h-10 w-10 items-center justify-center rounded-full border-2 shadow-sm transition-all duration-200",step.status==="done"&&"border-rose bg-rose/10 text-burgundy shadow-[0_0_0_3px_rgba(211,117,143,.12)] dark:bg-rose/10 dark:text-rose",step.status==="current"&&"border-gold bg-gold/[0.06] text-burgundy shadow-[0_0_0_5px_rgba(201,161,90,.18),0_0_22px_rgba(201,161,90,.22)] dark:text-gold",step.status==="upcoming"&&"border-clay/20 bg-transparent text-clay/45 dark:border-white/15 dark:text-white/45")}>
             <step.icon className="h-[1.05rem] w-[1.05rem] shrink-0" strokeWidth={2.25}/>
             {step.status==="done"&&<span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white bg-rose text-white shadow-sm dark:border-[#202225]"><Check className="h-2.5 w-2.5" strokeWidth={3}/></span>}
           </span>
-          <span className={cn("max-w-[82px] truncate text-[.58rem] font-semibold uppercase tracking-label",step.status==="current"?"text-burgundy dark:text-gold":step.status==="done"?"text-burgundy/80 dark:text-cream/75":"text-clay/45 dark:text-cream/45")}>{step.label}</span>
+          <span className={cn("max-w-[82px] truncate text-[.58rem] font-semibold uppercase tracking-label",step.status==="current"?"text-burgundy dark:text-gold":step.status==="done"?"text-burgundy/80 dark:text-[#F4D9DC]":"text-clay/45 dark:text-[#D9D9DE]/60")}>{step.label}</span>
         </button>
         {index<steps.length-1&&<div className={cn("mx-1 h-px flex-1",index<steps.findIndex(s=>s.id===etapaAtual)?"bg-burgundy/45":"bg-clay/20 dark:bg-white/10")}/>} 
       </div>)}</div>
-      <AnimatePresence mode="wait"><motion.div key={etapaAberta} initial={{opacity:0,y:4}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-4}} className="relative z-10 mt-3 rounded-lg border border-rose/15 bg-transparent px-3 py-2 text-center text-[.7rem] leading-5 text-clay/70 dark:border-rose/15 dark:text-cream/70">{textos[etapaAberta]??textos[etapaAtual]}</motion.div></AnimatePresence>
+      <AnimatePresence mode="wait"><motion.div key={etapaAberta} initial={{opacity:0,y:4}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-4}} className="relative z-10 mt-3 rounded-lg border border-rose/15 bg-transparent px-3 py-2 text-center text-[.7rem] leading-5 text-clay/70 dark:border-rose/15 dark:text-[#E7E2E5]/75">{textos[etapaAberta]??textos[etapaAtual]}</motion.div></AnimatePresence>
     </div>
   </>;
 }
