@@ -61,7 +61,7 @@ function PagamentosConteudo() {
 
   const boletosFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
-    const lista = !termo ? boletos : boletos.filter((b) => b.clientes?.nome_completo.toLowerCase().includes(termo) || b.clientes?.cpf.includes(termo.replace(/\D/g, "")));
+    const lista = !termo ? boletos : boletos.filter((b) => b.clientes?.nome_completo.toLowerCase().includes(termo));
     return [...lista].sort((a, b) => { const atrasoA = diasEmAtraso(a.data_vencimento); const atrasoB = diasEmAtraso(b.data_vencimento); if (atrasoB !== atrasoA) return atrasoB - atrasoA; return Number(a.numero_parcela) - Number(b.numero_parcela); });
   }, [boletos, busca]);
 
@@ -91,7 +91,7 @@ function PagamentosConteudo() {
     <Panel className="p-4 sm:p-5">
       <SectionHeading title="Pagamentos" description="A conferência acontece diretamente nesta lista, sem cards intermediários." />
       <div className="mb-4 mt-3 flex flex-wrap items-center gap-2.5">
-        <div className="relative min-w-[220px] flex-1"><Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-clay/30" /><Input placeholder="Buscar cliente ou CPF…" value={busca} onChange={(e) => setBusca(e.target.value)} className="pl-10" /></div>
+        <div className="relative min-w-[220px] flex-1"><Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-clay/30" /><Input placeholder="Buscar pelo nome…" value={busca} onChange={(e) => setBusca(e.target.value)} className="pl-10" /></div>
         <Select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)} className="w-auto"><option value="pendente_confirmacao">Aguardando confirmação</option><option value="nao_pago">Não pagos</option><option value="pago">Pagos</option><option value="rejeitado">Rejeitados</option><option value="todos">Todos</option></Select>
       </div>
       {selecionados.size > 0 && <div className="mb-3 flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-burgundy/15 bg-burgundy/[0.06] px-3 py-2.5"><span className="text-xs font-medium text-burgundy">{selecionados.size} parcela(s) selecionada(s)</span><Button size="sm" loading={processando} onClick={marcarSelecionadosComoPagos}><CheckCircle2 className="h-3.5 w-3.5" /> Marcar como pagas</Button></div>}
