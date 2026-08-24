@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Bell, CalendarClock, X } from "lucide-react";
+import { toast } from "sonner";
 import { Portal } from "@/components/ui/Portal";
 
 interface Notificacao {
@@ -22,7 +23,7 @@ interface CentralNotificacoesProps {
   /**
    * Muda de valor sempre que a página-mãe recebe um evento em tempo real
    * (Supabase Realtime) avisando de notificação nova — dispara um recarregar
-   * imediato aqui, em vez de esperar o polling de 30s.
+   * imediato aqui, em vez de esperar o polling.
    */
   refreshSignal?: number;
 }
@@ -35,16 +36,22 @@ function formatarDataHora(iso: string): { data: string; hora: string } {
   };
 }
 
+function formatarData(data: string | null | undefined): string {
+  if (!data) return "—";
+  return data.split("-").reverse().join("/");
+}
+
 /** Sino de notificações do app da cliente: contador de não lidas + painel clicável. */
 export function CentralNotificacoes({ onAbrirAgenda, refreshSignal }: CentralNotificacoesProps) {
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
   const [naoLidas, setNaoLidas] = useState(0);
   const [aberto, setAberto] = useState(false);
   const carregouUmaVez = useRef(false);
+  const etapaRef = useRef<string | null>(null);
 
   async function carregar() {
     try {
-      const res = await fetch("/api/cliente/notificacoes");
+      const res = await fetch("/api/cliente/notificacoes", { cache: "no-store" });
       if (!res.ok) return;
       const data = await res.json();
       setNotificacoes(data.notificacoes ?? []);
@@ -54,13 +61,66 @@ export function CentralNotificacoes({ onAbrirAgenda, refreshSignal }: CentralNot
     }
   }
 
+  async function atualizarNotificacaoDaEtapaAtual() {
+    try {
+      const res = await fetch("/api/cliente/agenda", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      const ativo = data.agendamentoAtivo;
+      const concluido = data.agendamentoConcluido;
+
+      let etapa: string | null = null;
+      let mensagem = "";
+
+      if (concluido) {
+        const previsao = formatarData(concluido.previsaoLiberacaoFinanceira);
+        etapa = `concluido:${concluido.id}:${concluido.previsaoLiberacaoFinanceira ?? ""}`;
+        mensagem = concluido.previsaoLiberacaoFinanceira
+          ? `✅ Termos assinados. A liberação financeira está prevista para ${previsao}.`
+          : "✅ Termos assinados. O próximo passo será a definição da liberação financeira.";
+      } else if (ativo?.previsaoLiberacaoFinanceira) {
+        const previsao = formatarData(ativo.previsaoLiberacaoFinanceira);
+        etapa = `liberacao:${ativo.id}:${ativo.previsaoLiberacaoFinanceira}`;
+        mensagem = `📅 Liberação financeira definida para ${previsao}.`;
+      } else if (ativo) {
+        const dataTermos = formatarData(ativo.data);
+        const horario = ativo.horario ? ` às ${ativo.horario}` : "";
+        etapa = `termos:${ativo.id}:${ativo.data}:${ativo.horario ?? ""}`;
+        mensagem = `📋 Assinatura dos termos agendada para ${dataTermos}${horario}.`;
+      }
+
+      if (!etapa || !mensagem || etapa === etapaRef.current) return;
+      const primeiraLeitura = etapaRef.current === null;
+      etapaRef.current = etapa;
+
+      // A mensagem antiga de “agenda liberada” é gerada pelo fluxo anterior.
+      // Quando a cliente avança, ela precisa ser substituída pela etapa atual.
+      // O pequeno atraso garante que o toast antigo já tenha sido registrado.
+      window.setTimeout(() => {
+        toast.dismiss();
+        toast.success(mensagem, { duration: 5000 });
+      }, primeiraLeitura ? 120 : 0);
+    } catch {
+      // A central de notificações não deve interromper a navegação da cliente.
+    }
+  }
+
   useEffect(() => {
     carregar();
-    // Mesma cadência do resto do app: a cliente não precisa recarregar a
-    // página pra ver uma notificação nova de previsão de liberação.
-    const intervalo = setInterval(carregar, 30_000);
+    atualizarNotificacaoDaEtapaAtual();
+
+    // A etapa da cliente é atualizada rapidamente para refletir imediatamente
+    // agendamento dos termos e definição da liberação financeira.
+    const intervalo = setInterval(() => {
+      carregar();
+      atualizarNotificacaoDaEtapaAtual();
+    }, 5_000);
+
     function aoFocarAba() {
-      if (document.visibilityState === "visible") carregar();
+      if (document.visibilityState === "visible") {
+        carregar();
+        atualizarNotificacaoDaEtapaAtual();
+      }
     }
     document.addEventListener("visibilitychange", aoFocarAba);
     window.addEventListener("focus", aoFocarAba);
@@ -72,8 +132,9 @@ export function CentralNotificacoes({ onAbrirAgenda, refreshSignal }: CentralNot
   }, []);
 
   useEffect(() => {
-    if (!carregouUmaVez.current) return; // evita recarregar em duplicidade no primeiro mount
+    if (!carregouUmaVez.current) return;
     carregar();
+    atualizarNotificacaoDaEtapaAtual();
   }, [refreshSignal]);
 
   async function abrirNotificacao(n: Notificacao) {
