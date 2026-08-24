@@ -1,0 +1,32 @@
+name: Fix open financial dates
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/components/admin/CicloLiberacaoFinanceiraV2.tsx')
+          s=p.read_text()
+          old='const cl=x.estado==="verde"?"border-success/40 bg-success/10 font-semibold text-success hover:bg-success/15":x.estado==="amarelo"?"border-gold/60 bg-gold/15 font-semibold text-burgundy hover:bg-gold/25":x.estado==="vermelho"?"border-burgundy bg-burgundy font-semibold text-cream":x.estado==="passado"?"border-transparent bg-transparent text-clay/20":"border-clay/[0.08] bg-clay/[0.035] text-clay/45 hover:bg-clay/[0.07]";'
+          new='const cl=x.estado==="vermelho"?"border-burgundy bg-burgundy font-semibold text-cream":x.estado==="amarelo"?"border-gold/60 bg-gold/15 font-semibold text-burgundy hover:bg-gold/25":x.estado==="passado"?"border-transparent bg-transparent text-clay/20":liberada?"border-success/40 bg-success/10 font-semibold text-success hover:bg-success/15":x.estado==="verde"?"border-success/25 bg-success/5 font-semibold text-success/80 hover:bg-success/10":"border-clay/[0.08] bg-clay/[0.035] text-clay/45 hover:bg-clay/[0.07]";'
+          if old not in s:
+              raise SystemExit('target style block not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/admin/CicloLiberacaoFinanceiraV2.tsx
+          git commit -m 'fix: mostrar datas abertas em verde na agenda financeira' || true
+          git push
+          rm -f .github/workflows/fix-open-financial-dates.yml
+          git add .github/workflows/fix-open-financial-dates.yml
+          git commit -m 'chore: remove temporary workflow' || true
+          git push
