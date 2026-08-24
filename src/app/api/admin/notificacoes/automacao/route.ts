@@ -39,8 +39,57 @@ async function runAtrasos(supabase: any, options: { ignorarIntervalo?: boolean }
   return { executado: true, habilitado: true, enviadas, ignoradas, falhas, frequencia_horas: frequenciaHoras, forcaram_envio: ignorarIntervalo };
 }
 
+function diferencaEmDias(dataISO: string, hojeISO: string) {
+  const [y, m, d] = dataISO.split("-").map(Number); const [hy, hm, hd] = hojeISO.split("-").map(Number);
+  if (![y, m, d, hy, hm, hd].every(Number.isFinite)) return null;
+  return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(hy, hm - 1, hd)) / 86400000);
+}
+
+async function runMomentosEspeciais(supabase: any) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const { data: agendamentos, error } = await supabase
+    .from("agendamentos")
+    .select("id, cliente_id, status, previsao_liberacao_financeira, created_at, datas(data)")
+    .in("status", ["confirmado", "realizado"])
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+
+  const vistos = new Set<string>();
+  let enviadas = 0; let ignoradas = 0; let falhas = 0;
+  for (const agenda of agendamentos ?? []) {
+    if (vistos.has(agenda.cliente_id)) continue;
+    vistos.add(agenda.cliente_id);
+    const dataTermos = agenda.datas?.data as string | null | undefined;
+    const dataLiberacao = agenda.previsao_liberacao_financeira as string | null | undefined;
+    const diffTermos = dataTermos ? diferencaEmDias(dataTermos, hoje) : null;
+    const diffLiberacao = dataLiberacao ? diferencaEmDias(dataLiberacao, hoje) : null;
+    let momento: "termos-amanha" | "termos-hoje" | "cirurgia-hoje" | null = null;
+    let dataEvento: string | null = null;
+    if (diffLiberacao === 0) { momento = "cirurgia-hoje"; dataEvento = dataLiberacao ?? null; }
+    else if (diffTermos === 0) { momento = "termos-hoje"; dataEvento = dataTermos ?? null; }
+    else if (diffTermos === 1) { momento = "termos-amanha"; dataEvento = dataTermos ?? null; }
+    if (!momento || !dataEvento) continue;
+    const tipo = `momento_${momento}`;
+    const { data: existente } = await supabase.from("notificacoes_cliente").select("id").eq("cliente_id", agenda.cliente_id).eq("tipo", tipo).eq("referencia_id", agenda.id).limit(1).maybeSingle();
+    if (existente) { ignoradas++; continue; }
+    const formatada = dataEvento.split("-").reverse().join("/");
+    const texto = momento === "termos-amanha" ? { titulo: "Amanhã é um dia especial 💗", mensagem: `Amanhã, ${formatada}, será a assinatura dos seus termos cirúrgicos. Prepare-se para essa etapa especial da sua jornada.`, emoji: "💗" } : momento === "termos-hoje" ? { titulo: "Hoje é o dia da sua assinatura ✨", mensagem: "Chegou o dia da assinatura dos seus termos cirúrgicos. Estamos felizes em acompanhar você nesta etapa tão importante.", emoji: "✨" } : { titulo: "Hoje é o grande dia! 🎉", mensagem: "Sua jornada chegou à conclusão. Hoje acontece a sua cirurgia e todo o caminho percorrido até aqui se concretiza.", emoji: "🎉" };
+    try {
+      const { data: notificacao, error: insertError } = await supabase.from("notificacoes_cliente").insert({ cliente_id: agenda.cliente_id, tipo, titulo: texto.titulo, mensagem: texto.mensagem, emoji: texto.emoji, destino: "agenda", referencia_id: agenda.id }).select("id, cliente_id, tipo, titulo, mensagem, emoji, destino, referencia_id, created_at").single();
+      if (insertError) throw new Error(insertError.message);
+      try { await supabase.channel(`notificacoes-cliente:${agenda.cliente_id}`).send({ type: "broadcast", event: "nova_notificacao", payload: notificacao }); } catch {}
+      try { await enviarWebPushParaCliente(createServiceSupabaseClient(), agenda.cliente_id, { title: texto.titulo, body: texto.mensagem, url: "/agenda", tag: `momento-${momento}-${agenda.id}`, notificationId: notificacao.id }); } catch (pushError) { console.warn("Web Push do momento especial não disponível:", pushError); }
+      enviadas++;
+    } catch (error: any) {
+      falhas++;
+      console.warn("Falha ao criar notificação de momento especial:", error?.message ?? error);
+    }
+  }
+  return { executado: true, enviadas, ignoradas, falhas, data: hoje };
+}
+
 export async function GET(req: NextRequest) { const supabase = await adminOrCron(req); if (!supabase) return NextResponse.json({ erro: "Não autenticado." }, { status: 401 }); const config = await getConfig(supabase); const { data: logs } = await supabase.from("notificacao_logs").select("id, cliente_id, notificacao_id, tipo, titulo, corpo, status, erro_mensagem, created_at, clientes(nome_completo)").order("created_at", { ascending: false }).limit(200); const { data: templates } = await supabase.from("notificacao_templates").select("id, tipo, dias_referencia, titulo, corpo, emoji, is_active, updated_at").order("tipo").order("dias_referencia", { ascending: true }); const { data: clientes } = await supabase.from("clientes").select("id, nome_completo, telefone, ativo").eq("ativo", true).order("nome_completo"); const { count: atrasadas } = await supabase.from("boletos").select("id", { count: "exact", head: true }).eq("status", "nao_pago").lt("data_vencimento", new Date().toISOString().slice(0, 10)); return NextResponse.json({ config, logs: logs ?? [], templates: templates ?? [], clientes: clientes ?? [], atrasadas: atrasadas ?? 0 }); }
 
 export async function PATCH(req: NextRequest) { const supabase = await adminOrCron(req); if (!supabase) return NextResponse.json({ erro: "Não autenticado." }, { status: 401 }); const body = await req.json().catch(() => ({})); const allowed: Record<string, string> = { atraso_habilitado: "boolean", frequencia_atraso_horas: "number", max_tentativas: "number" }; for (const [chave, tipo] of Object.entries(allowed)) { if (!(chave in body)) continue; const value = body[chave]; if (tipo === "number" && (!Number.isFinite(Number(value)) || Number(value) < 1)) return NextResponse.json({ erro: `Valor inválido para ${chave}.` }, { status: 400 }); await supabase.from("notificacoes_config").upsert({ chave, valor: String(value), tipo }, { onConflict: "chave" }); } return NextResponse.json({ ok: true, config: await getConfig(supabase) }); }
 
-export async function POST(req: NextRequest) { const supabase = await adminOrCron(req); if (!supabase) return NextResponse.json({ erro: "Não autenticado." }, { status: 401 }); const body = await req.json().catch(() => ({})); if (!["verificar_atrasos", "enviar_agora_todas"].includes(body.acao)) return NextResponse.json({ erro: "Ação inválida." }, { status: 400 }); try { const forcar = body.acao === "enviar_agora_todas"; return NextResponse.json(await runAtrasos(supabase, { ignorarIntervalo: forcar })); } catch (error: any) { return NextResponse.json({ erro: error?.message ?? "Falha ao executar a automação." }, { status: 500 }); } }
+export async function POST(req: NextRequest) { const supabase = await adminOrCron(req); if (!supabase) return NextResponse.json({ erro: "Não autenticado." }, { status: 401 }); const body = await req.json().catch(() => ({})); if (!["verificar_atrasos", "enviar_agora_todas", "verificar_momentos_especiais"].includes(body.acao)) return NextResponse.json({ erro: "Ação inválida." }, { status: 400 }); try { if (body.acao === "verificar_momentos_especiais") return NextResponse.json(await runMomentosEspeciais(supabase)); const forcar = body.acao === "enviar_agora_todas"; return NextResponse.json(await runAtrasos(supabase, { ignorarIntervalo: forcar })); } catch (error: any) { return NextResponse.json({ erro: error?.message ?? "Falha ao executar a automação." }, { status: 500 }); } }
