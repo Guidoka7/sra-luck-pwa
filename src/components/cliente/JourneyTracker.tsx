@@ -88,8 +88,14 @@ export function JourneyTracker({ percentualPagamento, percentualAtingido, status
         else if (diffTermos === 0) { proximo = "termos-hoje"; dataEvento = dataTermos ?? null; }
         else if (diffTermos === 1) { proximo = "termos-amanha"; dataEvento = dataTermos ?? null; }
         if (!proximo || !dataEvento) return;
-        const chave = `sra-luck-momento-especial:${proximo}:${dataEvento}`; if (sessionStorage.getItem(chave) === "1") return; sessionStorage.setItem(chave, "1");
-        if (!cancelado) { setDataMomentoEspecial(dataEvento); setMomentoEspecial(proximo); }
+        const chave = `sra-luck-momento-especial:${proximo}:${dataEvento}`;
+        if (sessionStorage.getItem(chave) === "1") return;
+        sessionStorage.setItem(chave, "1");
+        if (!cancelado) {
+          setDataMomentoEspecial(dataEvento);
+          setMomentoEspecial(proximo);
+          fetch("/api/cliente/momentos-especiais", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ momento: proximo, dataEvento }) }).catch(() => {});
+        }
       } catch {}
     }
     verificarDatasEspeciais(); const intervalo = window.setInterval(verificarDatasEspeciais, 15000); return () => { cancelado = true; window.clearInterval(intervalo); };
@@ -103,19 +109,22 @@ export function JourneyTracker({ percentualPagamento, percentualAtingido, status
   };
   return <>
     {momentoEspecial && dataMomentoEspecial && <CelebracaoEtapa momento={momentoEspecial} data={dataMomentoEspecial} onFechar={() => setMomentoEspecial(null)} />}
-    <div className="relative overflow-hidden rounded-2xl border border-white/70 bg-gradient-to-br from-white via-blush/30 to-white p-3.5 shadow-card sm:p-4 dark:border-white/10 dark:bg-gradient-to-br dark:from-[#202225] dark:via-[#181a1d] dark:to-[#111315]">
+    <div className="relative z-30 overflow-hidden rounded-2xl border-2 border-gold/20 bg-gradient-to-br from-white via-blush/30 to-white p-3.5 shadow-card transition-all duration-300 hover:border-gold/40 hover:shadow-[0_16px_45px_-28px_rgba(201,161,90,.65)] sm:p-4 dark:border-gold/20 dark:bg-gradient-to-br dark:from-[#202225] dark:via-[#181a1d] dark:to-[#111315]">
       <div className="pointer-events-none absolute -right-14 -top-14 h-40 w-40 rounded-full bg-gold/10 blur-2xl" />
-      <div className="relative mb-3 flex items-baseline justify-between gap-3"><h2 className="font-heading text-[.8rem] font-semibold text-burgundy sm:text-sm dark:text-[#F4D9DC]">Sua jornada até a cirurgia</h2><span className="text-[.6rem] font-semibold uppercase tracking-label text-clay/40 dark:text-[#D9C8CB]/55">{etapaAtual === "cirurgia" ? "Próxima etapa" : etapaAtual === "agendar" ? "Etapa atual" : "Em andamento"}</span></div>
-      <div className="relative mx-auto flex max-w-md items-center justify-between gap-1">
+      <div className="relative mb-3 flex items-baseline justify-between gap-3"><h2 className="font-heading text-[.8rem] font-semibold text-burgundy sm:text-sm dark:text-[#F4D9DC]">Sua jornada até a cirurgia</h2><span className="rounded-full bg-gold/10 px-2 py-1 text-[.6rem] font-semibold uppercase tracking-label text-gold dark:bg-gold/10">{etapaAtual === "cirurgia" ? "Próxima etapa" : etapaAtual === "agendar" ? "Etapa atual" : "Em andamento"}</span></div>
+      <div className="relative z-10 mx-auto flex max-w-md items-center justify-between gap-1">
         {steps.map((step, index) => <div key={step.id} className="flex min-w-0 flex-1 items-center">
-          <button type="button" onClick={() => setEtapaAberta(step.id)} className="relative z-10 mx-auto flex min-w-0 flex-col items-center gap-1 text-center">
-            <span className={cn("flex h-9 w-9 items-center justify-center rounded-full border-2 bg-white dark:bg-[#24272A]", step.status === "done" && "border-burgundy bg-burgundy text-cream", step.status === "current" && "border-gold text-burgundy shadow-[0_0_0_4px_rgba(201,161,90,.18)]", step.status === "upcoming" && "border-clay/20 text-clay/35")}>{step.status === "done" ? <Check className="h-4 w-4" /> : <step.icon className="h-4 w-4" />}</span>
-            <span className={cn("max-w-[82px] truncate text-[.58rem] font-semibold uppercase tracking-label", step.status === "current" ? "text-burgundy dark:text-gold" : step.status === "done" ? "text-burgundy/70 dark:text-cream/65" : "text-clay/35")}>{step.label}</span>
+          <button type="button" aria-current={step.id === etapaAtual ? "step" : undefined} onClick={() => setEtapaAberta(step.id)} className={cn("relative z-10 mx-auto flex min-w-0 cursor-pointer flex-col items-center gap-1 rounded-xl px-1.5 py-1 text-center transition-all duration-200 hover:-translate-y-0.5 hover:bg-gold/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold/60 active:scale-95", step.id === etapaAtual && "bg-gold/10")}>
+            <span className={cn("relative flex h-10 w-10 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-200 dark:bg-[#24272A]", step.status === "done" && "border-burgundy bg-burgundy text-cream shadow-[0_0_0_3px_rgba(128,46,64,.12)]", step.status === "current" && "border-gold text-burgundy shadow-[0_0_0_5px_rgba(201,161,90,.18),0_0_22px_rgba(201,161,90,.22)] dark:text-gold", step.status === "upcoming" && "border-clay/20 text-clay/45 dark:border-white/15 dark:text-white/45")}>
+              <step.icon className="h-[1.05rem] w-[1.05rem] shrink-0" strokeWidth={2.25} />
+              {step.status === "done" && <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border-2 border-white bg-success text-white dark:border-[#24272A]"><Check className="h-2.5 w-2.5" strokeWidth={3} /></span>}
+            </span>
+            <span className={cn("max-w-[82px] truncate text-[.58rem] font-semibold uppercase tracking-label", step.status === "current" ? "text-burgundy dark:text-gold" : step.status === "done" ? "text-burgundy/80 dark:text-cream/75" : "text-clay/45 dark:text-cream/45")}>{step.label}</span>
           </button>
-          {index < steps.length - 1 && <div className={cn("mx-1 h-px flex-1", index < steps.findIndex((s) => s.id === etapaAtual) ? "bg-burgundy/45" : "bg-clay/15")} />}
+          {index < steps.length - 1 && <div className={cn("mx-1 h-px flex-1 transition-colors", index < steps.findIndex((s) => s.id === etapaAtual) ? "bg-burgundy/45" : "bg-clay/20 dark:bg-white/10")} />}
         </div>)}
       </div>
-      <AnimatePresence mode="wait"><motion.div key={etapaAberta} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="mt-3 rounded-xl border border-rose/10 bg-white/55 px-3 py-2.5 text-center text-[.72rem] leading-5 text-clay/65 dark:border-white/5 dark:bg-white/[.025] dark:text-cream/60">{textos[etapaAberta] ?? textos[etapaAtual]}</motion.div></AnimatePresence>
+      <AnimatePresence mode="wait"><motion.div key={etapaAberta} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="relative z-10 mt-3 rounded-xl border border-gold/15 bg-white/70 px-3 py-2.5 text-center text-[.72rem] leading-5 text-clay/70 shadow-sm dark:border-gold/10 dark:bg-white/[.035] dark:text-cream/70">{textos[etapaAberta] ?? textos[etapaAtual]}</motion.div></AnimatePresence>
     </div>
   </>;
 }
