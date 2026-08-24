@@ -4,15 +4,43 @@ import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/s
 const CANAL_AGENDA_CLIENTES = "agenda-clientes";
 
 async function publicarAtualizacaoAgenda(payload: Record<string, unknown>) {
+  const serviceClient = createServiceSupabaseClient();
+  const canal = serviceClient.channel(CANAL_AGENDA_CLIENTES);
   try {
-    const serviceClient = createServiceSupabaseClient();
-    await serviceClient.channel(CANAL_AGENDA_CLIENTES).send({
-      type: "broadcast",
-      event: "datas_atualizadas",
-      payload,
+    await new Promise<void>((resolve) => {
+      let finalizado = false;
+      const finalizar = () => {
+        if (finalizado) return;
+        finalizado = true;
+        resolve();
+      };
+      const timeout = setTimeout(finalizar, 3000);
+      canal.subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          try {
+            await canal.send({
+              type: "broadcast",
+              event: "datas_atualizadas",
+              payload,
+            });
+          } catch (erro) {
+            console.error("Falha ao enviar atualização da agenda em tempo real:", erro);
+          } finally {
+            clearTimeout(timeout);
+            finalizar();
+          }
+        } else if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
+          clearTimeout(timeout);
+          finalizar();
+        }
+      });
     });
   } catch (erro) {
     console.error("Falha ao publicar atualização da agenda em tempo real:", erro);
+  } finally {
+    try {
+      await serviceClient.removeChannel(canal);
+    } catch {}
   }
 }
 
