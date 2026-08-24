@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Check, Calendar, FileSignature, HeartHandshake, Sparkles } from "lucide-react";
 import { cn, formatarDataLonga } from "@/lib/utils";
 
@@ -25,21 +25,28 @@ export function JourneyTracker({ percentualPagamento, percentualAtingido, status
     if (!agendada) return "agendar";
     return "cirurgia";
   }, [percentualAtingido, agendaLiberada, agendada]);
-  const [etapaAberta, setEtapaAberta] = useState("pagamento");
+  const [etapaAberta, setEtapaAberta] = useState(etapaAtual);
   const steps: JourneyStep[] = [
     { id: "contratar", label: "Contratar", icon: FileSignature, status: "done" },
     { id: "pagamento", label: `${Math.min(100, Math.max(0, Math.round(percentualPagamento)))}% pago`, icon: HeartHandshake, status: percentualAtingido ? "done" : "current" },
     { id: "agendar", label: "Agendar", icon: Calendar, status: agendaLiberada && agendada ? "done" : etapaAtual === "agendar" ? "current" : "upcoming" },
     { id: "cirurgia", label: "Cirurgia", icon: Sparkles, status: etapaAtual === "cirurgia" ? "current" : "upcoming" },
   ];
+
+  // A descrição acompanha automaticamente a etapa em que a cliente está.
+  // A cliente ainda pode tocar em uma etapa anterior para consultar o que já aconteceu.
+  useEffect(() => {
+    setEtapaAberta(etapaAtual);
+  }, [etapaAtual]);
+
   const etapaVisivel = steps.some((s) => s.id === etapaAberta) ? etapaAberta : etapaAtual;
   const totalSegmentos = steps.length - 1;
   const dataFormatadaLiberacao = previsaoLiberacaoFinanceira ? formatarDataLonga(previsaoLiberacaoFinanceira) : null;
   const textos: Record<string, string> = {
     contratar: "Seu contrato foi iniciado. Agora, cada pagamento confirmado faz parte da sua evolução.",
-    pagamento: percentualAtingido ? "Parabéns! Você atingiu o percentual de pagamento necessário." : "Cada pagamento confirmado te aproxima do percentual necessário para liberar sua agenda. Envie seus comprovantes na aba \"Meus Boletos\".",
-    agendar: agendaLiberada ? "Sua agenda está liberada para escolher a assinatura dos termos cirúrgicos." : revisaoPendente ? "Estamos realizando o levantamento financeiro dos seus pagamentos. Sua agenda será liberada após a confirmação." : revisaoRecusada ? "Encontramos uma divergência no levantamento financeiro. Fale com a nossa equipe para regularizar." : "Esta etapa será liberada quando seu percentual de pagamento for atingido.",
-    cirurgia: agendada ? dataFormatadaLiberacao ? `Você poderá agendar sua cirurgia a partir da data prevista para liberação financeira: ${dataFormatadaLiberacao}.` : "Sua assinatura está confirmada. A data prevista para liberação financeira será informada pela equipe." : "A cirurgia é a próxima conquista depois da assinatura dos termos.",
+    pagamento: percentualAtingido ? "Parabéns! Você atingiu o percentual de pagamento necessário. A próxima etapa será a liberação da sua agenda." : "Cada pagamento confirmado te aproxima do percentual necessário para liberar sua agenda. Envie seus comprovantes na aba \"Meus Boletos\".",
+    agendar: agendaLiberada ? agendada ? "Sua assinatura dos termos cirúrgicos foi confirmada. Agora você segue para a próxima etapa da sua jornada." : "Sua agenda está liberada para escolher a assinatura dos termos cirúrgicos." : revisaoPendente ? "Estamos realizando o levantamento financeiro dos seus pagamentos. Sua agenda será liberada após a confirmação." : revisaoRecusada ? "Encontramos uma divergência no levantamento financeiro. Fale com a nossa equipe para regularizar." : "Esta etapa será liberada quando seu percentual de pagamento for atingido.",
+    cirurgia: agendada ? dataFormatadaLiberacao ? `Sua assinatura está confirmada. Você poderá agendar sua cirurgia a partir da data prevista para liberação financeira: ${dataFormatadaLiberacao}.` : "Sua assinatura está confirmada. A data prevista para liberação financeira será informada pela equipe." : "A cirurgia é a próxima conquista depois da assinatura dos termos.",
   };
   const indiceAtual = Math.max(0, steps.findIndex((s) => s.id === etapaAtual));
   const fillPercent = totalSegmentos === 0 ? 0 : (indiceAtual / totalSegmentos) * 100 + (steps[indiceAtual]?.status === "current" ? 8 : 0);
