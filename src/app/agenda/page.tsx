@@ -34,7 +34,7 @@ export default function AgendaClientePage() {
   const [clienteId, setClienteId] = useState<string | null>(null);
   const [notificacaoTick, setNotificacaoTick] = useState(0);
   const [procedimento, setProcedimento] = useState<string | null>(null);
-  const [agendamentoAtivo, setAgendamentoAtivo] = useState<{ id: string; data: string; previsaoLiberacaoFinanceira: string | null } | null>(null);
+  const [agendamentoAtivo, setAgendamentoAtivo] = useState<{ id: string; data: string; horario: string | null; previsaoLiberacaoFinanceira: string | null } | null>(null);
   const [datas, setDatas] = useState<DataDisponivel[]>([]);
   const [confirmando, setConfirmando] = useState(false);
   const [celebrando, setCelebrando] = useState<string | null>(null);
@@ -50,7 +50,7 @@ export default function AgendaClientePage() {
 
   async function carregar(silencioso = false) {
     if (!silencioso) setCarregando(true);
-    const [resAgenda, resBoletos] = await Promise.all([fetch("/api/cliente/agenda"), fetch("/api/cliente/boletos")]);
+    const [resAgenda, resBoletos] = await Promise.all([fetch("/api/cliente/agenda", { cache: "no-store" }), fetch("/api/cliente/boletos", { cache: "no-store" })]);
     if (!resAgenda.ok) { router.push("/login"); return; }
     const data = await resAgenda.json();
     setNome(data.cliente.nome); setClienteId(data.cliente.id ?? null); setProcedimento(data.cliente.procedimento ?? null); setAgendamentoAtivo(data.agendamentoAtivo); setDatas(data.datasDisponiveis);
@@ -81,10 +81,10 @@ export default function AgendaClientePage() {
 
   useEffect(() => { if (!clienteId) return; const supabase = createClientSupabaseClient(); const canal = supabase.channel(`notificacoes-cliente:${clienteId}`).on("broadcast", { event: "nova_notificacao" }, () => { carregar(true); setNotificacaoTick((t) => t + 1); }).subscribe(); return () => { supabase.removeChannel(canal); }; }, [clienteId]);
 
-  async function escolherData(dataId: string) {
+  async function escolherData(dataId: string, horario: string) {
     if (!agendaLiberada) { if (statusRevisao === "recusada") toast.error("Encontramos uma divergência no levantamento financeiro. Fale com a nossa equipe."); else if (!podeAgendar) { const necessario = percentualNecessario(quantidadeParcelas); toast.error(`Você está em ${porcentagemPagamento ?? 0}% de pagamento. São necessários ${necessario}% para liberar sua agenda — continue enviando seus comprovantes na aba \"Meus Boletos\".`); } else toast.error("Seu levantamento financeiro ainda está em andamento. Toque no aviso do calendário para saber mais."); return; }
     setConfirmando(true);
-    try { const res = await fetch("/api/cliente/agendar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataId }) }); const resultado = await res.json(); if (!res.ok) { toast.error(resultado.erro ?? "Não foi possível confirmar essa data."); return; } setCelebrando(resultado.data); } catch { toast.error("Erro de conexão. Tente novamente."); } finally { setConfirmando(false); }
+    try { const res = await fetch("/api/cliente/agendar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataId, horario }) }); const resultado = await res.json(); if (!res.ok) { toast.error(resultado.erro ?? "Não foi possível confirmar essa data."); return; } setCelebrando(resultado.data); } catch { toast.error("Erro de conexão. Tente novamente."); } finally { setConfirmando(false); }
   }
   async function sair() { await fetch("/api/cliente/logout", { method: "POST" }); router.push("/login"); }
   if (carregando) return <main className="flex min-h-[100dvh] items-center justify-center bg-bloom"><LogoMark className="h-10 w-10 animate-pulse" /></main>;
