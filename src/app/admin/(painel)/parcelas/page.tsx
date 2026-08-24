@@ -58,7 +58,7 @@ export default function ParcelasPage() {
   const resultados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     if (termo.length < 2) return [];
-    return clientes.filter((c) => c.nome_completo.toLowerCase().includes(termo) || c.cpf.includes(termo.replace(/\D/g, ""))).slice(0, 8);
+    return clientes.filter((c) => c.nome_completo.toLowerCase().includes(termo)).slice(0, 8);
   }, [clientes, busca]);
 
   async function editar(boleto: Boleto, campo: "valor" | "data_vencimento", valor: string) {
@@ -119,15 +119,15 @@ export default function ParcelasPage() {
   const suspensas = boletos.filter((b) => b.suspensa).length;
 
   return <div className="space-y-4 pb-8">
-    <PageHeader eyebrow="Gestão financeira" title="Gestão de parcelas" description="Pesquise uma cliente pelo nome ou CPF para abrir o carnê. Alterar o vencimento não altera o valor." />
+    <PageHeader eyebrow="Gestão financeira" title="Gestão de parcelas" description="Pesquise uma cliente pelo nome para abrir o carnê. Alterar o vencimento não altera o valor." />
 
     <Panel className="p-4 sm:p-5">
-      <SectionHeading title="Pesquisar cliente" description="Nenhuma cliente é sugerida antes da pesquisa." />
+      <SectionHeading title="Pesquisar cliente" description="Digite o nome para localizar a cliente." />
       <div className="relative mt-3 max-w-xl">
         <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-clay/30" />
-        <Input className="pl-10" placeholder="Digite pelo menos 2 letras do nome ou CPF…" value={busca} onChange={(e) => { setBusca(e.target.value); if (!e.target.value.trim()) setClienteId(""); }} />
-        {resultados.length > 0 && !clienteId && <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-2xl border border-white/10 bg-[#1b181b] p-1.5 shadow-2xl">
-          {resultados.map((c) => <button key={c.id} type="button" onClick={() => { setClienteId(c.id); setBusca(c.nome_completo); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-white/5"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose/10 text-rose"><UserRound className="h-3.5 w-3.5" /></span><span className="min-w-0"><span className="block truncate text-xs font-semibold text-pearl">{c.nome_completo}</span><span className="text-[0.62rem] text-pearl/40">CPF {c.cpf}</span></span></button>)}
+        <Input className="pl-10" placeholder="Buscar pelo nome…" value={busca} onChange={(e) => { setBusca(e.target.value); if (!e.target.value.trim()) setClienteId(""); }} />
+        {resultados.length > 0 && !clienteId && <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-30 overflow-hidden rounded-2xl border border-rose/10 bg-[rgb(var(--surface-2))] p-1.5 shadow-card dark:border-white/10 dark:bg-[#1b181b]">
+          {resultados.map((c) => <button key={c.id} type="button" onClick={() => { setClienteId(c.id); setBusca(c.nome_completo); }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-blush/40 dark:hover:bg-white/5"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose/10 text-rose"><UserRound className="h-3.5 w-3.5" /></span><span className="min-w-0"><span className="block truncate text-xs font-semibold text-burgundy dark:text-pearl">{c.nome_completo}</span><span className="text-[0.62rem] text-clay/50 dark:text-pearl/40">Cliente</span></span></button>)}
         </div>}
       </div>
       {clienteId && <div className="mt-3 flex items-center justify-between rounded-xl border border-success/15 bg-success/5 px-3 py-2"><span className="text-xs font-medium text-burgundy">Cliente selecionada: {busca}</span><button type="button" onClick={() => { setClienteId(""); setBusca(""); }} className="text-[0.62rem] text-rose hover:underline">Trocar</button></div>}
