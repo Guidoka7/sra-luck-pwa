@@ -70,7 +70,7 @@ export function SolicitarLiberacaoFinanceira({ ativo = true }: Props) {
   const statusDescricao = recusada
     ? solicitacao?.observacao ?? "Nossa equipe registrou uma observação sobre a solicitação."
     : aprovada
-      ? "No ato da assinatura dos termos, o valor restante deverá ser custeado."
+      ? "O valor restante do seu contrato deverá ser pago no dia da assinatura dos termos."
       : "Sua escolha foi registrada e está em análise pela equipe financeira.";
 
   return <>
