@@ -40,5 +40,22 @@ export async function POST(req: NextRequest) {
     .in("status", ["pendente", "em_analise", "aprovada"])
     .is("agendamento_id", null);
 
+  // Atualiza em tempo real a agenda administrativa de termos e as agendas de clientes.
+  try {
+    await supabase.channel("agenda-clientes").send({
+      type: "broadcast",
+      event: "datas_atualizadas",
+      payload: {
+        acao: "agendamento_confirmado",
+        data: dataAlvo.data,
+        dataId: dataAlvo.id,
+        clienteId: cliente.id,
+        agendamentoId: novoAgendamento.id,
+      },
+    });
+  } catch (erroBroadcast) {
+    console.error("Falha ao publicar atualização do agendamento:", erroBroadcast);
+  }
+
   return NextResponse.json({ ok: true, agendamentoId: novoAgendamento.id, data: dataAlvo.data });
 }
