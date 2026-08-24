@@ -61,10 +61,30 @@ export async function POST(req: NextRequest) {
     ? Math.round((saldoRestante * (1 + taxaCartao / 100)) * 100) / 100
     : saldoRestante;
 
+  const { data: agendamentoAtivo } = await supabase.from("agendamentos")
+    .select("id")
+    .eq("cliente_id", cliente.id)
+    .eq("status", "confirmado")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   const { data: existente } = await supabase.from("solicitacoes_liberacao_financeira")
     .select("id, status, forma_custeio, saldo_restante, taxa_cartao, total_com_taxa, agendamento_id")
     .eq("cliente_id", cliente.id).in("status", ["pendente", "em_analise", "aprovada"]).order("created_at", { ascending: false }).limit(1).maybeSingle();
-  if (existente) return NextResponse.json({ erro: "Sua escolha de custeio já foi enviada para nossa equipe.", solicitacao: existente }, { status: 409 });
+
+  if (existente) {
+    if (!existente.agendamento_id && agendamentoAtivo?.id) {
+      const { data: vinculada, error: erroVinculo } = await supabase.from("solicitacoes_liberacao_financeira")
+        .update({ agendamento_id: agendamentoAtivo.id })
+        .eq("id", existente.id)
+        .select("id, status, forma_custeio, saldo_restante, taxa_cartao, total_com_taxa, agendamento_id")
+        .single();
+      if (erroVinculo) return NextResponse.json({ erro: erroVinculo.message }, { status: 500 });
+      return NextResponse.json({ solicitacao: vinculada });
+    }
+    return NextResponse.json({ erro: "Sua escolha de custeio já foi enviada para nossa equipe.", solicitacao: existente }, { status: 409 });
+  }
 
   const observacao = formaCusteio === "cheques" || formaCusteio === "boleto_100"
     ? "Forma de custeio sujeita a análise de até 5 dias úteis."
@@ -72,6 +92,7 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabase.from("solicitacoes_liberacao_financeira").insert({
     cliente_id: cliente.id,
+    agendamento_id: agendamentoAtivo?.id ?? null,
     forma_custeio: formaCusteio,
     saldo_restante: saldoRestante,
     taxa_cartao: taxaCartao,
@@ -86,7 +107,7 @@ export async function POST(req: NextRequest) {
     acao: "solicitou_liberacao_financeira",
     entidade: "solicitacoes_liberacao_financeira",
     entidade_id: data.id,
-    detalhes: { cliente: cliente.nome_completo, formaCusteio, saldoRestante, taxaCartao, totalComTaxa, observacao },
+    detalhes: { cliente: cliente.nome_completo, formaCusteio, saldoRestante, taxaCartao, totalComTaxa, observacao, agendamentoId: agendamentoAtivo?.id ?? null },
   });
   return NextResponse.json({ solicitacao: data });
 }
