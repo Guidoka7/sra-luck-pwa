@@ -7,16 +7,24 @@ if (!secret) {
   process.exit(1);
 }
 
+async function executarAcao(acao) {
+  const response = await fetch(`${baseUrl}/api/admin/notificacoes/automacao`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-notificacoes-cron-secret': secret },
+    body: JSON.stringify({ acao }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.erro || `HTTP ${response.status}`);
+  return data;
+}
+
 async function executar() {
   try {
-    const response = await fetch(`${baseUrl}/api/admin/notificacoes/automacao`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-notificacoes-cron-secret': secret },
-      body: JSON.stringify({ acao: 'verificar_atrasos' }),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.erro || `HTTP ${response.status}`);
-    console.log(`[notificacoes] ${new Date().toISOString()}`, data);
+    const [atrasos, momentos] = await Promise.all([
+      executarAcao('verificar_atrasos'),
+      executarAcao('verificar_momentos_especiais'),
+    ]);
+    console.log(`[notificacoes] ${new Date().toISOString()}`, { atrasos, momentos });
   } catch (error) {
     console.error('[notificacoes] falha:', error.message);
   }
