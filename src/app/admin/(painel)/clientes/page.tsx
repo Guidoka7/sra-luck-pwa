@@ -9,54 +9,19 @@ import { SkeletonCards } from "@/components/ui/Skeleton";
 import { formatarCpf } from "@/lib/cpf";
 import { formatarMoeda } from "@/lib/utils";
 import { fetchInstant, getInstantCache, refreshInstant } from "@/lib/instantCache";
+import { createClientSupabaseClient } from "@/lib/supabase/client";
 import type { Cliente } from "@/types/database";
 import { ModalClienteCompacto } from "@/components/admin/ModalClienteCompacto";
 
-const statusPagamento = (c: Cliente) => {
-  const p = c.porcentagem_pagamento;
-  if (p == null) return "Sem parcelas";
-  if (p >= 100) return "Quitado";
-  return `${p}% pago`;
-};
-
-function BadgesCiclo({ cliente }: { cliente: Cliente }) {
-  const quitada = Boolean(cliente.custeio_confirmado_em) || cliente.status_financeiro === "pago";
-  const cirurgia = cliente.status_cirurgia === "realizada";
-  const termos = Boolean(cliente.termos_assinados_em);
-  return <div className="mt-1 flex flex-wrap gap-1">
-    {termos && <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5 text-[0.5rem] font-semibold text-success"><CheckCircle2 className="h-2.5 w-2.5" /> Termos assinados</span>}
-    {quitada && <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5 text-[0.5rem] font-semibold text-success"><CheckCircle2 className="h-2.5 w-2.5" /> Quitada</span>}
-    {cirurgia && <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5 text-[0.5rem] font-semibold text-success"><CheckCircle2 className="h-2.5 w-2.5" /> Cirurgia realizada</span>}
-  </div>;
-}
-
-function AgendaClienteCompacta({ cliente }: { cliente: Cliente }) {
-  if (cliente.termos_assinados_em) return <span className="mt-1 flex items-center gap-1 text-[0.52rem] text-success"><CheckCircle2 className="h-2.5 w-2.5" /> Termos assinados</span>;
-  if (!cliente.proximo_agendamento_data) return null;
-  return <span className="mt-1 flex items-center gap-1 text-[0.52rem] text-rose"><CalendarClock className="h-2.5 w-2.5" /> Termos: {cliente.proximo_agendamento_data.split("-").reverse().join("/")}{cliente.proximo_agendamento_horario ? ` · ${cliente.proximo_agendamento_horario}` : ""}</span>;
-}
+const statusPagamento = (c: Cliente) => { const p = c.porcentagem_pagamento; if (p == null) return "Sem parcelas"; if (p >= 100) return "Quitado"; return `${p}% pago`; };
+function BadgesCiclo({ cliente }: { cliente: Cliente }) { const quitada = Boolean(cliente.custeio_confirmado_em) || cliente.status_financeiro === "pago"; const cirurgia = cliente.status_cirurgia === "realizada"; const termos = Boolean(cliente.termos_assinados_em); return <div className="mt-1 flex flex-wrap gap-1">{termos && <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5 text-[0.5rem] font-semibold text-success"><CheckCircle2 className="h-2.5 w-2.5" /> Termos assinados</span>}{quitada && <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5 text-[0.5rem] font-semibold text-success"><CheckCircle2 className="h-2.5 w-2.5" /> Quitada</span>}{cirurgia && <span className="inline-flex items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5 text-[0.5rem] font-semibold text-success"><CheckCircle2 className="h-2.5 w-2.5" /> Cirurgia realizada</span>}</div>; }
+function AgendaClienteCompacta({ cliente }: { cliente: Cliente }) { if (cliente.termos_assinados_em) return <span className="mt-1 flex items-center gap-1 text-[0.52rem] text-success"><CheckCircle2 className="h-2.5 w-2.5" /> Termos assinados</span>; if (!cliente.proximo_agendamento_data) return null; return <span className="mt-1 flex items-center gap-1 text-[0.52rem] text-rose"><CalendarClock className="h-2.5 w-2.5" /> Termos: {cliente.proximo_agendamento_data.split("-").reverse().join("/")}{cliente.proximo_agendamento_horario ? ` · ${cliente.proximo_agendamento_horario}` : ""}</span>; }
 
 export default function ClientesPage() {
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [carregando, setCarregando] = useState(true);
-  const [erro, setErro] = useState<string | null>(null);
-  const [busca, setBusca] = useState("");
-  const [visualizacao, setVisualizacao] = useState<"lista" | "cards">("lista");
-  const [modal, setModal] = useState<Cliente | null | false>(false);
-
-  async function carregar(force = false) {
-    const url = "/api/admin/clientes";
-    const cached = !force ? getInstantCache<{ clientes?: Cliente[] }>(url) : null;
-    if (cached) { setClientes(cached.clientes ?? []); setCarregando(false); } else setCarregando(true);
-    setErro(null);
-    try { const data = force ? await refreshInstant<{ clientes?: Cliente[] }>(url) : await fetchInstant<{ clientes?: Cliente[] }>(url); setClientes(data.clientes ?? []); }
-    catch (e: any) { if (!cached) { setErro(e?.message ?? "Falha ao carregar clientes."); setClientes([]); } }
-    finally { setCarregando(false); }
-  }
-
-  useEffect(() => { carregar(); const intervalo=setInterval(()=>carregar(true),30000); return ()=>clearInterval(intervalo); }, []);
-  const filtradas = useMemo(() => { const termo = busca.trim().toLowerCase(); if (!termo) return clientes; return clientes.filter((c) => c.nome_completo.toLowerCase().includes(termo)); }, [clientes, busca]);
-  const fecharESalvar = () => { setModal(false); carregar(true); };
+  const [clientes, setClientes] = useState<Cliente[]>([]); const [carregando, setCarregando] = useState(true); const [erro, setErro] = useState<string | null>(null); const [busca, setBusca] = useState(""); const [visualizacao, setVisualizacao] = useState<"lista" | "cards">("lista"); const [modal, setModal] = useState<Cliente | null | false>(false);
+  async function carregar(force = false) { const url = "/api/admin/clientes"; const cached = !force ? getInstantCache<{ clientes?: Cliente[] }>(url) : null; if (cached) { setClientes(cached.clientes ?? []); setCarregando(false); } else setCarregando(true); setErro(null); try { const data = force ? await refreshInstant<{ clientes?: Cliente[] }>(url) : await fetchInstant<{ clientes?: Cliente[] }>(url); setClientes(data.clientes ?? []); } catch (e: any) { if (!cached) { setErro(e?.message ?? "Falha ao carregar clientes."); setClientes([]); } } finally { setCarregando(false); } }
+  useEffect(() => { carregar(); const intervalo=setInterval(()=>carregar(true),30000); const supabase=createClientSupabaseClient(); const canal=supabase.channel("agenda-clientes-lista").on("broadcast",{event:"datas_atualizadas"},()=>carregar(true)).subscribe(); return ()=>{clearInterval(intervalo);supabase.removeChannel(canal);}; }, []);
+  const filtradas = useMemo(() => { const termo = busca.trim().toLowerCase(); if (!termo) return clientes; return clientes.filter((c) => c.nome_completo.toLowerCase().includes(termo)); }, [clientes, busca]); const fecharESalvar = () => { setModal(false); carregar(true); };
 
   return <div className="space-y-5 pb-8">
     <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-rose">Gestão</p><h1 className="mt-1 text-2xl font-semibold text-burgundy sm:text-3xl">Clientes</h1><p className="mt-1 text-sm text-clay/50">Perfil, crédito, parcelas e andamento dos termos em um único espaço.</p></div><Button onClick={() => setModal(null)}><Plus className="h-4 w-4" /> Nova cliente</Button></div>
