@@ -63,8 +63,18 @@ export function CalendarioAgendamento({ datas, onConfirmar, confirmando, bloquea
   }
 
   return <div className="relative min-w-0">
-    {statusRevisao === "aprovada" && <section className="mb-4 overflow-hidden rounded-2xl border border-success/15 bg-success/[0.045] shadow-[0_14px_40px_-28px_rgba(0,0,0,.35)]">
-      <div className="flex flex-wrap items-center gap-3 px-3.5 py-3.5 sm:px-4"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success"><CheckCircle2 className="h-4 w-4" /></span><div className="min-w-0 flex-1"><p className="text-[0.6rem] font-semibold uppercase tracking-[0.16em] text-success">Financeiro confirmado</p><h3 className="mt-0.5 font-heading text-base font-semibold text-burgundy sm:text-lg">Sua agenda foi liberada</h3><p className="mt-0.5 text-[0.68rem] leading-4 text-clay/55">Escolha a data dos termos e, em seguida, informe como será realizado o custeio do saldo restante.</p></div><button type="button" onClick={abrirCusteio} disabled={carregandoFinanceiro || solicitacaoEnviada} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-burgundy px-3.5 py-2.5 text-[0.62rem] font-bold uppercase tracking-[0.12em] text-cream shadow-card transition hover:bg-burgundy-dark disabled:cursor-not-allowed disabled:opacity-55"><CreditCard className="h-3.5 w-3.5" />{solicitacaoEnviada ? "Custeio enviado" : "Ver liberação financeira"}</button></div>
+    {statusRevisao === "aprovada" && <section className="mb-3 overflow-hidden rounded-xl border border-success/15 bg-success/[0.04]">
+      <div className="flex items-center gap-2.5 px-2.5 py-2.5 sm:px-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success"><CheckCircle2 className="h-4 w-4" /></span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[0.52rem] font-bold uppercase tracking-[0.14em] text-success">Financeiro confirmado</p>
+          <h3 className="mt-0.5 font-heading text-sm font-semibold leading-tight text-burgundy">Sua agenda foi liberada</h3>
+          <p className="mt-0.5 text-[0.6rem] leading-[1.35] text-clay/55">Escolha a data dos termos e, em seguida, informe como será realizado o custeio do saldo restante.</p>
+        </div>
+        <button type="button" onClick={abrirCusteio} disabled={carregandoFinanceiro || solicitacaoEnviada} className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-burgundy px-2.5 py-2 text-[0.52rem] font-bold uppercase tracking-[0.08em] text-cream transition hover:bg-burgundy-dark disabled:cursor-not-allowed disabled:opacity-55">
+          <CreditCard className="h-3 w-3" />{solicitacaoEnviada ? "Custeio enviado" : "Ver liberação"}
+        </button>
+      </div>
     </section>}
 
     <div className={cn("min-w-0", bloqueado && "pointer-events-none select-none blur-[2px]")}>
