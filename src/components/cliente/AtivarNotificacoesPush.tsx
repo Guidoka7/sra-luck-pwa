@@ -4,6 +4,20 @@ import { useEffect, useState } from "react";
 import { Bell, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 
+const DISMISS_KEY = "sra-luck-push-prompt-dismissed-date";
+
+function hoje() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function foiDispensadoHoje() {
+  try {
+    return localStorage.getItem(DISMISS_KEY) === hoje();
+  } catch {
+    return false;
+  }
+}
+
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -92,15 +106,19 @@ export function AtivarNotificacoesPush() {
       if (cancelado) return;
       if (Notification.permission === "denied") {
         setBloqueado(true);
-        setVisivel(true);
+        // Se estiver bloqueado, o navegador não permite pedir a permissão de
+        // novo. Ainda mostramos o aviso uma vez por dia para orientar a cliente.
+        if (!foiDispensadoHoje()) setVisivel(true);
         return;
       }
 
-      const dispensado = sessionStorage.getItem("sra-luck-push-prompt-dismissed");
-      if (!dispensado) setVisivel(true);
+      // Não usamos sessionStorage: o lembrete é controlado por data e volta
+      // automaticamente no próximo dia caso a cliente ainda não tenha ativado.
+      if (!foiDispensadoHoje()) setVisivel(true);
     }
 
-    verificarAssinatura();
+    // Executa assim que o componente entra na tela, sem esperar uma nova navegação.
+    void verificarAssinatura();
     return () => {
       cancelado = true;
     };
@@ -121,6 +139,8 @@ export function AtivarNotificacoesPush() {
 
     setAtivando(true);
     try {
+      // A chamada fica dentro do clique da cliente porque os navegadores
+      // bloqueiam requestPermission() automático fora de uma interação do usuário.
       const permission = await Notification.requestPermission();
 
       if (permission !== "granted") {
@@ -160,10 +180,17 @@ export function AtivarNotificacoesPush() {
     }
   }
 
+  function dispensar() {
+    try {
+      localStorage.setItem(DISMISS_KEY, hoje());
+    } catch {}
+    setVisivel(false);
+  }
+
   if (ativo || !visivel) return null;
 
   return (
-    <div className="mb-4 rounded-2xl border border-burgundy/10 bg-white/85 p-4 shadow-card dark:border-white/10 dark:bg-white/[0.055]">
+    <div className="mb-4 rounded-2xl border border-burgundy/10 bg-white/95 p-4 shadow-card dark:border-white/10 dark:bg-white/[0.055]">
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blush text-burgundy dark:bg-white/10 dark:text-[#F4D9DC]"><Bell className="h-5 w-5" /></div>
         <div className="min-w-0 flex-1">
@@ -175,12 +202,17 @@ export function AtivarNotificacoesPush() {
               ? "O navegador está impedindo as notificações deste site. Permita as notificações nas configurações do navegador e depois tente novamente."
               : "Ative as notificações para receber mensagens da Sra. Luck mesmo com o app fechado."}
           </p>
-          <button type="button" onClick={ativar} disabled={ativando || bloqueado} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-burgundy px-3.5 py-2 text-xs font-semibold text-pearl disabled:opacity-60">
-            {ativando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
-            {ativando ? "Ativando..." : bloqueado ? "Permitir nas configurações" : "Permitir notificações"}
-          </button>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" onClick={ativar} disabled={ativando || bloqueado} className="inline-flex items-center gap-2 rounded-xl bg-burgundy px-3.5 py-2 text-xs font-semibold text-pearl disabled:opacity-60">
+              {ativando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
+              {ativando ? "Ativando..." : bloqueado ? "Permitir nas configurações" : "Permitir notificações"}
+            </button>
+            <button type="button" onClick={dispensar} className="inline-flex items-center gap-2 rounded-xl border border-burgundy/10 px-3.5 py-2 text-xs font-semibold text-burgundy dark:border-white/10 dark:text-pearl">
+              Agora não
+            </button>
+          </div>
         </div>
-        <button type="button" aria-label="Dispensar" onClick={() => { sessionStorage.setItem("sra-luck-push-prompt-dismissed", "1"); setVisivel(false); }} className="flex h-8 w-8 items-center justify-center rounded-full text-clay/40 hover:bg-blush dark:hover:bg-white/10"><X className="h-4 w-4" /></button>
+        <button type="button" aria-label="Não ativar agora" onClick={dispensar} className="flex h-8 w-8 items-center justify-center rounded-full text-clay/40 hover:bg-blush dark:hover:bg-white/10"><X className="h-4 w-4" /></button>
       </div>
     </div>
   );
