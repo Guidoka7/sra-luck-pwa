@@ -44,7 +44,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="pt-BR" className={`${display.variable} ${sans.variable} ${script.variable} ${heading.variable}`}>
       <head>
         <meta name="mobile-web-app-capable" content="yes" />
-        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var s=localStorage.getItem("sra-luck-theme");document.documentElement.classList.toggle("dark",s==="dark")}catch(e){}})()` }} />
+        <script dangerouslySetInnerHTML={{ __html: `(function(){
+          try {
+            var s=localStorage.getItem("sra-luck-theme");
+            document.documentElement.classList.toggle("dark",s==="dark");
+          } catch(e) {}
+          window.__sraLuckBeforeInstallPrompt = window.__sraLuckBeforeInstallPrompt || null;
+          window.addEventListener("beforeinstallprompt", function(event){
+            event.preventDefault();
+            window.__sraLuckBeforeInstallPrompt = event;
+            window.dispatchEvent(new Event("sra-luck-pwa-ready"));
+          });
+          if (location.pathname.indexOf("/agenda") === 0 && "serviceWorker" in navigator) {
+            navigator.serviceWorker.register("/simulador-iphone-sw.js", {scope:"/agenda", updateViaCache:"none"})
+              .then(function(reg){ return reg.update().catch(function(){}); })
+              .catch(function(){});
+          }
+        })()` }} />
       </head>
       <body className="bg-cream text-clay font-sans antialiased selection:bg-burgundy selection:text-pearl overflow-y-auto touch-pan-y">
         <ThemeProvider>
