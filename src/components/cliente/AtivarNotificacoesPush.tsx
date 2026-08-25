@@ -44,10 +44,12 @@ export function AtivarNotificacoesPush() {
   const [visivel, setVisivel] = useState(false);
   const [ativando, setAtivando] = useState(false);
   const [ativo, setAtivo] = useState(false);
+  const [bloqueado, setBloqueado] = useState(false);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return;
     let cancelado = false;
+
     async function sincronizarAssinaturaPendente() {
       try {
         const raw = localStorage.getItem("sra-luck-pending-push-subscription");
@@ -55,7 +57,11 @@ export function AtivarNotificacoesPush() {
         const subscription = JSON.parse(raw);
         if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) return false;
         const deviceKey = obterDeviceKey();
-        const response = await fetch("/api/cliente/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription, deviceKey }) });
+        const response = await fetch("/api/cliente/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subscription, deviceKey }),
+        });
         if (response.ok) {
           localStorage.removeItem("sra-luck-pending-push-subscription");
           if (!cancelado) setAtivo(true);
@@ -68,6 +74,7 @@ export function AtivarNotificacoesPush() {
 
     async function verificarAssinatura() {
       if (await sincronizarAssinaturaPendente()) return;
+
       if (Notification.permission === "granted") {
         try {
           const reg = await navigator.serviceWorker.ready;
@@ -79,14 +86,24 @@ export function AtivarNotificacoesPush() {
           }
         } catch {}
       }
+
       await atualizarTelemetria(false);
-      if (!cancelado && Notification.permission !== "denied") {
-        const dispensado = sessionStorage.getItem("sra-luck-push-prompt-dismissed");
-        if (!dispensado) setVisivel(true);
+
+      if (cancelado) return;
+      if (Notification.permission === "denied") {
+        setBloqueado(true);
+        setVisivel(true);
+        return;
       }
+
+      const dispensado = sessionStorage.getItem("sra-luck-push-prompt-dismissed");
+      if (!dispensado) setVisivel(true);
     }
+
     verificarAssinatura();
-    return () => { cancelado = true; };
+    return () => {
+      cancelado = true;
+    };
   }, []);
 
   async function ativar() {
@@ -94,25 +111,47 @@ export function AtivarNotificacoesPush() {
       toast.error("Para receber notificações do sistema, abra o app em HTTPS ou como PWA instalado.");
       return;
     }
+
+    if (Notification.permission === "denied") {
+      setBloqueado(true);
+      setVisivel(true);
+      toast.error("O navegador bloqueou as notificações. É necessário permitir este site nas configurações do navegador.");
+      return;
+    }
+
     setAtivando(true);
     try {
       const permission = await Notification.requestPermission();
+
       if (permission !== "granted") {
         await atualizarTelemetria(false);
-        toast.error("As notificações foram bloqueadas. Você pode permitir novamente nas configurações do navegador.");
+        setBloqueado(permission === "denied");
+        setVisivel(true);
+        if (permission === "denied") {
+          toast.error("O navegador bloqueou as notificações. Permita este site nas configurações do navegador e tente novamente.");
+        }
         return;
       }
+
       const reg = await navigator.serviceWorker.ready;
       const keyRes = await fetch("/api/cliente/push/vapid", { cache: "no-store" });
       if (!keyRes.ok) throw new Error("Servidor de notificações não configurado.");
       const { publicKey } = await keyRes.json();
-      const subscription = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+      const subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
       const deviceKey = obterDeviceKey();
-      const saveRes = await fetch("/api/cliente/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: subscription.toJSON(), deviceKey }) });
+      const saveRes = await fetch("/api/cliente/push/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscription: subscription.toJSON(), deviceKey }),
+      });
       if (!saveRes.ok) throw new Error("Não foi possível registrar este celular.");
       await atualizarTelemetria(true);
       setAtivo(true);
       setVisivel(false);
+      setBloqueado(false);
       toast.success("🔔 Notificações ativadas neste celular.");
     } catch (error: any) {
       toast.error(error?.message ?? "Não foi possível ativar as notificações.");
@@ -128,9 +167,18 @@ export function AtivarNotificacoesPush() {
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blush text-burgundy dark:bg-white/10 dark:text-[#F4D9DC]"><Bell className="h-5 w-5" /></div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-burgundy dark:text-pearl">Receba avisos no celular</p>
-          <p className="mt-0.5 text-xs leading-relaxed text-clay/60 dark:text-pearl/55">Ative as notificações para receber mensagens da Sra. Luck mesmo com o app fechado.</p>
-          <button type="button" onClick={ativar} disabled={ativando} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-burgundy px-3.5 py-2 text-xs font-semibold text-pearl disabled:opacity-60">{ativando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}{ativando ? "Ativando..." : "Permitir notificações"}</button>
+          <p className="text-sm font-semibold text-burgundy dark:text-pearl">
+            {bloqueado ? "Notificações bloqueadas" : "Receba avisos no celular"}
+          </p>
+          <p className="mt-0.5 text-xs leading-relaxed text-clay/60 dark:text-pearl/55">
+            {bloqueado
+              ? "O navegador está impedindo as notificações deste site. Permita as notificações nas configurações do navegador e depois tente novamente."
+              : "Ative as notificações para receber mensagens da Sra. Luck mesmo com o app fechado."}
+          </p>
+          <button type="button" onClick={ativar} disabled={ativando || bloqueado} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-burgundy px-3.5 py-2 text-xs font-semibold text-pearl disabled:opacity-60">
+            {ativando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
+            {ativando ? "Ativando..." : bloqueado ? "Permitir nas configurações" : "Permitir notificações"}
+          </button>
         </div>
         <button type="button" aria-label="Dispensar" onClick={() => { sessionStorage.setItem("sra-luck-push-prompt-dismissed", "1"); setVisivel(false); }} className="flex h-8 w-8 items-center justify-center rounded-full text-clay/40 hover:bg-blush dark:hover:bg-white/10"><X className="h-4 w-4" /></button>
       </div>
