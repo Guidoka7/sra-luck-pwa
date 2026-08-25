@@ -10,9 +10,11 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 const DISMISS_KEY = "sra-luck-pwa-install-dismissed-date";
+const GLOBAL_EVENT_KEY = "__sraLuckBeforeInstallPrompt";
+type WindowWithInstallEvent = Window & { [GLOBAL_EVENT_KEY]?: BeforeInstallPromptEvent | null };
 
 function hoje() {
-  return new Date().toISOString().slice(0, 10);
+  return new Date().toLocaleDateString("sv-SE");
 }
 
 function isStandalone() {
@@ -60,6 +62,7 @@ export function PwaInstallPrompt() {
   const [visivel, setVisivel] = useState(false);
   const [instalando, setInstalando] = useState(false);
   const [ios, setIos] = useState(false);
+  const [preparando, setPreparando] = useState(false);
 
   useEffect(() => {
     if (isStandalone()) return;
@@ -71,15 +74,29 @@ export function PwaInstallPrompt() {
       if (!isStandalone() && !foiDispensadoHoje()) setVisivel(true);
     };
 
-    const onBeforeInstall = (event: Event) => {
+    const receberEvento = (event: BeforeInstallPromptEvent) => {
       event.preventDefault();
-      const installEvent = event as BeforeInstallPromptEvent;
-      setEvento(installEvent);
+      (window as WindowWithInstallEvent)[GLOBAL_EVENT_KEY] = event;
+      setEvento(event);
+      setPreparando(false);
       mostrarSeNecessario();
     };
 
+    const onBeforeInstall = (event: Event) => receberEvento(event as BeforeInstallPromptEvent);
+
+    const recuperarEvento = () => {
+      const existente = (window as WindowWithInstallEvent)[GLOBAL_EVENT_KEY] ?? null;
+      if (existente) {
+        setEvento(existente);
+        setPreparando(false);
+        mostrarSeNecessario();
+      }
+    };
+
     const onInstalled = () => {
+      (window as WindowWithInstallEvent)[GLOBAL_EVENT_KEY] = null;
       setEvento(null);
+      setPreparando(false);
       setVisivel(false);
       registrarInstalacao();
       toast.success("Aplicativo instalado. Agora ele abre como um app.");
@@ -87,15 +104,28 @@ export function PwaInstallPrompt() {
 
     window.addEventListener("beforeinstallprompt", onBeforeInstall);
     window.addEventListener("appinstalled", onInstalled);
+    window.addEventListener("pageshow", recuperarEvento);
+    document.addEventListener("visibilitychange", recuperarEvento);
 
-    // O aviso visual aparece imediatamente ao entrar. O prompt nativo só pode
-    // ser aberto pelo navegador quando beforeinstallprompt estiver disponível.
-    const timer = window.setTimeout(mostrarSeNecessario, 0);
+    // O cartão aparece imediatamente. Em alguns aparelhos o navegador demora
+    // alguns instantes para disponibilizar beforeinstallprompt, então fazemos
+    // pequenas tentativas de recuperação sem exigir que a cliente recarregue.
+    mostrarSeNecessario();
+    recuperarEvento();
+    const interval = window.setInterval(recuperarEvento, 500);
+    const timeout = window.setTimeout(() => window.clearInterval(interval), 15000);
+
+    if (!iosDevice && !(window as WindowWithInstallEvent)[GLOBAL_EVENT_KEY]) {
+      setPreparando(true);
+    }
 
     return () => {
-      window.clearTimeout(timer);
+      window.clearInterval(interval);
+      window.clearTimeout(timeout);
       window.removeEventListener("beforeinstallprompt", onBeforeInstall);
       window.removeEventListener("appinstalled", onInstalled);
+      window.removeEventListener("pageshow", recuperarEvento);
+      document.removeEventListener("visibilitychange", recuperarEvento);
     };
   }, []);
 
@@ -104,18 +134,25 @@ export function PwaInstallPrompt() {
       toast.info("No iPhone, toque em Compartilhar e depois em 'Adicionar à Tela de Início'.");
       return;
     }
-    if (!evento) {
-      toast.info("A instalação ainda está sendo preparada pelo navegador. Aguarde um instante e tente novamente.");
+
+    const eventoAtual = evento ?? (window as WindowWithInstallEvent)[GLOBAL_EVENT_KEY] ?? null;
+    if (!eventoAtual) {
+      setPreparando(true);
+      toast.info("O navegador ainda está preparando a instalação. Aguarde alguns segundos e tente novamente.");
       return;
     }
 
     setInstalando(true);
+    setPreparando(false);
     try {
-      await evento.prompt();
-      const escolha = await evento.userChoice;
+      await eventoAtual.prompt();
+      const escolha = await eventoAtual.userChoice;
       if (escolha.outcome === "accepted") {
         setVisivel(false);
+      } else {
+        setVisivel(false);
       }
+      (window as WindowWithInstallEvent)[GLOBAL_EVENT_KEY] = null;
       setEvento(null);
     } catch {
       toast.error("O navegador não conseguiu abrir a instalação agora. Tente novamente.");
@@ -145,10 +182,9 @@ export function PwaInstallPrompt() {
               {instalando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
               {ios ? "Como instalar" : instalando ? "Abrindo instalação..." : "Instalar aplicativo"}
             </button>
-            <button type="button" onClick={dispensar} className="inline-flex items-center gap-2 rounded-xl border border-burgundy/10 px-3.5 py-2 text-xs font-semibold text-burgundy dark:border-white/10 dark:text-pearl">
-              Agora não
-            </button>
+            <button type="button" onClick={dispensar} className="inline-flex items-center gap-2 rounded-xl border border-burgundy/10 px-3.5 py-2 text-xs font-semibold text-burgundy dark:border-white/10 dark:text-pearl">Agora não</button>
           </div>
+          {!ios && preparand o && <p className="mt-2 text-[0.68rem] text-clay/50 dark:text-pearl/45">Preparando a instalação pelo navegador…</p>}
         </div>
         <button type="button" aria-label="Não instalar agora" onClick={dispensar} className="flex h-8 w-8 items-center justify-center rounded-full text-clay/40 hover:bg-blush dark:hover:bg-white/10"><X className="h-4 w-4" /></button>
       </div>
