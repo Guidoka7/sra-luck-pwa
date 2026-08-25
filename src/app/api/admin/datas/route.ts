@@ -3,6 +3,8 @@ import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/s
 
 const CANAL_AGENDA_CLIENTES = "agenda-clientes";
 
+type StatusCanal = "SUBSCRIBED" | "CHANNEL_ERROR" | "TIMED_OUT" | "CLOSED" | string;
+
 async function publicarAtualizacaoAgenda(payload: Record<string, unknown>) {
   const serviceClient = createServiceSupabaseClient();
   const canal = serviceClient.channel(CANAL_AGENDA_CLIENTES);
@@ -15,7 +17,7 @@ async function publicarAtualizacaoAgenda(payload: Record<string, unknown>) {
         resolve();
       };
       const timeout = setTimeout(finalizar, 3000);
-      canal.subscribe(async (status) => {
+      canal.subscribe(async (status: StatusCanal) => {
         if (status === "SUBSCRIBED") {
           try {
             await canal.send({
