@@ -13,9 +13,7 @@ const DISMISS_KEY = "sra-luck-pwa-install-dismissed-date";
 const GLOBAL_EVENT_KEY = "__sraLuckBeforeInstallPrompt";
 type WindowWithInstallEvent = Window & { [GLOBAL_EVENT_KEY]?: BeforeInstallPromptEvent | null };
 
-function hoje() {
-  return new Date().toLocaleDateString("sv-SE");
-}
+function hoje() { return new Date().toLocaleDateString("sv-SE"); }
 
 function isStandalone() {
   if (typeof window === "undefined") return false;
@@ -30,11 +28,7 @@ function isIOS() {
 }
 
 function foiDispensadoHoje() {
-  try {
-    return localStorage.getItem(DISMISS_KEY) === hoje();
-  } catch {
-    return false;
-  }
+  try { return localStorage.getItem(DISMISS_KEY) === hoje(); } catch { return false; }
 }
 
 function registrarInstalacao() {
@@ -66,7 +60,6 @@ export function PwaInstallPrompt() {
 
   useEffect(() => {
     if (isStandalone()) return;
-
     const iosDevice = isIOS();
     setIos(iosDevice);
 
@@ -81,8 +74,6 @@ export function PwaInstallPrompt() {
       setPreparando(false);
       mostrarSeNecessario();
     };
-
-    const onBeforeInstall = (event: Event) => receberEvento(event as BeforeInstallPromptEvent);
 
     const recuperarEvento = () => {
       const existente = (window as WindowWithInstallEvent)[GLOBAL_EVENT_KEY] ?? null;
@@ -102,27 +93,22 @@ export function PwaInstallPrompt() {
       toast.success("Aplicativo instalado. Agora ele abre como um app.");
     };
 
-    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    window.addEventListener("beforeinstallprompt", receberEvento as EventListener);
     window.addEventListener("appinstalled", onInstalled);
     window.addEventListener("pageshow", recuperarEvento);
     document.addEventListener("visibilitychange", recuperarEvento);
 
-    // O cartão aparece imediatamente. Em alguns aparelhos o navegador demora
-    // alguns instantes para disponibilizar beforeinstallprompt, então fazemos
-    // pequenas tentativas de recuperação sem exigir que a cliente recarregue.
     mostrarSeNecessario();
     recuperarEvento();
     const interval = window.setInterval(recuperarEvento, 500);
     const timeout = window.setTimeout(() => window.clearInterval(interval), 15000);
 
-    if (!iosDevice && !(window as WindowWithInstallEvent)[GLOBAL_EVENT_KEY]) {
-      setPreparando(true);
-    }
+    if (!iosDevice && !(window as WindowWithInstallEvent)[GLOBAL_EVENT_KEY]) setPreparando(true);
 
     return () => {
       window.clearInterval(interval);
       window.clearTimeout(timeout);
-      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      window.removeEventListener("beforeinstallprompt", receberEvento as EventListener);
       window.removeEventListener("appinstalled", onInstalled);
       window.removeEventListener("pageshow", recuperarEvento);
       document.removeEventListener("visibilitychange", recuperarEvento);
@@ -146,12 +132,8 @@ export function PwaInstallPrompt() {
     setPreparando(false);
     try {
       await eventoAtual.prompt();
-      const escolha = await eventoAtual.userChoice;
-      if (escolha.outcome === "accepted") {
-        setVisivel(false);
-      } else {
-        setVisivel(false);
-      }
+      await eventoAtual.userChoice;
+      setVisivel(false);
       (window as WindowWithInstallEvent)[GLOBAL_EVENT_KEY] = null;
       setEvento(null);
     } catch {
@@ -162,9 +144,7 @@ export function PwaInstallPrompt() {
   }
 
   function dispensar() {
-    try {
-      localStorage.setItem(DISMISS_KEY, hoje());
-    } catch {}
+    try { localStorage.setItem(DISMISS_KEY, hoje()); } catch {}
     setVisivel(false);
   }
 
@@ -184,7 +164,7 @@ export function PwaInstallPrompt() {
             </button>
             <button type="button" onClick={dispensar} className="inline-flex items-center gap-2 rounded-xl border border-burgundy/10 px-3.5 py-2 text-xs font-semibold text-burgundy dark:border-white/10 dark:text-pearl">Agora não</button>
           </div>
-          {!ios && preparand o && <p className="mt-2 text-[0.68rem] text-clay/50 dark:text-pearl/45">Preparando a instalação pelo navegador…</p>}
+          {!ios && preparando && <p className="mt-2 text-[0.68rem] text-clay/50 dark:text-pearl/45">Preparando a instalação pelo navegador…</p>}
         </div>
         <button type="button" aria-label="Não instalar agora" onClick={dispensar} className="flex h-8 w-8 items-center justify-center rounded-full text-clay/40 hover:bg-blush dark:hover:bg-white/10"><X className="h-4 w-4" /></button>
       </div>
