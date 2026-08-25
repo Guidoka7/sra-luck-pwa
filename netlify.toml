@@ -5,9 +5,8 @@
 [build.environment]
   NODE_VERSION = "22"
 
-# Next.js 14+ usa o runtime OpenNext/Next.js da Netlify automaticamente.
-# Não fixamos @netlify/plugin-nextjs aqui para permitir que a Netlify
-# mantenha o adapter atualizado e compatível com a versão do Next.js.
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
 
 [[headers]]
   for = "/simulador-iphone-sw.js"
