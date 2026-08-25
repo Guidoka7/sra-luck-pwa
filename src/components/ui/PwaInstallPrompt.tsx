@@ -56,7 +56,6 @@ export function PwaInstallPrompt() {
   const [visivel, setVisivel] = useState(false);
   const [instalando, setInstalando] = useState(false);
   const [ios, setIos] = useState(false);
-  const [preparando, setPreparando] = useState(false);
 
   useEffect(() => {
     if (isStandalone()) return;
@@ -67,48 +66,48 @@ export function PwaInstallPrompt() {
       if (!isStandalone() && !foiDispensadoHoje()) setVisivel(true);
     };
 
-    const receberEvento = (event: BeforeInstallPromptEvent) => {
-      event.preventDefault();
-      (window as WindowWithInstallEvent)[GLOBAL_EVENT_KEY] = event;
-      setEvento(event);
-      setPreparando(false);
-      mostrarSeNecessario();
-    };
-
     const recuperarEvento = () => {
       const existente = (window as WindowWithInstallEvent)[GLOBAL_EVENT_KEY] ?? null;
       if (existente) {
         setEvento(existente);
-        setPreparando(false);
         mostrarSeNecessario();
       }
+    };
+
+    const receberEvento = (event: Event) => {
+      const installEvent = event as BeforeInstallPromptEvent;
+      (window as WindowWithInstallEvent)[GLOBAL_EVENT_KEY] = installEvent;
+      setEvento(installEvent);
+      mostrarSeNecessario();
     };
 
     const onInstalled = () => {
       (window as WindowWithInstallEvent)[GLOBAL_EVENT_KEY] = null;
       setEvento(null);
-      setPreparando(false);
       setVisivel(false);
       registrarInstalacao();
       toast.success("Aplicativo instalado. Agora ele abre como um app.");
     };
 
-    window.addEventListener("beforeinstallprompt", receberEvento as EventListener);
+    window.addEventListener("beforeinstallprompt", receberEvento);
+    window.addEventListener("sra-luck-pwa-ready", recuperarEvento);
     window.addEventListener("appinstalled", onInstalled);
     window.addEventListener("pageshow", recuperarEvento);
     document.addEventListener("visibilitychange", recuperarEvento);
 
     mostrarSeNecessario();
     recuperarEvento();
+
+    // Se o navegador disponibilizar o instalador alguns instantes depois da
+    // primeira pintura, recuperamos o evento sem exigir recarregar a página.
     const interval = window.setInterval(recuperarEvento, 500);
     const timeout = window.setTimeout(() => window.clearInterval(interval), 15000);
-
-    if (!iosDevice && !(window as WindowWithInstallEvent)[GLOBAL_EVENT_KEY]) setPreparando(true);
 
     return () => {
       window.clearInterval(interval);
       window.clearTimeout(timeout);
-      window.removeEventListener("beforeinstallprompt", receberEvento as EventListener);
+      window.removeEventListener("beforeinstallprompt", receberEvento);
+      window.removeEventListener("sra-luck-pwa-ready", recuperarEvento);
       window.removeEventListener("appinstalled", onInstalled);
       window.removeEventListener("pageshow", recuperarEvento);
       document.removeEventListener("visibilitychange", recuperarEvento);
@@ -123,13 +122,11 @@ export function PwaInstallPrompt() {
 
     const eventoAtual = evento ?? (window as WindowWithInstallEvent)[GLOBAL_EVENT_KEY] ?? null;
     if (!eventoAtual) {
-      setPreparando(true);
-      toast.info("O navegador ainda está preparando a instalação. Aguarde alguns segundos e tente novamente.");
+      toast.error("O navegador não disponibilizou a instalação deste PWA. Recarregue a página uma vez e tente novamente.");
       return;
     }
 
     setInstalando(true);
-    setPreparando(false);
     try {
       await eventoAtual.prompt();
       await eventoAtual.userChoice;
@@ -164,7 +161,6 @@ export function PwaInstallPrompt() {
             </button>
             <button type="button" onClick={dispensar} className="inline-flex items-center gap-2 rounded-xl border border-burgundy/10 px-3.5 py-2 text-xs font-semibold text-burgundy dark:border-white/10 dark:text-pearl">Agora não</button>
           </div>
-          {!ios && preparando && <p className="mt-2 text-[0.68rem] text-clay/50 dark:text-pearl/45">Preparando a instalação pelo navegador…</p>}
         </div>
         <button type="button" aria-label="Não instalar agora" onClick={dispensar} className="flex h-8 w-8 items-center justify-center rounded-full text-clay/40 hover:bg-blush dark:hover:bg-white/10"><X className="h-4 w-4" /></button>
       </div>
