@@ -16,6 +16,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const { data: boleto } = await supabase.from("boletos").select("id, cliente_id, numero_parcela, status, comprovante_url").eq("id", boletoId).single();
   if (!boleto || boleto.cliente_id !== sessao.clienteId) return NextResponse.json({ erro: "Boleto não encontrado." }, { status: 404 });
 
+  const { data: clienteAntes } = await supabase.from("clientes").select("status_revisao_financeira").eq("id", sessao.clienteId).single();
+
   let formData: FormData;
   try { formData = await req.formData(); } catch { return NextResponse.json({ erro: "Requisição inválida." }, { status: 400 }); }
   const arquivo = formData.get("arquivo") as File | null;
@@ -36,6 +38,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   if (boleto.comprovante_url && boleto.comprovante_url !== caminho) {
     await supabase.storage.from(BUCKET).remove([boleto.comprovante_url]);
+  }
+
+  // Se a revisão anterior foi recusada, o novo comprovante precisa passar
+  // novamente pelo levantamento antes que a agenda de termos seja liberada.
+  if (clienteAntes?.status_revisao_financeira === "recusada") {
+    const { data: podeAgendar } = await supabase.rpc("pode_agendar", { p_cliente_id: sessao.clienteId });
+    if (Boolean(podeAgendar)) {
+      await supabase.from("clientes").update({
+        status_revisao_financeira: "pendente",
+        data_atingiu_percentual: new Date().toISOString(),
+        observacao_revisao_financeira: null,
+      }).eq("id", sessao.clienteId);
+    }
   }
 
   return NextResponse.json({ sucesso: true, boleto_id: boletoId, status: "pago" });
