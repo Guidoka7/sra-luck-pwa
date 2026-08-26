@@ -34,17 +34,13 @@ export function CalendarioCirurgia({ dataAssinatura, dataCirurgiaAtual = null, o
   }
 
   useEffect(() => { void carregar(); const t = setInterval(() => void carregar(), 5000); return () => clearInterval(t); }, []);
-  useEffect(() => {
-    const futuras = datas.map(d => d.data).filter(d => d >= format(hoje, "yyyy-MM-dd")).sort();
-    if (futuras[0] && !dataCirurgiaAtual) setMesAtual(startOfMonth(parseDataLocal(futuras[0])));
-  }, [datas, dataCirurgiaAtual, hoje]);
 
   const porData = useMemo(() => new Map(datas.map(d => [d.data, d])), [datas]);
   const primeiroDiaSemana = mesAtual.getDay();
   const diasDoMes = getDaysInMonth(mesAtual);
   const celulas = Array.from({ length: primeiroDiaSemana + diasDoMes }, (_, i) => i < primeiroDiaSemana ? null : i - primeiroDiaSemana + 1);
 
-  function mudarMes(delta: 1 | -1) { setDirecao(delta); setMesAtual(atual => delta === 1 ? addMonths(atual, 1) : subMonths(atual, 1)); setDiaSelecionado(null); setHorarioSelecionado(null); }
+  function mudarMes(delta: 1 | -1) { setDirecao(delta); setMesAtual(atual => delta === 1 ? addMonths(atual, 1) : subMonths(atual, 1)); setDiaSelecionado(null); setHorarioSelecionado(null); setErro(null); }
 
   function selecionarDia(dia: Date) {
     if (isBefore(dia, hoje)) return;
