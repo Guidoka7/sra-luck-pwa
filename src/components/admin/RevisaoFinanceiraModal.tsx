@@ -10,23 +10,26 @@ import type { Boleto } from "@/types/database";
 
 type Forma = "cartao" | "pix" | "cheques" | "boleto_100";
 const FORMAS: Array<{ value: Forma; label: string }> = [
-  { value: "cartao", label: "Cartão" },
-  { value: "pix", label: "PIX" },
-  { value: "cheques", label: "Cheques" },
-  { value: "boleto_100", label: "100% boleto" },
+  { value: "cartao", label: "Cartão" }, { value: "pix", label: "PIX" },
+  { value: "cheques", label: "Cheques" }, { value: "boleto_100", label: "100% boleto" },
 ];
 
 type ClienteFinanceiro = {
-  nome_completo: string;
-  telefone: string | null;
-  valor_contrato: number;
-  termos_assinados_em?: string | null;
-  financeiro_saldo_restante?: number | null;
+  nome_completo: string; telefone: string | null; valor_contrato: number;
+  termos_assinados_em?: string | null; financeiro_saldo_restante?: number | null;
 };
+type AgendamentoTermos = { data: string | null; horario: string | null };
+
+function dataBR(data?: string | null) {
+  if (!data) return null;
+  const [a, m, d] = data.split("-");
+  return a && m && d ? `${d}/${m}/${a}` : null;
+}
 
 export function RevisaoFinanceiraModal({ clienteId, onClose, onConcluido }: { clienteId: string; onClose: () => void; onConcluido: () => void }) {
   const [cliente, setCliente] = useState<ClienteFinanceiro | null>(null);
   const [boletos, setBoletos] = useState<Boleto[]>([]);
+  const [agendamentoTermos, setAgendamentoTermos] = useState<AgendamentoTermos | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [processando, setProcessando] = useState<string | null>(null);
   const [taxa, setTaxa] = useState("5.4");
@@ -35,16 +38,18 @@ export function RevisaoFinanceiraModal({ clienteId, onClose, onConcluido }: { cl
   async function carregar() {
     setCarregando(true);
     try {
-      const [rc, rb] = await Promise.all([
+      const [rc, rb, ra] = await Promise.all([
         fetch(`/api/admin/clientes/${clienteId}`, { cache: "no-store" }),
         fetch(`/api/admin/clientes/${clienteId}/boletos`, { cache: "no-store" }),
+        fetch(`/api/admin/agendamentos-termos`, { cache: "no-store" }),
       ]);
-      const dc = await rc.json();
-      const db = await rb.json();
+      const dc = await rc.json(); const db = await rb.json(); const da = await ra.json().catch(() => ({ agendamentos: [] }));
       if (!rc.ok) throw new Error(dc.erro ?? "Não foi possível carregar os dados da cliente.");
       if (!rb.ok) throw new Error(db.erro ?? "Não foi possível carregar as parcelas.");
       setCliente(dc.cliente as ClienteFinanceiro);
       setBoletos((db.boletos ?? []) as Boleto[]);
+      const agenda = (da.agendamentos ?? []).find((a: { clienteId?: string }) => a.clienteId === clienteId);
+      setAgendamentoTermos(agenda ? { data: agenda.data ?? null, horario: agenda.horario ?? null } : null);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Não foi possível carregar a revisão financeira.");
     } finally { setCarregando(false); }
@@ -64,46 +69,43 @@ export function RevisaoFinanceiraModal({ clienteId, onClose, onConcluido }: { cl
   }
 
   async function decidirParcela(boleto: Boleto, acao: "confirmar" | "rejeitar") {
-    if (acao === "rejeitar") {
-      const motivo = window.prompt(`Motivo da recusa da parcela ${boleto.numero_parcela}/${boleto.total_parcelas}:`, "Comprovante/pagamento não está de acordo com o informado.");
-      if (motivo === null) return;
-      const observacoes = `Parcela ${boleto.numero_parcela}/${boleto.total_parcelas}: pagamento recusado. ${motivo.trim() || "Pagamento recusado pela administração."}`;
-      setProcessando(boleto.id);
-      try {
-        const r = await fetch(`/api/admin/boletos/${boleto.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao, observacoes }) });
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.erro ?? "Não foi possível recusar a parcela.");
-        setBoletos((atual) => atual.map((b) => b.id === boleto.id ? { ...b, status: "nao_pago", data_pagamento: null, observacoes } : b));
-        toast.success(`Parcela ${boleto.numero_parcela} recusada e devolvida para Em aberto.`);
-        onConcluido();
-      } catch (e) { toast.error(e instanceof Error ? e.message : "Erro ao recusar parcela."); }
-      finally { setProcessando(null); }
-      return;
-    }
-
+    const motivo = acao === "rejeitar" ? window.prompt(
+      `Motivo da recusa da parcela ${boleto.numero_parcela}/${boleto.total_parcelas}:`,
+      "Comprovante/pagamento não está de acordo com o informado."
+    ) : null;
+    if (acao === "rejeitar" && motivo === null) return;
+    const observacoes = acao === "rejeitar"
+      ? `Parcela ${boleto.numero_parcela}/${boleto.total_parcelas}: pagamento/comprovante recusado. ${motivo?.trim() || "Recusado pela administração."}`
+      : (boleto.comprovante_url ? "Pagamento confirmado após conferência administrativa." : "Pagamento confirmado sem comprovante anexado após conferência administrativa.");
     setProcessando(boleto.id);
     try {
-      const r = await fetch(`/api/admin/boletos/${boleto.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao: "confirmar", observacoes: boleto.comprovante_url ? "Pagamento confirmado após conferência administrativa." : "Pagamento confirmado sem comprovante anexado após conferência administrativa." }) });
+      const r = await fetch(`/api/admin/boletos/${boleto.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ acao, observacoes }),
+      });
       const d = await r.json();
-      if (!r.ok) throw new Error(d.erro ?? "Não foi possível confirmar a parcela.");
-      setBoletos((atual) => atual.map((b) => b.id === boleto.id ? { ...b, status: "pago", data_pagamento: d.boleto?.data_pagamento ?? b.data_pagamento ?? new Date().toISOString().slice(0, 10), observacoes: d.boleto?.observacoes ?? b.observacoes } : b));
-      toast.success(`Parcela ${boleto.numero_parcela} confirmada.`);
-    } catch (e) { toast.error(e instanceof Error ? e.message : "Erro ao confirmar parcela."); }
+      if (!r.ok) throw new Error(d.erro ?? `Não foi possível ${acao === "confirmar" ? "confirmar" : "recusar"} a parcela.`);
+      setBoletos((atual) => atual.map((b) => b.id === boleto.id ? {
+        ...b,
+        status: acao === "confirmar" ? "pago" : "nao_pago",
+        data_pagamento: acao === "confirmar" ? new Date().toISOString().slice(0, 10) : null,
+        observacoes: d.boleto?.observacoes ?? observacoes,
+      } : b));
+      toast.success(acao === "confirmar" ? `Parcela ${boleto.numero_parcela} confirmada.` : `Parcela ${boleto.numero_parcela} recusada e devolvida para Em aberto.`);
+      onConcluido();
+    } catch (e) { toast.error(e instanceof Error ? e.message : "Erro ao atualizar parcela."); }
     finally { setProcessando(null); }
   }
 
   async function confirmarLevantamento() {
     if (!formas.length) return toast.error("Selecione pelo menos uma forma de custeio.");
-    if (!Number.isFinite(valorRestante) || valorRestante < 0) return toast.error("Não foi possível calcular o valor restante.");
     if (boletos.some((b) => b.status !== "pago")) return toast.error("Confirme ou regularize todas as parcelas antes de liberar a próxima etapa.");
     setProcessando("final");
     try {
       const r = await fetch(`/api/admin/clientes/${clienteId}/revisao-financeira`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decisao: "aprovada", saldoRestante: valorRestante, taxaCartao: taxaNumero, formasCusteio: formas }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.erro ?? "Não foi possível confirmar o levantamento financeiro.");
-      toast.success("Levantamento confirmado. A próxima etapa foi liberada.");
-      onConcluido();
-      onClose();
+      toast.success("Levantamento confirmado. A próxima etapa foi liberada."); onConcluido(); onClose();
     } catch (e) { toast.error(e instanceof Error ? e.message : "Erro ao confirmar levantamento."); }
     finally { setProcessando(null); }
   }
@@ -119,20 +121,20 @@ export function RevisaoFinanceiraModal({ clienteId, onClose, onConcluido }: { cl
           <section className="grid gap-2 sm:grid-cols-4">
             <div className="rounded-xl border border-white/8 bg-white/[0.035] p-2.5"><p className="text-[0.48rem] uppercase tracking-label text-pearl/35">Telefone</p><p className="mt-1 text-[0.68rem] font-semibold text-pearl/85">{cliente?.telefone || "Não informado"}</p></div>
             <div className="rounded-xl border border-white/8 bg-white/[0.035] p-2.5"><p className="text-[0.48rem] uppercase tracking-label text-pearl/35">Carta de crédito</p><p className="mt-1 text-[0.68rem] font-semibold text-pearl/85">{formatarMoeda(Number(cliente?.valor_contrato || 0))}</p></div>
-            <div className="rounded-xl border border-white/8 bg-white/[0.035] p-2.5"><p className="text-[0.48rem] uppercase tracking-label text-pearl/35">Termos</p><p className="mt-1 text-[0.68rem] font-semibold text-pearl/85">{cliente?.termos_assinados_em ? "Assinados" : "Ainda não assinados"}</p></div>
+            <div className="rounded-xl border border-white/8 bg-white/[0.035] p-2.5"><p className="text-[0.48rem] uppercase tracking-label text-pearl/35">Termos</p>{agendamentoTermos?.data ? <div className="mt-1 flex flex-wrap items-center gap-1.5"><span className="text-[0.62rem] font-semibold text-pearl/80">Assinatura agendada</span><span className="rounded-full border border-gold/20 bg-gold/10 px-2 py-0.5 text-[0.5rem] font-bold text-gold">{dataBR(agendamentoTermos.data)}{agendamentoTermos.horario ? ` · ${agendamentoTermos.horario}` : ""}</span></div> : <p className="mt-1 text-[0.68rem] font-semibold text-pearl/85">{cliente?.termos_assinados_em ? "Assinados" : "Ainda não assinados"}</p>}</div>
             <div className="rounded-xl border border-success/15 bg-success/[0.045] p-2.5"><p className="text-[0.48rem] uppercase tracking-label text-success/70">Pagamento</p><p className="mt-1 text-[0.68rem] font-semibold text-pearl/85">{pagas.length}/{boletos.length} parcelas · {formatarMoeda(valorPago)} pagos</p></div>
           </section>
 
           <section className="rounded-xl border border-white/8 bg-white/[0.025] p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[0.58rem] font-bold uppercase tracking-[0.16em] text-rose">Parcelas e comprovantes</p><p className="mt-0.5 text-[0.58rem] text-pearl/35">Confira cada parcela. Todas podem ser confirmadas ou recusadas. Comprovantes anexados podem ser visualizados.</p></div><span className={`rounded-full px-2 py-1 text-[0.52rem] font-bold ${boletos.every((b) => b.status === "pago") ? "bg-success/10 text-success" : "bg-gold/10 text-gold"}`}>{pagas.length}/{boletos.length} confirmadas</span></div>
+            <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[0.58rem] font-bold uppercase tracking-[0.16em] text-rose">Parcelas e comprovantes</p><p className="mt-0.5 text-[0.58rem] text-pearl/35">Confira cada parcela. Use as bolinhas para confirmar, recusar ou abrir o comprovante.</p></div><span className={`rounded-full px-2 py-1 text-[0.52rem] font-bold ${boletos.every((b) => b.status === "pago") ? "bg-success/10 text-success" : "bg-gold/10 text-gold"}`}>{pagas.length}/{boletos.length} confirmadas</span></div>
             <div className="mt-2 overflow-hidden rounded-lg border border-white/8">
               {boletos.map((b) => <div key={b.id} className="grid grid-cols-[46px_1fr_auto] items-center gap-2 border-b border-white/6 px-2.5 py-2 last:border-0">
                 <span className="text-[0.6rem] font-semibold text-pearl/60">{b.numero_parcela}/{b.total_parcelas}</span>
                 <div className="min-w-0"><div className="flex flex-wrap gap-x-2 text-[0.6rem]"><span className="text-pearl/45">{b.data_vencimento?.split("-").reverse().join("/") ?? "—"}</span><strong className="text-pearl/85">{formatarMoeda(Number(b.valor))}</strong></div><p className={`mt-0.5 text-[0.5rem] ${b.status === "pago" ? "text-success" : "text-pearl/35"}`}>{b.status === "pago" ? "Pagamento confirmado" : "Em aberto"}{b.comprovante_url ? " · comprovante anexado" : " · sem comprovante"}</p></div>
                 <div className="flex items-center gap-1">
-                  {b.comprovante_url && <a href={`/api/admin/boletos/${b.id}/comprovante`} target="_blank" rel="noopener noreferrer" className="flex h-7 w-7 items-center justify-center rounded-full border border-rose/20 bg-rose/10 text-rose transition hover:scale-105 hover:bg-rose/20" title="Visualizar comprovante" aria-label={`Visualizar comprovante da parcela ${b.numero_parcela}`}><FileText className="h-3.5 w-3.5" /></a>}
-                  <button type="button" disabled={processando === b.id} onClick={() => decidirParcela(b, "confirmar")} className="flex h-7 w-7 items-center justify-center rounded-full border border-success/25 bg-success/10 text-success transition hover:scale-105 hover:bg-success/20 disabled:cursor-wait disabled:opacity-40" title="Confirmar parcela" aria-label={`Confirmar parcela ${b.numero_parcela}`}><Check className="h-3.5 w-3.5" /></button>
-                  <button type="button" disabled={processando === b.id} onClick={() => decidirParcela(b, "rejeitar")} className="flex h-7 w-7 items-center justify-center rounded-full border border-alert/25 bg-alert/10 text-alert transition hover:scale-105 hover:bg-alert/20 disabled:cursor-wait disabled:opacity-40" title="Recusar parcela" aria-label={`Recusar parcela ${b.numero_parcela}`}><X className="h-3.5 w-3.5" /></button>
+                  {b.comprovante_url && <a href={`/api/admin/boletos/${b.id}/comprovante`} target="_blank" rel="noopener noreferrer" className="flex h-7 w-7 items-center justify-center rounded-full border border-rose/20 bg-rose/10 text-rose transition hover:bg-rose/20" title="Abrir comprovante"><FileText className="h-3.5 w-3.5" /></a>}
+                  <button type="button" disabled={processando === b.id} onClick={() => decidirParcela(b, "confirmar")} className="flex h-7 w-7 items-center justify-center rounded-full border border-success/20 bg-success/10 text-success transition hover:bg-success/20 disabled:opacity-40" title="Confirmar parcela"><Check className="h-3.5 w-3.5" /></button>
+                  <button type="button" disabled={processando === b.id} onClick={() => decidirParcela(b, "rejeitar")} className="flex h-7 w-7 items-center justify-center rounded-full border border-alert/20 bg-alert/10 text-alert transition hover:bg-alert/20 disabled:opacity-40" title="Recusar parcela"><X className="h-3.5 w-3.5" /></button>
                 </div>
               </div>)}
             </div>
@@ -140,7 +142,7 @@ export function RevisaoFinanceiraModal({ clienteId, onClose, onConcluido }: { cl
 
           <section className="rounded-xl border border-gold/15 bg-gold/[0.045] p-3">
             <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-gold"/><div><p className="text-[0.58rem] font-bold uppercase tracking-[0.16em] text-gold">Custeio do valor restante</p><p className="text-[0.58rem] text-pearl/35">{parcelasRestantes.length} parcelas restantes · {formatarMoeda(valorRestante)}</p></div></div>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2"><label className="text-[0.52rem] font-bold uppercase tracking-label text-pearl/40">Valor restante<input value={formatarMoeda(valorRestante)} readOnly aria-readonly="true" inputMode="decimal" className="mt-1 h-8 w-full rounded-lg border border-white/10 bg-white/[0.04] px-2.5 text-xs font-semibold text-pearl outline-none" /></label><label className="text-[0.52rem] font-bold uppercase tracking-label text-pearl/40">Taxa cartão (%)<input value={taxa} onChange={(e) => setTaxa(e.target.value)} inputMode="decimal" className="mt-1 h-8 w-full rounded-lg border border-white/10 bg-white/[0.06] px-2.5 text-xs text-pearl outline-none" /></label></div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2"><label className="text-[0.52rem] font-bold uppercase tracking-label text-pearl/40">Valor restante<input value={formatarMoeda(valorRestante)} readOnly aria-readonly="true" className="mt-1 h-8 w-full rounded-lg border border-white/10 bg-white/[0.04] px-2.5 text-xs font-semibold text-pearl outline-none" /></label><label className="text-[0.52rem] font-bold uppercase tracking-label text-pearl/40">Taxa cartão (%)<input value={taxa} onChange={(e) => setTaxa(e.target.value)} inputMode="decimal" className="mt-1 h-8 w-full rounded-lg border border-white/10 bg-white/[0.06] px-2.5 text-xs text-pearl outline-none" /></label></div>
             <div className="mt-2"><p className="mb-1.5 text-[0.52rem] font-bold uppercase tracking-label text-pearl/40">Formas de custeio disponíveis</p><div className="flex flex-wrap gap-1.5">{FORMAS.map((f) => <button type="button" key={f.value} onClick={() => alternarForma(f.value)} className={`rounded-full border px-2.5 py-1.5 text-[0.56rem] font-semibold transition ${formas.includes(f.value) ? "border-rose/30 bg-rose text-white" : "border-white/10 bg-white/[0.04] text-pearl/60"}`}>{f.label}</button>)}</div></div>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-black/10 px-2.5 py-2"><p className="text-[0.56rem] text-pearl/45">Total com taxa de cartão: <strong className="text-pearl/80">{formatarMoeda(totalComTaxa)}</strong></p><Button size="sm" loading={processando === "final"} onClick={confirmarLevantamento} disabled={boletos.length === 0 || boletos.some((b) => b.status !== "pago")}><CheckCircle2 className="h-3.5 w-3.5" />Confirmar levantamento</Button></div>
           </section>
