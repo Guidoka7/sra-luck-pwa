@@ -15,9 +15,8 @@ export async function POST(req: NextRequest) {
   if (!dataId || !horario || !HORARIOS_VALIDOS.has(horario)) return NextResponse.json({ erro: "Escolha a data e o horário da assinatura." }, { status: 400 });
   const supabase = createServiceSupabaseClient();
 
-  const { data: cliente } = await supabase.from("clientes").select("id, valor_contrato, status_revisao_financeira").eq("id", sessao.clienteId).single();
+  const { data: cliente } = await supabase.from("clientes").select("id, valor_contrato").eq("id", sessao.clienteId).single();
   if (!cliente) return NextResponse.json({ erro: "Cliente não encontrada." }, { status: 404 });
-  if (cliente.status_revisao_financeira !== "aprovada") return NextResponse.json({ erro: "Sua agenda ainda não está liberada para agendamento." }, { status: 409 });
 
   const { data: jaTem } = await supabase.from("agendamentos").select("id").eq("cliente_id", cliente.id).eq("status", "confirmado").maybeSingle();
   if (jaTem) return NextResponse.json({ erro: "Você já tem uma data confirmada. Fale conosco para remarcar." }, { status: 409 });
@@ -28,20 +27,10 @@ export async function POST(req: NextRequest) {
   const { count } = await supabase.from("agendamentos").select("id", { count: "exact", head: true }).eq("data_id", dataId).eq("status", "confirmado");
   if ((count ?? 0) >= dataAlvo.vagas_totais) return NextResponse.json({ erro: "As vagas dessa data acabaram de se esgotar." }, { status: 409 });
 
-  const { data: novoAgendamento, error } = await supabase.from("agendamentos").insert({
-    cliente_id: cliente.id,
-    data_id: dataId,
-    valor_contrato: cliente.valor_contrato,
-    status: "confirmado",
-    horario_termos: horario,
-  }).select("id").single();
+  const { data: novoAgendamento, error } = await supabase.from("agendamentos").insert({ cliente_id: cliente.id, data_id: dataId, valor_contrato: cliente.valor_contrato, status: "confirmado", horario_termos: horario }).select("id").single();
   if (error) return NextResponse.json({ erro: "Não foi possível confirmar sua data. Tente novamente." }, { status: 500 });
 
-  await supabase.from("solicitacoes_liberacao_financeira")
-    .update({ agendamento_id: novoAgendamento.id })
-    .eq("cliente_id", cliente.id)
-    .in("status", ["pendente", "em_analise", "aprovada"])
-    .is("agendamento_id", null);
+  await supabase.from("solicitacoes_liberacao_financeira").update({ agendamento_id: novoAgendamento.id }).eq("cliente_id", cliente.id).in("status", ["pendente", "em_analise", "aprovada"]).is("agendamento_id", null);
 
   try {
     await supabase.channel("agenda-clientes").send({ type: "broadcast", event: "datas_atualizadas", payload: { acao: "agendamento_confirmado", data: dataAlvo.data, dataId: dataAlvo.id, clienteId: cliente.id, agendamentoId: novoAgendamento.id, horario } });
