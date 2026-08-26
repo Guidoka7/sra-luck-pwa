@@ -36,6 +36,28 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const dataPagamento = rejeitado ? null : new Date().toISOString().slice(0, 10);
   const { data, error } = await supabase.from("boletos").update({ status: novoStatus, data_pagamento: dataPagamento, observacoes: observacoes || null }).eq("id", params.id).select("*").single();
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
+
+  // Uma rejeição invalida a revisão anterior: a agenda de termos fica
+  // bloqueada até a cliente regularizar a parcela e um novo levantamento.
+  if (rejeitado) {
+    await supabase.from("clientes").update({
+      status_revisao_financeira: "recusada",
+      observacao_revisao_financeira: observacoes || "Foi identificada uma divergência em um comprovante/pagamento. Regularize a parcela e aguarde um novo levantamento financeiro.",
+    }).eq("id", boleto.cliente_id);
+  } else {
+    const { data: cliente } = await supabase.from("clientes").select("status_revisao_financeira").eq("id", boleto.cliente_id).single();
+    if (cliente?.status_revisao_financeira === "recusada") {
+      const { data: podeAgendar } = await supabase.rpc("pode_agendar", { p_cliente_id: boleto.cliente_id });
+      if (Boolean(podeAgendar)) {
+        await supabase.from("clientes").update({
+          status_revisao_financeira: "pendente",
+          data_atingiu_percentual: new Date().toISOString(),
+          observacao_revisao_financeira: null,
+        }).eq("id", boleto.cliente_id);
+      }
+    }
+  }
+
   await supabase.from("logs_alteracoes").insert({ usuario: user.email ?? "admin", acao: rejeitado ? "rejeitou_pagamento" : "confirmou_pagamento", entidade: "boleto", entidade_id: params.id, detalhes: { cliente_id: boleto.cliente_id, numero_parcela: boleto.numero_parcela, retorno_para_aberto: rejeitado } });
   await avisarCliente(boleto.cliente_id, { tipo: "status_parcela_atualizado", parcela: boleto.numero_parcela, rejeitado });
   return NextResponse.json({ boleto: { ...data, valor: Number(data.valor) } });
