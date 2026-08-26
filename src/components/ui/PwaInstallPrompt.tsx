@@ -6,11 +6,13 @@ import { toast } from "sonner";
 
 interface BeforeInstallPromptEvent extends Event { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>; }
 const DISMISS_KEY = "sra-luck-pwa-install-dismissed-date";
+const TOUR_KEY = "sra-luck-cliente-tour-v3";
 const GLOBAL_EVENT_KEY = "__sraLuckBeforeInstallPrompt";
 type WindowWithInstallEvent = Window & { [GLOBAL_EVENT_KEY]?: BeforeInstallPromptEvent | null };
 function hoje() { return new Date().toLocaleDateString("sv-SE"); }
 function isStandalone() { return typeof window !== "undefined" && (window.matchMedia?.("(display-mode: standalone)").matches || ("standalone" in navigator && Boolean((navigator as Navigator & { standalone?: boolean }).standalone))); }
 function isIOS() { return typeof navigator !== "undefined" && (/iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)); }
+function tourConcluido() { try { return localStorage.getItem(TOUR_KEY) === "concluido"; } catch { return false; } }
 function foiDispensadoHoje() { try { return localStorage.getItem(DISMISS_KEY) === hoje(); } catch { return false; } }
 function registrarInstalacao() { try { const deviceKey = localStorage.getItem("sra-luck-device-key"); if (!deviceKey) return; void fetch("/api/cliente/app-telemetry", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ deviceKey, deviceType:window.innerWidth<768?"mobile":window.innerWidth<1024?"tablet":"desktop", displayMode:"standalone", isPwaInstalled:true, notificationPermission:"Notification" in window?Notification.permission:"default", pushActive:false }), keepalive:true }); } catch {} }
 
@@ -24,13 +26,13 @@ export function PwaInstallPrompt() {
   useEffect(() => {
     if (isStandalone()) return;
     setIos(isIOS());
-    const mostrar=()=>{if(!isStandalone()&&!foiDispensadoHoje())setVisivel(true);};
+    const mostrar=()=>{if(!isStandalone()&&tourConcluido()&&!foiDispensadoHoje())setVisivel(true);};
     const recuperar=()=>{const e=(window as WindowWithInstallEvent)[GLOBAL_EVENT_KEY]??null;if(e){setEvento(e);setPreparando(false);mostrar();}};
     const receber=(event:Event)=>{const e=event as BeforeInstallPromptEvent;event.preventDefault();(window as WindowWithInstallEvent)[GLOBAL_EVENT_KEY]=e;setEvento(e);setPreparando(false);mostrar();};
     const instalado=()=>{(window as WindowWithInstallEvent)[GLOBAL_EVENT_KEY]=null;setEvento(null);setVisivel(false);setPreparando(false);registrarInstalacao();toast.success("Aplicativo instalado. Agora ele abre como um app.");};
     window.addEventListener("beforeinstallprompt",receber);window.addEventListener("sra-luck-pwa-ready",recuperar);window.addEventListener("appinstalled",instalado);window.addEventListener("pageshow",recuperar);document.addEventListener("visibilitychange",recuperar);mostrar();recuperar();
-    const interval=window.setInterval(recuperar,400);const timeout=window.setTimeout(()=>window.clearInterval(interval),20000);
-    return()=>{window.clearInterval(interval);window.clearTimeout(timeout);window.removeEventListener("beforeinstallprompt",receber);window.removeEventListener("sra-luck-pwa-ready",recuperar);window.removeEventListener("appinstalled",instalado);window.removeEventListener("pageshow",recuperar);document.removeEventListener("visibilitychange",recuperar);};
+    const interval=window.setInterval(()=>{if(tourConcluido())mostrar();recuperar();},500);
+    return()=>{window.clearInterval(interval);window.removeEventListener("beforeinstallprompt",receber);window.removeEventListener("sra-luck-pwa-ready",recuperar);window.removeEventListener("appinstalled",instalado);window.removeEventListener("pageshow",recuperar);document.removeEventListener("visibilitychange",recuperar);};
   },[]);
 
   async function instalar(){
