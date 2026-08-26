@@ -18,6 +18,10 @@ function foiDispensadoHoje() {
   }
 }
 
+function isStandalone() {
+  return typeof window !== "undefined" && (window.matchMedia?.("(display-mode: standalone)").matches || ("standalone" in navigator && Boolean((navigator as Navigator & { standalone?: boolean }).standalone)));
+}
+
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -44,8 +48,8 @@ async function atualizarTelemetria(pushActive: boolean) {
       body: JSON.stringify({
         deviceKey,
         deviceType: window.innerWidth < 768 ? "mobile" : window.innerWidth < 1024 ? "tablet" : "desktop",
-        displayMode: window.matchMedia("(display-mode: standalone)").matches ? "standalone" : "browser",
-        isPwaInstalled: window.matchMedia("(display-mode: standalone)").matches,
+        displayMode: "standalone",
+        isPwaInstalled: true,
         notificationPermission: Notification.permission,
         pushActive,
       }),
@@ -61,6 +65,9 @@ export function AtivarNotificacoesPush() {
   const [bloqueado, setBloqueado] = useState(false);
 
   useEffect(() => {
+    // A solicitação de notificações pertence somente ao aplicativo instalado.
+    // No navegador/web não mostramos o card nem consultamos a permissão.
+    if (!isStandalone()) return;
     if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return;
     let cancelado = false;
 
@@ -106,18 +113,13 @@ export function AtivarNotificacoesPush() {
       if (cancelado) return;
       if (Notification.permission === "denied") {
         setBloqueado(true);
-        // Se estiver bloqueado, o navegador não permite pedir a permissão de
-        // novo. Ainda mostramos o aviso uma vez por dia para orientar a cliente.
         if (!foiDispensadoHoje()) setVisivel(true);
         return;
       }
 
-      // Não usamos sessionStorage: o lembrete é controlado por data e volta
-      // automaticamente no próximo dia caso a cliente ainda não tenha ativado.
       if (!foiDispensadoHoje()) setVisivel(true);
     }
 
-    // Executa assim que o componente entra na tela, sem esperar uma nova navegação.
     void verificarAssinatura();
     return () => {
       cancelado = true;
@@ -125,22 +127,21 @@ export function AtivarNotificacoesPush() {
   }, []);
 
   async function ativar() {
+    if (!isStandalone()) return;
     if (!window.isSecureContext) {
-      toast.error("Para receber notificações do sistema, abra o app em HTTPS ou como PWA instalado.");
+      toast.error("Para receber notificações, abra o aplicativo instalado em um contexto seguro.");
       return;
     }
 
     if (Notification.permission === "denied") {
       setBloqueado(true);
       setVisivel(true);
-      toast.error("O navegador bloqueou as notificações. É necessário permitir este site nas configurações do navegador.");
+      toast.error("O aplicativo não tem permissão para enviar notificações. Permita as notificações nas configurações do celular.");
       return;
     }
 
     setAtivando(true);
     try {
-      // A chamada fica dentro do clique da cliente porque os navegadores
-      // bloqueiam requestPermission() automático fora de uma interação do usuário.
       const permission = await Notification.requestPermission();
 
       if (permission !== "granted") {
@@ -148,7 +149,7 @@ export function AtivarNotificacoesPush() {
         setBloqueado(permission === "denied");
         setVisivel(true);
         if (permission === "denied") {
-          toast.error("O navegador bloqueou as notificações. Permita este site nas configurações do navegador e tente novamente.");
+          toast.error("As notificações foram bloqueadas. Permita as notificações do aplicativo nas configurações do celular.");
         }
         return;
       }
@@ -187,7 +188,7 @@ export function AtivarNotificacoesPush() {
     setVisivel(false);
   }
 
-  if (ativo || !visivel) return null;
+  if (ativo || !visivel || !isStandalone()) return null;
 
   return (
     <div className="mb-4 rounded-2xl border border-burgundy/10 bg-white/95 p-4 shadow-card dark:border-white/10 dark:bg-white/[0.055]">
@@ -199,8 +200,8 @@ export function AtivarNotificacoesPush() {
           </p>
           <p className="mt-0.5 text-xs leading-relaxed text-clay/60 dark:text-pearl/55">
             {bloqueado
-              ? "O navegador está impedindo as notificações deste site. Permita as notificações nas configurações do navegador e depois tente novamente."
-              : "Ative as notificações para receber mensagens da Sra. Luck mesmo com o app fechado."}
+              ? "O aplicativo está sem permissão para enviar notificações. Permita as notificações nas configurações do celular e tente novamente."
+              : "Ative as notificações para receber mensagens da Sra. Luck mesmo com o aplicativo fechado."}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" onClick={ativar} disabled={ativando || bloqueado} className="inline-flex items-center gap-2 rounded-xl bg-burgundy px-3.5 py-2 text-xs font-semibold text-pearl disabled:opacity-60">
