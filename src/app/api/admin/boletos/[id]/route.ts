@@ -28,12 +28,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 
   if (!acao || !["confirmar", "rejeitar"].includes(acao)) return NextResponse.json({ erro: "Ação inválida. Use 'confirmar' ou 'rejeitar'." }, { status: 400 });
-  const { data: boleto } = await supabase.from("boletos").select("id, cliente_id, numero_parcela, status, comprovante_url").eq("id", params.id).single();
+  const { data: boleto } = await supabase.from("boletos").select("id, cliente_id, numero_parcela, status, comprovante_url, data_pagamento").eq("id", params.id).single();
   if (!boleto) return NextResponse.json({ erro: "Boleto não encontrado." }, { status: 404 });
 
   const rejeitado = acao === "rejeitar";
   const novoStatus = rejeitado ? "nao_pago" : "pago";
-  const dataPagamento = rejeitado ? null : new Date().toISOString().slice(0, 10);
+  const dataPagamento = rejeitado ? null : (boleto.status === "pago" && boleto.data_pagamento ? boleto.data_pagamento : new Date().toISOString().slice(0, 10));
   const { data, error } = await supabase.from("boletos").update({ status: novoStatus, data_pagamento: dataPagamento, observacoes: observacoes || null }).eq("id", params.id).select("*").single();
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
 

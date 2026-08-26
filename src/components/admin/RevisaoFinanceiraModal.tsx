@@ -65,9 +65,9 @@ export function RevisaoFinanceiraModal({ clienteId, onClose, onConcluido }: { cl
 
   async function decidirParcela(boleto: Boleto, acao: "confirmar" | "rejeitar") {
     if (acao === "rejeitar") {
-      const motivo = window.prompt(`Motivo da recusa da parcela ${boleto.numero_parcela}/${boleto.total_parcelas}:`, "Comprovante não está de acordo com o pagamento informado.");
+      const motivo = window.prompt(`Motivo da recusa da parcela ${boleto.numero_parcela}/${boleto.total_parcelas}:`, "Comprovante/pagamento não está de acordo com o informado.");
       if (motivo === null) return;
-      const observacoes = `Parcela ${boleto.numero_parcela}/${boleto.total_parcelas}: comprovante recusado. ${motivo.trim() || "Comprovante recusado pela administração."}`;
+      const observacoes = `Parcela ${boleto.numero_parcela}/${boleto.total_parcelas}: pagamento recusado. ${motivo.trim() || "Pagamento recusado pela administração."}`;
       setProcessando(boleto.id);
       try {
         const r = await fetch(`/api/admin/boletos/${boleto.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao, observacoes }) });
@@ -86,7 +86,7 @@ export function RevisaoFinanceiraModal({ clienteId, onClose, onConcluido }: { cl
       const r = await fetch(`/api/admin/boletos/${boleto.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao: "confirmar", observacoes: boleto.comprovante_url ? "Pagamento confirmado após conferência administrativa." : "Pagamento confirmado sem comprovante anexado após conferência administrativa." }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.erro ?? "Não foi possível confirmar a parcela.");
-      setBoletos((atual) => atual.map((b) => b.id === boleto.id ? { ...b, status: "pago", data_pagamento: new Date().toISOString().slice(0, 10), observacoes: d.boleto?.observacoes ?? b.observacoes } : b));
+      setBoletos((atual) => atual.map((b) => b.id === boleto.id ? { ...b, status: "pago", data_pagamento: d.boleto?.data_pagamento ?? b.data_pagamento ?? new Date().toISOString().slice(0, 10), observacoes: d.boleto?.observacoes ?? b.observacoes } : b));
       toast.success(`Parcela ${boleto.numero_parcela} confirmada.`);
     } catch (e) { toast.error(e instanceof Error ? e.message : "Erro ao confirmar parcela."); }
     finally { setProcessando(null); }
@@ -124,15 +124,15 @@ export function RevisaoFinanceiraModal({ clienteId, onClose, onConcluido }: { cl
           </section>
 
           <section className="rounded-xl border border-white/8 bg-white/[0.025] p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[0.58rem] font-bold uppercase tracking-[0.16em] text-rose">Parcelas e comprovantes</p><p className="mt-0.5 text-[0.58rem] text-pearl/35">Confira cada parcela. Comprovantes anexados ficam disponíveis para visualização e recusa.</p></div><span className={`rounded-full px-2 py-1 text-[0.52rem] font-bold ${boletos.every((b) => b.status === "pago") ? "bg-success/10 text-success" : "bg-gold/10 text-gold"}`}>{pagas.length}/{boletos.length} confirmadas</span></div>
+            <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[0.58rem] font-bold uppercase tracking-[0.16em] text-rose">Parcelas e comprovantes</p><p className="mt-0.5 text-[0.58rem] text-pearl/35">Confira cada parcela. Todas podem ser confirmadas ou recusadas. Comprovantes anexados podem ser visualizados.</p></div><span className={`rounded-full px-2 py-1 text-[0.52rem] font-bold ${boletos.every((b) => b.status === "pago") ? "bg-success/10 text-success" : "bg-gold/10 text-gold"}`}>{pagas.length}/{boletos.length} confirmadas</span></div>
             <div className="mt-2 overflow-hidden rounded-lg border border-white/8">
               {boletos.map((b) => <div key={b.id} className="grid grid-cols-[46px_1fr_auto] items-center gap-2 border-b border-white/6 px-2.5 py-2 last:border-0">
                 <span className="text-[0.6rem] font-semibold text-pearl/60">{b.numero_parcela}/{b.total_parcelas}</span>
                 <div className="min-w-0"><div className="flex flex-wrap gap-x-2 text-[0.6rem]"><span className="text-pearl/45">{b.data_vencimento?.split("-").reverse().join("/") ?? "—"}</span><strong className="text-pearl/85">{formatarMoeda(Number(b.valor))}</strong></div><p className={`mt-0.5 text-[0.5rem] ${b.status === "pago" ? "text-success" : "text-pearl/35"}`}>{b.status === "pago" ? "Pagamento confirmado" : "Em aberto"}{b.comprovante_url ? " · comprovante anexado" : " · sem comprovante"}</p></div>
                 <div className="flex items-center gap-1">
-                  {b.comprovante_url && <a href={`/api/admin/boletos/${b.id}/comprovante`} target="_blank" rel="noopener noreferrer" className="flex h-7 w-7 items-center justify-center rounded-md bg-rose/10 text-rose" title="Ver comprovante"><FileText className="h-3.5 w-3.5" /></a>}
-                  {b.status !== "pago" && <Button size="sm" loading={processando === b.id} onClick={() => decidirParcela(b, "confirmar")} className="!h-7 !px-2 !text-[0.55rem]"><Check className="h-3 w-3" />Aprovar</Button>}
-                  {b.comprovante_url && <button type="button" disabled={processando === b.id} onClick={() => decidirParcela(b, "rejeitar")} className="flex h-7 items-center gap-1 rounded-md bg-alert/10 px-2 text-[0.55rem] font-semibold text-alert disabled:opacity-40"><X className="h-3 w-3" />Recusar</button>}
+                  {b.comprovante_url && <a href={`/api/admin/boletos/${b.id}/comprovante`} target="_blank" rel="noopener noreferrer" className="flex h-7 w-7 items-center justify-center rounded-full border border-rose/20 bg-rose/10 text-rose transition hover:scale-105 hover:bg-rose/20" title="Visualizar comprovante" aria-label={`Visualizar comprovante da parcela ${b.numero_parcela}`}><FileText className="h-3.5 w-3.5" /></a>}
+                  <button type="button" disabled={processando === b.id} onClick={() => decidirParcela(b, "confirmar")} className="flex h-7 w-7 items-center justify-center rounded-full border border-success/25 bg-success/10 text-success transition hover:scale-105 hover:bg-success/20 disabled:cursor-wait disabled:opacity-40" title="Confirmar parcela" aria-label={`Confirmar parcela ${b.numero_parcela}`}><Check className="h-3.5 w-3.5" /></button>
+                  <button type="button" disabled={processando === b.id} onClick={() => decidirParcela(b, "rejeitar")} className="flex h-7 w-7 items-center justify-center rounded-full border border-alert/25 bg-alert/10 text-alert transition hover:scale-105 hover:bg-alert/20 disabled:cursor-wait disabled:opacity-40" title="Recusar parcela" aria-label={`Recusar parcela ${b.numero_parcela}`}><X className="h-3.5 w-3.5" /></button>
                 </div>
               </div>)}
             </div>
