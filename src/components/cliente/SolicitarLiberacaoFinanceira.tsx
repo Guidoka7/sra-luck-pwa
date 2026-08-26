@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { CheckCircle2, CreditCard, LockKeyhole, X } from "lucide-react";
+import { CalendarDays, CheckCircle2, CreditCard, LockKeyhole, Pencil, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CalendarioAgendamento, DataDisponivel } from "@/components/cliente/CalendarioAgendamento";
 import { CalendarioCirurgia } from "@/components/cliente/CalendarioCirurgia";
 
 interface Props { ativo?: boolean; }
@@ -11,15 +12,19 @@ type FormaCusteio = "cartao" | "pix" | "cheques" | "boleto_100";
 interface Financeiro { saldoRestante: number | null; taxaCartao: number; totalComTaxa: number | null; formasCusteio: string[]; }
 interface Solicitacao { id: string; forma_custeio: FormaCusteio; saldo_restante: number; taxa_cartao: number; total_com_taxa: number; status: string; observacao: string | null; }
 function formatarMoeda(valor: number) { return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
+function formatarData(iso: string) { return iso.split("-").reverse().join("/"); }
 
 export function SolicitarLiberacaoFinanceira({ ativo = true }: Props) {
   const [financeiro, setFinanceiro] = useState<Financeiro>({ saldoRestante: null, taxaCartao: 5.4, totalComTaxa: null, formasCusteio: [] });
   const [solicitacao, setSolicitacao] = useState<Solicitacao | null>(null);
   const [dataAssinaturaTermos, setDataAssinaturaTermos] = useState<string | null>(null);
   const [dataCirurgia, setDataCirurgia] = useState<string | null>(null);
+  const [datasTermos, setDatasTermos] = useState<DataDisponivel[]>([]);
   const [parcelasPagas, setParcelasPagas] = useState(0);
   const [quantidadeParcelas, setQuantidadeParcelas] = useState(0);
   const [modalAberto, setModalAberto] = useState(false);
+  const [alterandoTermos, setAlterandoTermos] = useState(false);
+  const [alterandoCirurgia, setAlterandoCirurgia] = useState(false);
   const [formaCusteio, setFormaCusteio] = useState<FormaCusteio | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -29,10 +34,7 @@ export function SolicitarLiberacaoFinanceira({ ativo = true }: Props) {
     let montado = true;
     async function carregar() {
       try {
-        const [resAgenda, resBoletos] = await Promise.all([
-          fetch("/api/cliente/agenda", { cache: "no-store" }),
-          fetch("/api/cliente/boletos", { cache: "no-store" }),
-        ]);
+        const [resAgenda, resBoletos] = await Promise.all([fetch("/api/cliente/agenda", { cache: "no-store" }), fetch("/api/cliente/boletos", { cache: "no-store" })]);
         if (!resAgenda.ok || !montado) return;
         const data = await resAgenda.json();
         setFinanceiro(data.financeiro ?? { saldoRestante: null, taxaCartao: 5.4, totalComTaxa: null, formasCusteio: [] });
@@ -40,14 +42,8 @@ export function SolicitarLiberacaoFinanceira({ ativo = true }: Props) {
         const agenda = data.agendamentoAtivo ?? data.agendamentoConcluido ?? null;
         setDataAssinaturaTermos(agenda?.data ?? null);
         setDataCirurgia(agenda?.previsaoLiberacaoFinanceira ?? null);
-
-        if (resBoletos.ok) {
-          const boletosData = await resBoletos.json();
-          const total = Number(boletosData.quantidade_parcelas ?? boletosData.boletos?.length ?? 0);
-          const pagas = Number(boletosData.parcelas_pagas ?? 0);
-          setQuantidadeParcelas(total);
-          setParcelasPagas(pagas);
-        }
+        setDatasTermos(data.datasDisponiveis ?? []);
+        if (resBoletos.ok) { const boletosData = await resBoletos.json(); setQuantidadeParcelas(Number(boletosData.quantidade_parcelas ?? boletosData.boletos?.length ?? 0)); setParcelasPagas(Number(boletosData.parcelas_pagas ?? 0)); }
       } catch {}
     }
     void carregar();
@@ -61,84 +57,33 @@ export function SolicitarLiberacaoFinanceira({ ativo = true }: Props) {
   const parcelasRestantes = Math.max(0, quantidadeParcelas - parcelasPagas);
   const formasDisponiveis = useMemo(() => ["cartao", "pix", "cheques", "boleto_100"].filter(f => financeiro.formasCusteio.includes(f)) as FormaCusteio[], [financeiro.formasCusteio]);
   const status = String(solicitacao?.status ?? "").toLowerCase();
-  const recusada = status.includes("recus");
-  const aprovada = status.includes("aprov");
+  const recusada = status.includes("recus"); const aprovada = status.includes("aprov");
 
-  function abrirModal() {
-    setErro(null);
-    setFormaCusteio(solicitacao?.forma_custeio ?? null);
-    setModalAberto(true);
-  }
+  function abrirModal() { setErro(null); setFormaCusteio(solicitacao?.forma_custeio ?? null); setModalAberto(true); }
+  async function enviar() { if (!formaCusteio) return; setEnviando(true); setErro(null); try { const res = await fetch("/api/cliente/solicitacao-liberacao-financeira", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ formaCusteio }) }); const data = await res.json(); if (!res.ok) throw new Error(data.erro ?? "Não foi possível enviar sua solicitação."); setSolicitacao(data.solicitacao ?? null); setModalAberto(false); } catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível enviar sua solicitação."); } finally { setEnviando(false); } }
 
-  async function enviar() {
-    if (!formaCusteio) return;
-    setEnviando(true); setErro(null);
-    try {
-      const res = await fetch("/api/cliente/solicitacao-liberacao-financeira", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ formaCusteio }) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.erro ?? "Não foi possível enviar sua solicitação.");
-      setSolicitacao(data.solicitacao ?? null); setModalAberto(false);
-    } catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível enviar sua solicitação."); }
-    finally { setEnviando(false); }
+  async function remarcarTermos(dataId: string, horario: string) {
+    setErro(null); setEnviando(true);
+    try { const res = await fetch("/api/cliente/remarcar-agendamento", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dataId, horario }) }); const data = await res.json(); if (!res.ok) throw new Error(data.erro ?? "Não foi possível alterar a data dos termos."); setDataAssinaturaTermos(data.data); setDataCirurgia(null); setAlterandoTermos(false); } catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível alterar a data dos termos."); } finally { setEnviando(false); }
   }
 
   if (!ativo) return null;
 
   return <div className="flex flex-col gap-4">
+    {dataAssinaturaTermos && dataCirurgia && <section className="overflow-hidden rounded-2xl border border-rose/15 bg-white/75 shadow-[0_14px_40px_-28px_rgba(0,0,0,.3)] dark:border-white/10 dark:bg-white/[0.035]">
+      <div className="flex items-center justify-between gap-3 px-3 py-3 sm:px-4"><div className="min-w-0"><p className="text-[0.55rem] font-semibold uppercase tracking-[0.14em] text-rose">Agendamento dos termos</p><p className="mt-0.5 text-sm font-heading font-semibold text-burgundy">Assinatura confirmada para {formatarData(dataAssinaturaTermos)}</p></div><button type="button" onClick={() => { setErro(null); setAlterandoTermos(true); }} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-rose/20 bg-white px-2.5 py-2 text-[0.58rem] font-bold uppercase tracking-[0.08em] text-burgundy hover:border-rose dark:border-white/10 dark:bg-white/[0.04] dark:text-cream"><Pencil className="h-3 w-3" /> Alterar data</button></div>
+      {alterandoTermos && <div className="border-t border-rose/10 p-3 sm:p-4"><div className="mb-3 flex items-center justify-between"><p className="text-xs font-semibold text-burgundy">Escolha uma nova data para os termos</p><button type="button" onClick={() => !enviando && setAlterandoTermos(false)} className="rounded-full p-1 text-clay/50 hover:bg-blush"><X className="h-4 w-4" /></button></div><CalendarioAgendamento datas={datasTermos} onConfirmar={remarcarTermos} confirmando={enviando} /></div>}
+    </section>}
+
     <section className={cn("overflow-hidden rounded-2xl border shadow-[0_14px_40px_-28px_rgba(0,0,0,.35)]", recusada ? "border-alert/15 bg-alert/[0.045]" : "border-success/15 bg-success/[0.045]")}>
       <div className="flex items-center gap-2.5 px-3 py-3 sm:px-3.5 sm:py-3.5"><span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", recusada ? "bg-alert/10 text-alert" : "bg-success/10 text-success")}><CheckCircle2 className="h-4 w-4" /></span><div className="min-w-0 flex-1"><p className={cn("text-[0.58rem] font-semibold uppercase tracking-[0.14em]", recusada ? "text-alert" : "text-success")}>Financeiro confirmado</p><h3 className="mt-0.5 font-heading text-sm font-semibold leading-tight text-burgundy">Agora escolha a data da sua cirurgia</h3><p className="mt-0.5 text-[0.62rem] leading-[1.4] text-clay/55">A data da assinatura dos termos já foi escolhida. Para escolher a data da cirurgia, informe como será realizado o pagamento do saldo restante.</p></div>{!solicitacao && <button type="button" onClick={abrirModal} className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-rose px-2.5 py-2 text-[0.55rem] font-bold uppercase tracking-[0.08em] text-white shadow-card transition hover:opacity-90"><CreditCard className="h-3 w-3" /> Informar custeio</button>}{solicitacao && <span className={cn("hidden shrink-0 rounded-lg border px-2.5 py-1.5 text-[0.54rem] font-bold uppercase tracking-[0.08em] sm:inline-flex", recusada ? "border-alert/15 bg-alert/10 text-alert" : "border-success/15 bg-success/10 text-success")}>{recusada ? "Revisar custeio" : aprovada ? "Custeio confirmado" : "Custeio enviado"}</span>}</div>
     </section>
 
-    {dataAssinaturaTermos && !solicitacao && !dataCirurgia && <section className="relative overflow-hidden rounded-2xl border border-rose/15 bg-white/70 p-3 shadow-[0_14px_40px_-28px_rgba(0,0,0,.25)] dark:border-white/10 dark:bg-white/[0.035] sm:p-4">
-      <div className="relative">
-        <div className="pointer-events-none select-none blur-[4px] opacity-45">
-          <CalendarioCirurgia dataAssinatura={dataAssinaturaTermos} onConfirmada={() => {}} />
-        </div>
-        <div className="absolute inset-0 z-10 flex items-center justify-center px-3">
-          <div className="w-full max-w-[32rem] rounded-2xl border border-gold/30 bg-white/95 p-6 text-center shadow-[0_18px_55px_-25px_rgba(82,28,42,.28)] backdrop-blur-sm dark:border-white/10 dark:bg-[#25161b]/95 sm:p-8">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gold/10 text-gold"><LockKeyhole className="h-5 w-5" /></div>
-            <h3 className="mt-5 font-heading text-xl font-semibold text-burgundy dark:text-cream">Agenda da cirurgia bloqueada</h3>
-            <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-clay/65 dark:text-pearl/60">Escolha primeiro a forma de custeio do valor restante. Depois disso, esta agenda será liberada para seleção.</p>
-          </div>
-        </div>
-      </div>
-    </section>}
-    {solicitacao && dataAssinaturaTermos && !dataCirurgia && <CalendarioCirurgia dataAssinatura={dataAssinaturaTermos} onConfirmada={setDataCirurgia} />}
+    {dataAssinaturaTermos && !solicitacao && !dataCirurgia && <section className="relative overflow-hidden rounded-2xl border border-rose/15 bg-white/70 p-3 shadow-[0_14px_40px_-28px_rgba(0,0,0,.25)] dark:border-white/10 dark:bg-white/[0.035] sm:p-4"><div className="relative"><div className="pointer-events-none select-none blur-[4px] opacity-45"><CalendarioCirurgia dataAssinatura={dataAssinaturaTermos} onConfirmada={() => {}} /></div><div className="absolute inset-0 z-10 flex items-center justify-center px-3"><div className="w-full max-w-[32rem] rounded-2xl border border-gold/30 bg-white/95 p-6 text-center shadow-[0_18px_55px_-25px_rgba(82,28,42,.28)] backdrop-blur-sm dark:border-white/10 dark:bg-[#25161b]/95 sm:p-8"><div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gold/10 text-gold"><LockKeyhole className="h-5 w-5" /></div><h3 className="mt-5 font-heading text-xl font-semibold text-burgundy dark:text-cream">Agenda da cirurgia bloqueada</h3><p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-clay/65 dark:text-pearl/60">Escolha primeiro a forma de custeio do valor restante. Depois disso, esta agenda será liberada para seleção.</p></div></div></div></section>}
+    {solicitacao && dataAssinaturaTermos && !dataCirurgia && !alterandoCirurgia && <CalendarioCirurgia dataAssinatura={dataAssinaturaTermos} onConfirmada={setDataCirurgia} />}
+    {solicitacao && dataAssinaturaTermos && dataCirurgia && <section className="overflow-hidden rounded-2xl border border-success/15 bg-success/[0.035] shadow-[0_14px_40px_-28px_rgba(0,0,0,.3)]"><div className="flex items-center justify-between gap-3 px-3 py-3 sm:px-4"><div className="min-w-0"><p className="text-[0.55rem] font-semibold uppercase tracking-[0.14em] text-success">Cirurgia agendada</p><p className="mt-0.5 text-sm font-heading font-semibold text-burgundy">Data confirmada para {formatarData(dataCirurgia)}</p></div><button type="button" onClick={() => { setErro(null); setAlterandoCirurgia(true); }} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-rose/20 bg-white px-2.5 py-2 text-[0.58rem] font-bold uppercase tracking-[0.08em] text-burgundy hover:border-rose dark:border-white/10 dark:bg-white/[0.04] dark:text-cream"><CalendarDays className="h-3 w-3" /> Alterar data</button></div></section>}
+    {solicitacao && dataAssinaturaTermos && dataCirurgia && alterandoCirurgia && <div><CalendarioCirurgia dataAssinatura={dataAssinaturaTermos} dataCirurgiaAtual={dataCirurgia} onConfirmada={(data) => { setDataCirurgia(data); setAlterandoCirurgia(false); }} /><button type="button" onClick={() => setAlterandoCirurgia(false)} className="mt-2 inline-flex w-full items-center justify-center rounded-xl border border-rose/15 bg-white/70 px-3 py-2 text-[0.62rem] font-bold uppercase tracking-[0.08em] text-clay/65">Cancelar alteração</button></div>}
 
-    <AnimatePresence>{modalAberto && <motion.div className="fixed inset-0 z-[80] flex min-h-[100dvh] items-center justify-center overflow-y-auto bg-black/55 p-3 backdrop-blur-sm sm:p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={e => { if (e.target === e.currentTarget && !enviando) setModalAberto(false); }}>
-      <motion.div role="dialog" aria-modal="true" initial={{ opacity: 0, scale: .98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .98 }} className="my-auto w-full max-w-md max-h-[calc(100dvh-1.5rem)] overflow-y-auto rounded-2xl border border-rose/15 bg-white p-4 text-clay shadow-2xl dark:border-white/10 dark:bg-[#171618] dark:text-white sm:p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-[0.6rem] font-semibold uppercase tracking-label text-rose">Custeio do valor restante</p>
-            <h2 className="mt-1 font-heading text-base font-semibold text-burgundy dark:text-cream">Informe como será realizado o pagamento</h2>
-          </div>
-          <button type="button" onClick={() => !enviando && setModalAberto(false)} className="rounded-full p-1.5 text-clay/50 hover:bg-blush dark:text-white/50 dark:hover:bg-white/10"><X className="h-4 w-4" /></button>
-        </div>
-
-        <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-blush/45 p-3 dark:bg-white/[0.045]">
-          <div>
-            <p className="text-[0.55rem] font-semibold uppercase tracking-label text-clay/45">Parcelas pagas</p>
-            <p className="mt-0.5 text-sm font-bold text-burgundy dark:text-rose">{parcelasPagas} de {quantidadeParcelas || "—"}</p>
-          </div>
-          <div>
-            <p className="text-[0.55rem] font-semibold uppercase tracking-label text-clay/45">Parcelas restantes</p>
-            <p className="mt-0.5 text-sm font-bold text-burgundy dark:text-rose">{parcelasRestantes}</p>
-          </div>
-          <div>
-            <p className="text-[0.55rem] font-semibold uppercase tracking-label text-clay/45">Valor restante</p>
-            <p className="mt-0.5 text-sm font-bold text-burgundy dark:text-rose">{formatarMoeda(saldoRestante)}</p>
-          </div>
-          <div>
-            <p className="text-[0.55rem] font-semibold uppercase tracking-label text-clay/45">Cartão com taxa</p>
-            <p className="mt-0.5 text-sm font-bold text-burgundy dark:text-rose">{formatarMoeda(totalCartao)}</p>
-          </div>
-        </div>
-
-        <div className="mt-3 grid gap-2">{formasDisponiveis.map(forma => { const titulo = forma === "cartao" ? "Cartão de crédito" : forma === "pix" ? "PIX" : forma === "cheques" ? "Cheques" : "100% boleto"; const descricao = forma === "cartao" ? "taxa configurada no contrato" : forma === "pix" ? "sem taxa adicional" : "análise de até 5 dias úteis"; return <button key={forma} type="button" onClick={() => setFormaCusteio(forma)} className={cn("flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition", formaCusteio === forma ? "border-burgundy bg-burgundy text-cream" : "border-rose/15 bg-white text-clay/70 hover:border-rose dark:border-white/10 dark:bg-white/[0.035] dark:text-white/75")}><span><span className="block text-[0.72rem] font-semibold">{titulo}</span><span className="block text-[0.6rem] opacity-60">{descricao}</span></span><span className={cn("h-3.5 w-3.5 rounded-full border", formaCusteio === forma ? "border-cream bg-cream" : "border-clay/25")} /></button>; })}</div>
-        {formasDisponiveis.length === 0 && <p className="mt-3 rounded-xl bg-alert/10 p-3 text-xs text-alert">Nenhuma forma de custeio está disponível para este contrato no momento.</p>}
-        {erro && <p className="mt-3 rounded-xl bg-alert/10 p-3 text-xs text-alert">{erro}</p>}
-        <button type="button" onClick={enviar} disabled={!formaCusteio || enviando || formasDisponiveis.length === 0} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-burgundy px-4 py-3 text-[0.66rem] font-bold uppercase tracking-[0.12em] text-cream transition hover:bg-burgundy-dark disabled:cursor-not-allowed disabled:opacity-45">{enviando ? "Enviando..." : "Confirmar custeio e liberar agenda"}</button>
-      </motion.div>
-    </motion.div>}</AnimatePresence>
+    <AnimatePresence>{modalAberto && <motion.div className="fixed inset-0 z-[80] flex min-h-[100dvh] items-center justify-center overflow-y-auto bg-black/55 p-3 backdrop-blur-sm sm:p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={e => { if (e.target === e.currentTarget && !enviando) setModalAberto(false); }}><motion.div role="dialog" aria-modal="true" initial={{ opacity: 0, scale: .98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .98 }} className="my-auto w-full max-w-md max-h-[calc(100dvh-1.5rem)] overflow-y-auto rounded-2xl border border-rose/15 bg-white p-4 text-clay shadow-2xl dark:border-white/10 dark:bg-[#171618] dark:text-white sm:p-5"><div className="flex items-start justify-between gap-3"><div><p className="text-[0.6rem] font-semibold uppercase tracking-label text-rose">Custeio do valor restante</p><h2 className="mt-1 font-heading text-base font-semibold text-burgundy dark:text-cream">Informe como será realizado o pagamento</h2></div><button type="button" onClick={() => !enviando && setModalAberto(false)} className="rounded-full p-1.5 text-clay/50 hover:bg-blush dark:text-white/50 dark:hover:bg-white/10"><X className="h-4 w-4" /></button></div><div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-blush/45 p-3 dark:bg-white/[0.045]"><div><p className="text-[0.55rem] font-semibold uppercase tracking-label text-clay/45">Parcelas pagas</p><p className="mt-0.5 text-sm font-bold text-burgundy dark:text-rose">{parcelasPagas} de {quantidadeParcelas || "—"}</p></div><div><p className="text-[0.55rem] font-semibold uppercase tracking-label text-clay/45">Parcelas restantes</p><p className="mt-0.5 text-sm font-bold text-burgundy dark:text-rose">{parcelasRestantes}</p></div><div><p className="text-[0.55rem] font-semibold uppercase tracking-label text-clay/45">Valor restante</p><p className="mt-0.5 text-sm font-bold text-burgundy dark:text-rose">{formatarMoeda(saldoRestante)}</p></div><div><p className="text-[0.55rem] font-semibold uppercase tracking-label text-clay/45">Cartão com taxa</p><p className="mt-0.5 text-sm font-bold text-burgundy dark:text-rose">{formatarMoeda(totalCartao)}</p></div></div><div className="mt-3 grid gap-2">{formasDisponiveis.map(forma => { const titulo = forma === "cartao" ? "Cartão de crédito" : forma === "pix" ? "PIX" : forma === "cheques" ? "Cheques" : "100% boleto"; const descricao = forma === "cartao" ? "taxa configurada no contrato" : forma === "pix" ? "sem taxa adicional" : "análise de até 5 dias úteis"; return <button key={forma} type="button" onClick={() => setFormaCusteio(forma)} className={cn("flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition", formaCusteio === forma ? "border-burgundy bg-burgundy text-cream" : "border-rose/15 bg-white text-clay/70 hover:border-rose dark:border-white/10 dark:bg-white/[0.035] dark:text-white/75")}><span><span className="block text-[0.72rem] font-semibold">{titulo}</span><span className="block text-[0.6rem] opacity-60">{descricao}</span></span><span className={cn("h-3.5 w-3.5 rounded-full border", formaCusteio === forma ? "border-cream bg-cream" : "border-clay/25")} /></button>; })}</div>{formasDisponiveis.length === 0 && <p className="mt-3 rounded-xl bg-alert/10 p-3 text-xs text-alert">Nenhuma forma de custeio está disponível para este contrato no momento.</p>}{erro && <p className="mt-3 rounded-xl bg-alert/10 p-3 text-xs text-alert">{erro}</p>}<button type="button" onClick={enviar} disabled={!formaCusteio || enviando || formasDisponiveis.length === 0} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-burgundy px-4 py-3 text-[0.66rem] font-bold uppercase tracking-[0.12em] text-cream transition hover:bg-burgundy-dark disabled:cursor-not-allowed disabled:opacity-45">{enviando ? "Enviando..." : "Confirmar custeio e liberar agenda"}</button></motion.div></motion.div>}</AnimatePresence>
   </div>;
 }
