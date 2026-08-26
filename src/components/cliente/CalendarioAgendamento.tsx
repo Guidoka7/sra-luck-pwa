@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { addMonths, format, getDaysInMonth, isBefore, isToday, startOfDay, startOfMonth, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -15,9 +15,15 @@ function parseDataLocal(iso: string): Date { const [ano, mes, dia] = iso.split("
 
 export function CalendarioAgendamento({ datas, onConfirmar, confirmando, bloqueado = false }: CalendarioAgendamentoProps) {
   const hoje = startOfDay(new Date());
+  const inicializado = useRef(false);
   const [mesAtual, setMesAtual] = useState(() => { const hojeStr = format(hoje, "yyyy-MM-dd"); const futuras = datas.map(d => d.data).filter(d => d >= hojeStr).sort(); return futuras[0] ? startOfMonth(parseDataLocal(futuras[0])) : startOfMonth(hoje); });
   const [direcao, setDirecao] = useState<1 | -1>(1); const [diaSelecionado, setDiaSelecionado] = useState<string | null>(null); const [horarioSelecionado, setHorarioSelecionado] = useState<string | null>(null);
-  useEffect(() => { const primeira = datas.map(d => d.data).filter(d => d >= format(hoje, "yyyy-MM-dd")).sort()[0]; if (primeira && !diaSelecionado) setMesAtual(startOfMonth(parseDataLocal(primeira))); }, [datas, hoje, diaSelecionado]);
+  useEffect(() => {
+    if (inicializado.current) return;
+    const primeira = datas.map(d => d.data).filter(d => d >= format(hoje, "yyyy-MM-dd")).sort()[0];
+    if (primeira) setMesAtual(startOfMonth(parseDataLocal(primeira)));
+    inicializado.current = true;
+  }, [datas, hoje]);
   const porData = useMemo(() => new Map(datas.map(d => [d.data, d])), [datas]); const primeiroDiaSemana = mesAtual.getDay(); const diasDoMes = getDaysInMonth(mesAtual); const celulas = Array.from({ length: primeiroDiaSemana + diasDoMes }, (_, i) => i < primeiroDiaSemana ? null : i - primeiroDiaSemana + 1); const entradaSelecionada = diaSelecionado ? porData.get(diaSelecionado) : null;
   function mudarMes(delta: 1 | -1) { setDirecao(delta); setMesAtual(atual => delta === 1 ? addMonths(atual, 1) : subMonths(atual, 1)); setDiaSelecionado(null); setHorarioSelecionado(null); }
   function selecionarDia(dia: Date) { if (bloqueado || isBefore(dia, hoje)) return; const chave = format(dia, "yyyy-MM-dd"); const entrada = porData.get(chave); if (!entrada || entrada.vagasRestantes <= 0) return; setDiaSelecionado(chave === diaSelecionado ? null : chave); setHorarioSelecionado(null); }
