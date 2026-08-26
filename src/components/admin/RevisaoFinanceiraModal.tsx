@@ -29,7 +29,6 @@ export function RevisaoFinanceiraModal({ clienteId, onClose, onConcluido }: { cl
   const [boletos, setBoletos] = useState<Boleto[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [processando, setProcessando] = useState<string | null>(null);
-  const [saldo, setSaldo] = useState("0");
   const [taxa, setTaxa] = useState("5.4");
   const [formas, setFormas] = useState<Forma[]>(["cartao", "pix", "cheques", "boleto_100"]);
 
@@ -44,24 +43,25 @@ export function RevisaoFinanceiraModal({ clienteId, onClose, onConcluido }: { cl
       const db = await rb.json();
       if (!rc.ok) throw new Error(dc.erro ?? "Não foi possível carregar os dados da cliente.");
       if (!rb.ok) throw new Error(db.erro ?? "Não foi possível carregar as parcelas.");
-      const c = dc.cliente as ClienteFinanceiro;
-      const lista = (db.boletos ?? []) as Boleto[];
-      setCliente(c);
-      setBoletos(lista);
-      setSaldo(String(c.financeiro_saldo_restante ?? lista.filter((b) => b.status !== "pago").reduce((s, b) => s + Number(b.valor || 0), 0)));
+      setCliente(dc.cliente as ClienteFinanceiro);
+      setBoletos((db.boletos ?? []) as Boleto[]);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Não foi possível carregar a revisão financeira.");
     } finally { setCarregando(false); }
   }
+
   useEffect(() => { void carregar(); }, [clienteId]);
 
   const pagas = useMemo(() => boletos.filter((b) => b.status === "pago"), [boletos]);
-  const valorPago = pagas.reduce((s, b) => s + Number(b.valor || 0), 0);
-  const valorRestante = boletos.filter((b) => b.status !== "pago").reduce((s, b) => s + Number(b.valor || 0), 0);
+  const valorPago = useMemo(() => pagas.reduce((s, b) => s + Number(b.valor || 0), 0), [pagas]);
+  const parcelasRestantes = useMemo(() => boletos.filter((b) => b.status !== "pago"), [boletos]);
+  const valorRestante = useMemo(() => parcelasRestantes.reduce((s, b) => s + Number(b.valor || 0), 0), [parcelasRestantes]);
   const taxaNumero = Number(taxa.replace(",", ".")) || 0;
-  const totalComTaxa = Number(saldo || 0) * (1 + taxaNumero / 100);
+  const totalComTaxa = valorRestante * (1 + taxaNumero / 100);
 
-  function alternarForma(forma: Forma) { setFormas((atual) => atual.includes(forma) ? atual.filter((x) => x !== forma) : [...atual, forma]); }
+  function alternarForma(forma: Forma) {
+    setFormas((atual) => atual.includes(forma) ? atual.filter((x) => x !== forma) : [...atual, forma]);
+  }
 
   async function decidirParcela(boleto: Boleto, acao: "confirmar" | "rejeitar") {
     if (acao === "rejeitar") {
@@ -73,13 +73,14 @@ export function RevisaoFinanceiraModal({ clienteId, onClose, onConcluido }: { cl
         const r = await fetch(`/api/admin/boletos/${boleto.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao, observacoes }) });
         const d = await r.json();
         if (!r.ok) throw new Error(d.erro ?? "Não foi possível recusar a parcela.");
-        toast.success(`Parcela ${boleto.numero_parcela} recusada e devolvida para Em aberto.`);
         setBoletos((atual) => atual.map((b) => b.id === boleto.id ? { ...b, status: "nao_pago", data_pagamento: null, observacoes } : b));
+        toast.success(`Parcela ${boleto.numero_parcela} recusada e devolvida para Em aberto.`);
         onConcluido();
       } catch (e) { toast.error(e instanceof Error ? e.message : "Erro ao recusar parcela."); }
       finally { setProcessando(null); }
       return;
     }
+
     setProcessando(boleto.id);
     try {
       const r = await fetch(`/api/admin/boletos/${boleto.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ acao: "confirmar", observacoes: boleto.comprovante_url ? "Pagamento confirmado após conferência administrativa." : "Pagamento confirmado sem comprovante anexado após conferência administrativa." }) });
@@ -93,12 +94,11 @@ export function RevisaoFinanceiraModal({ clienteId, onClose, onConcluido }: { cl
 
   async function confirmarLevantamento() {
     if (!formas.length) return toast.error("Selecione pelo menos uma forma de custeio.");
-    const saldoNumero = Number(saldo);
-    if (!Number.isFinite(saldoNumero) || saldoNumero < 0) return toast.error("Informe um valor restante válido.");
+    if (!Number.isFinite(valorRestante) || valorRestante < 0) return toast.error("Não foi possível calcular o valor restante.");
     if (boletos.some((b) => b.status !== "pago")) return toast.error("Confirme ou regularize todas as parcelas antes de liberar a próxima etapa.");
     setProcessando("final");
     try {
-      const r = await fetch(`/api/admin/clientes/${clienteId}/revisao-financeira`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decisao: "aprovada", saldoRestante: saldoNumero, taxaCartao: taxaNumero, formasCusteio: formas }) });
+      const r = await fetch(`/api/admin/clientes/${clienteId}/revisao-financeira`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decisao: "aprovada", saldoRestante: valorRestante, taxaCartao: taxaNumero, formasCusteio: formas }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.erro ?? "Não foi possível confirmar o levantamento financeiro.");
       toast.success("Levantamento confirmado. A próxima etapa foi liberada.");
@@ -139,8 +139,8 @@ export function RevisaoFinanceiraModal({ clienteId, onClose, onConcluido }: { cl
           </section>
 
           <section className="rounded-xl border border-gold/15 bg-gold/[0.045] p-3">
-            <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-gold"/><div><p className="text-[0.58rem] font-bold uppercase tracking-[0.16em] text-gold">Custeio do valor restante</p><p className="text-[0.58rem] text-pearl/35">{boletos.length - pagas.length} parcelas restantes · {formatarMoeda(valorRestante)}</p></div></div>
-            <div className="mt-2 grid gap-2 sm:grid-cols-2"><label className="text-[0.52rem] font-bold uppercase tracking-label text-pearl/40">Valor restante<input value={saldo} onChange={(e) => setSaldo(e.target.value)} inputMode="decimal" className="mt-1 h-8 w-full rounded-lg border border-white/10 bg-white/[0.06] px-2.5 text-xs text-pearl outline-none" /></label><label className="text-[0.52rem] font-bold uppercase tracking-label text-pearl/40">Taxa cartão (%)<input value={taxa} onChange={(e) => setTaxa(e.target.value)} inputMode="decimal" className="mt-1 h-8 w-full rounded-lg border border-white/10 bg-white/[0.06] px-2.5 text-xs text-pearl outline-none" /></label></div>
+            <div className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-gold"/><div><p className="text-[0.58rem] font-bold uppercase tracking-[0.16em] text-gold">Custeio do valor restante</p><p className="text-[0.58rem] text-pearl/35">{parcelasRestantes.length} parcelas restantes · {formatarMoeda(valorRestante)}</p></div></div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2"><label className="text-[0.52rem] font-bold uppercase tracking-label text-pearl/40">Valor restante<input value={formatarMoeda(valorRestante)} readOnly aria-readonly="true" inputMode="decimal" className="mt-1 h-8 w-full rounded-lg border border-white/10 bg-white/[0.04] px-2.5 text-xs font-semibold text-pearl outline-none" /></label><label className="text-[0.52rem] font-bold uppercase tracking-label text-pearl/40">Taxa cartão (%)<input value={taxa} onChange={(e) => setTaxa(e.target.value)} inputMode="decimal" className="mt-1 h-8 w-full rounded-lg border border-white/10 bg-white/[0.06] px-2.5 text-xs text-pearl outline-none" /></label></div>
             <div className="mt-2"><p className="mb-1.5 text-[0.52rem] font-bold uppercase tracking-label text-pearl/40">Formas de custeio disponíveis</p><div className="flex flex-wrap gap-1.5">{FORMAS.map((f) => <button type="button" key={f.value} onClick={() => alternarForma(f.value)} className={`rounded-full border px-2.5 py-1.5 text-[0.56rem] font-semibold transition ${formas.includes(f.value) ? "border-rose/30 bg-rose text-white" : "border-white/10 bg-white/[0.04] text-pearl/60"}`}>{f.label}</button>)}</div></div>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-black/10 px-2.5 py-2"><p className="text-[0.56rem] text-pearl/45">Total com taxa de cartão: <strong className="text-pearl/80">{formatarMoeda(totalComTaxa)}</strong></p><Button size="sm" loading={processando === "final"} onClick={confirmarLevantamento} disabled={boletos.length === 0 || boletos.some((b) => b.status !== "pago")}><CheckCircle2 className="h-3.5 w-3.5" />Confirmar levantamento</Button></div>
           </section>
