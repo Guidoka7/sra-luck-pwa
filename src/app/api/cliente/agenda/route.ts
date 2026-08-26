@@ -5,7 +5,6 @@ import { CLIENTE_COOKIE_NAME, verificarTokenSessao } from "@/lib/session";
 function mapAgendamento(a: any) {
   return a ? { id: a.id, data: a.datas?.data, horario: a.horario_termos ? String(a.horario_termos).slice(0, 5) : null, termosAssinadosEm: a.termos_assinados_em ?? null, previsaoLiberacaoFinanceira: a.previsao_liberacao_financeira ?? null, status: a.status } : null;
 }
-
 function dataTesteValida(valor: string | undefined) { return Boolean(valor && /^\d{4}-\d{2}-\d{2}$/.test(valor)); }
 
 export async function GET(req: NextRequest) {
@@ -20,13 +19,26 @@ export async function GET(req: NextRequest) {
   const agendamentoAtivo = (agendamentos ?? []).find((a: any) => a.status === "confirmado") ?? null;
   const agendamentoConcluido = (agendamentos ?? []).find((a: any) => a.status === "realizado") ?? null;
   const { data: solicitacao } = await supabase.from("solicitacoes_liberacao_financeira").select("id, forma_custeio, saldo_restante, taxa_cartao, total_com_taxa, status, observacao, agendamento_id, created_at, updated_at").eq("cliente_id", cliente.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+
   const testDate = req.cookies.get("sra_luck_test_date")?.value;
   const hoje = dataTesteValida(testDate) ? testDate! : new Date().toISOString().slice(0, 10);
+
+  // Primeira agenda: datas liberadas pelo Admin para assinatura dos termos.
   const { data: datasDisponiveis } = await supabase.from("datas").select("id, data, vagas_totais").eq("status", "disponivel").gte("data", hoje).order("data", { ascending: true });
   const { data: agendamentosAtivos } = await supabase.from("agendamentos").select("data_id").eq("status", "confirmado");
   const ocupacaoPorData = new Map<string, number>();
   for (const a of agendamentosAtivos ?? []) ocupacaoPorData.set(a.data_id, (ocupacaoPorData.get(a.data_id) ?? 0) + 1);
   const datas = (datasDisponiveis ?? []).map((d: { id: string; data: string; vagas_totais: number }) => ({ id: d.id, data: d.data, vagasRestantes: Math.max(0, d.vagas_totais - (ocupacaoPorData.get(d.id) ?? 0)) }));
+
+  // Segunda agenda: usa EXCLUSIVAMENTE o calendário que o Admin libera em
+  // "Previsão de liberação financeira". Para a cliente, essas datas passam a
+  // representar a data da cirurgia. Datas não liberadas simplesmente não
+  // entram no mapa e o calendário visual as apresenta como "lotadas".
+  const { data: datasCirurgia } = await supabase.from("datas_liberacao_financeira").select("id, data, status").eq("status", "disponivel").gte("data", hoje).order("data", { ascending: true });
+  const { data: cirurgiasAgendadas } = await supabase.from("agendamentos").select("previsao_liberacao_financeira").eq("status", "confirmado").not("previsao_liberacao_financeira", "is", null);
+  const ocupacaoCirurgia = new Map<string, number>();
+  for (const a of cirurgiasAgendadas ?? []) { const data = (a as any).previsao_liberacao_financeira as string | null; if (data) ocupacaoCirurgia.set(data, (ocupacaoCirurgia.get(data) ?? 0) + 1); }
+  const datasCirurgiaDisponiveis = (datasCirurgia ?? []).map((d: { id: string; data: string }) => ({ id: d.id, data: d.data, vagasRestantes: Math.max(0, 1 - (ocupacaoCirurgia.get(d.data) ?? 0)) }));
 
   return NextResponse.json({
     cliente: { id: cliente.id, nome: cliente.nome_completo, procedimento: cliente.procedimento },
@@ -35,6 +47,7 @@ export async function GET(req: NextRequest) {
     agendamentoAtivo: mapAgendamento(agendamentoAtivo),
     agendamentoConcluido: mapAgendamento(agendamentoConcluido),
     datasDisponiveis: datas,
+    datasCirurgiaDisponiveis,
     dataTesteAtiva: dataTesteValida(testDate) ? hoje : null,
   });
 }
