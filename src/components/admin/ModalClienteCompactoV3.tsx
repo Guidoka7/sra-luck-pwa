@@ -13,9 +13,14 @@ import { QUANTIDADE_PARCELAS_OPCOES, STATUS_BOLETO_LABEL, TAXA_ADMINISTRATIVA_PA
 
 const moeda = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-function ValueBadge({ label, value, prefix = "R$", tone = "neutral", onChange }: { label: string; value: string; prefix?: string; tone?: "neutral" | "green" | "gold" | "rose"; onChange?: (v: string) => void }) {
+function ValueBadge({ label, value, prefix = "R$", suffix, tone = "neutral", onChange }: { label: string; value: string; prefix?: string; suffix?: string; tone?: "neutral" | "green" | "gold" | "rose"; onChange?: (v: string) => void }) {
   const tones = { neutral: "border-rose/10 bg-white/[0.035] text-pearl", green: "border-emerald-300/20 bg-emerald-400/[0.08] text-emerald-100", gold: "border-amber-300/20 bg-amber-300/[0.08] text-amber-100", rose: "border-rose/20 bg-rose/[0.08] text-rose-100" };
-  return <div className="min-w-0"><Label>{label}</Label><div className={`mt-1 flex h-10 items-center rounded-xl border px-2.5 shadow-sm transition focus-within:ring-1 focus-within:ring-rose/20 ${tones[tone]}`}><span className="shrink-0 text-[0.62rem] font-bold opacity-65">{prefix}</span><input inputMode="decimal" value={value} onChange={e => onChange?.(e.target.value)} className="min-w-0 w-full bg-transparent px-1.5 text-xs font-bold outline-none" /></div></div>;
+  const mostrarPrefixo = Boolean(prefix) && !suffix;
+  return <div className="min-w-0"><Label>{label}</Label><div className={`mt-1 flex h-10 items-center rounded-xl border px-2.5 shadow-sm transition focus-within:ring-1 focus-within:ring-rose/20 ${tones[tone]}`}>
+    {mostrarPrefixo && <span className="shrink-0 text-[0.62rem] font-bold opacity-65">{prefix}</span>}
+    <input inputMode="decimal" value={value} onChange={e => onChange?.(e.target.value)} className="min-w-0 w-full bg-transparent px-1.5 text-xs font-bold outline-none" />
+    {suffix && <span className="shrink-0 pl-1 text-[0.62rem] font-bold opacity-65">{suffix}</span>}
+  </div></div>;
 }
 
 export function ModalClienteCompactoV3({ cliente, onClose, onSalvo }: { cliente: Cliente | null; onClose: () => void; onSalvo: () => void }) {
