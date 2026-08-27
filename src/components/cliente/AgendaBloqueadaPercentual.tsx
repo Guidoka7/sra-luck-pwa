@@ -41,7 +41,7 @@ export function AgendaBloqueadaPercentual({ percentual, parcelasNecessarias, dat
             {levantamento ? "Levantamento financeiro" : "Agenda bloqueada"}
           </p>
           <h4 className={`mt-1.5 font-heading text-lg font-semibold leading-tight sm:text-xl ${levantamento ? "text-rose dark:!text-rose" : "text-burgundy dark:!text-[#F7F3F4]"}`}>
-            Agenda da cirurgia indisponível no momento
+            {levantamento ? "Agenda da cirurgia indisponível no momento" : "Agenda da assinatura dos termos"}
           </h4>
           <p className="mx-auto mt-2.5 max-w-[30rem] text-[0.72rem] leading-relaxed text-clay/75 dark:!text-[#D9D5D6] sm:text-sm">
             {levantamento
