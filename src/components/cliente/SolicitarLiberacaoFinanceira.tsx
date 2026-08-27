@@ -88,7 +88,7 @@ export function SolicitarLiberacaoFinanceira({ ativo = true }: Props) {
           <p className="text-[0.54rem] font-semibold uppercase tracking-[0.2em] text-clay/45 dark:text-pearl/40">{titulo}</p>
           <div className="mt-2 flex items-end gap-2">
             <span className="font-heading text-[2.55rem] font-semibold leading-none tracking-[-0.04em] text-burgundy dark:text-cream">{data.dia}</span>
-            <span className="pb-0.5 text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-rose dark:text-rose">{data.mes}</span>
+            <span className="pb-0.5 text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-rose">{data.mes}</span>
           </div>
           <p className="mt-1 text-[0.62rem] font-medium tracking-[0.12em] text-clay/45 dark:text-pearl/40">{data.ano}</p>
         </div>
@@ -113,6 +113,10 @@ export function SolicitarLiberacaoFinanceira({ ativo = true }: Props) {
         {renderDataCard("Data da sua cirurgia", dataCirurgia, "cirurgia")}
       </div>
       <p className="px-4 pb-4 text-center text-[0.58rem] leading-relaxed text-clay/45 dark:text-pearl/35">As duas datas foram registradas: assinatura dos termos e data da cirurgia.</p>
+    </section>}
+
+    {dataAssinaturaTermos && !dataCirurgia && <section className={cn("overflow-hidden rounded-2xl border shadow-[0_14px_40px_-28px_rgba(0,0,0,.35)]", recusada ? "border-alert/15 bg-alert/[0.045]" : "border-success/15 bg-success/[0.045]")}>
+      <div className="flex items-center gap-2.5 px-3 py-3 sm:px-3.5 sm:py-3.5"><span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", recusada ? "bg-alert/10 text-alert" : "bg-success/10 text-success")}><CheckCircle2 className="h-4 w-4" /></span><div className="min-w-0 flex-1"><p className={cn("text-[0.58rem] font-semibold uppercase tracking-[0.14em]", recusada ? "text-alert" : "text-success")}>{recusada ? "Custeio precisa de revisão" : aprovada ? "Custeio confirmado" : "Próxima etapa"}</p><h3 className="mt-0.5 font-heading text-sm font-semibold leading-tight text-burgundy">{recusada ? "Revise a forma de custeio" : "Informe como será realizado o pagamento do saldo restante"}</h3><p className="mt-0.5 text-[0.62rem] leading-[1.4] text-clay/55">{recusada ? "A solicitação anterior foi recusada. Você pode informar novamente a forma de custeio." : "Depois de informar a forma de custeio, a agenda da cirurgia será liberada para seleção."}</p></div>{(!solicitacao || recusada) && <button type="button" onClick={abrirModal} className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-rose px-2.5 py-2 text-[0.55rem] font-bold uppercase tracking-[0.08em] text-white shadow-card transition hover:opacity-90"><CreditCard className="h-3 w-3" /> Informar custeio</button>}{solicitacao && !recusada && <span className="hidden shrink-0 rounded-lg border border-success/15 bg-success/10 px-2.5 py-1.5 text-[0.54rem] font-bold uppercase tracking-[0.08em] text-success sm:inline-flex">{aprovada ? "Custeio confirmado" : "Custeio enviado"}</span>}</div>
     </section>}
 
     {alterandoTermos && <section className="overflow-hidden rounded-2xl border border-rose/15 bg-white/75 p-3 shadow-[0_14px_40px_-28px_rgba(0,0,0,.25)] dark:border-white/10 dark:bg-white/[0.035] sm:p-4"><div className="mb-3 flex items-center justify-between"><p className="text-xs font-semibold text-burgundy dark:text-cream">Escolha uma nova data para os termos</p><button type="button" onClick={() => !enviando && setAlterandoTermos(false)} className="rounded-full p-1 text-clay/50 hover:bg-blush dark:text-pearl/50 dark:hover:bg-white/10"><X className="h-4 w-4" /></button></div><CalendarioAgendamento datas={datasTermos} onConfirmar={remarcarTermos} confirmando={enviando} /></section>}
