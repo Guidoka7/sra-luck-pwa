@@ -168,31 +168,40 @@ html.dark {
   .dark [class~="bg-white/[0.02]"] { background-color: rgb(255 255 255 / 0.014) !important; }
 }
 
-/* CORREÇÃO DO PERFIL DA CLIENTE NO MODO CLARO.
-   O modal antigo usa uma superfície escura fixa (#1b181b) e text-pearl.
-   Enquanto o modal existir, estes seletores convertem apenas essa janela
-   para a paleta clara, sem alterar o restante do sistema. */
+/* Modal de cliente: somente no tema claro, restaurando contraste sem afetar o tema escuro. */
 @layer utilities {
-  body:has([class~="bg-[#1b181b]"]) [class~="bg-[#1b181b]"] {
-    background-color: rgb(var(--surface-0)) !important;
+  html:not(.dark) body:has([class~="bg-[#1b181b]"]) [class~="bg-[#1b181b]"] {
+    background: rgb(var(--surface-0)) !important;
     color: rgb(var(--text-main)) !important;
     border-color: rgb(var(--border-soft) / 0.14) !important;
   }
-  body:has([class~="bg-[#1b181b]"]) [class*="text-pearl"] {
+  html:not(.dark) body:has([class~="bg-[#1b181b]"]) [class*="text-pearl"] {
     color: rgb(var(--text-main)) !important;
   }
-  body:has([class~="bg-[#1b181b]"]) [class*="border-white"] {
+  html:not(.dark) body:has([class~="bg-[#1b181b]"]) [class*="text-pearl/35"],
+  html:not(.dark) body:has([class~="bg-[#1b181b]"]) [class*="text-pearl/40"],
+  html:not(.dark) body:has([class~="bg-[#1b181b]"]) [class*="text-pearl/45"] {
+    color: rgb(var(--text-soft)) !important;
+  }
+  html:not(.dark) body:has([class~="bg-[#1b181b]"]) [class*="text-emerald-100"] {
+    color: rgb(21 128 61) !important;
+  }
+  html:not(.dark) body:has([class~="bg-[#1b181b]"]) [class*="text-amber-100"] {
+    color: rgb(146 94 25) !important;
+  }
+  html:not(.dark) body:has([class~="bg-[#1b181b]"]) [class*="text-rose-100"] {
+    color: rgb(var(--color-burgundy)) !important;
+  }
+  html:not(.dark) body:has([class~="bg-[#1b181b]"]) [class*="border-white"] {
     border-color: rgb(var(--border-soft) / 0.10) !important;
   }
-  body:has([class~="bg-[#1b181b]"]) [class~="bg-black/10"] {
+  html:not(.dark) body:has([class~="bg-[#1b181b]"]) [class~="bg-black/10"] {
     background-color: rgb(var(--surface-1)) !important;
   }
-  body:has([class~="bg-[#1b181b]"]) [class~="bg-white/[0.035]"] {
+  html:not(.dark) body:has([class~="bg-[#1b181b]"]) [class~="bg-white/[0.035]"] {
     background-color: rgb(var(--text-main) / 0.045) !important;
   }
-  body:has([class~="bg-[#1b181b]"]) [class~="bg-white/5"]:hover {
+  html:not(.dark) body:has([class~="bg-[#1b181b]"]) [class~="bg-white/5"]:hover {
     background-color: rgb(var(--color-rose) / 0.10) !important;
   }
 }
-
-@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
