@@ -30,7 +30,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const { error: erroUpload } = await supabase.storage.from(BUCKET).upload(caminho, arquivo, { contentType: arquivo.type, upsert: false });
   if (erroUpload) { console.error("Erro upload comprovante:", erroUpload); return NextResponse.json({ erro: "Erro ao enviar o arquivo." }, { status: 500 }); }
 
-  const { error: erroUpdate } = await supabase.from("boletos").update({ status: "pago", comprovante_url: caminho, data_pagamento: new Date().toISOString().slice(0, 10), observacoes: null }).eq("id", boletoId);
+  // O envio do comprovante NÃO confirma o pagamento.
+  // Ele fica pendente até a administração analisar e confirmar ou rejeitar.
+  const { error: erroUpdate } = await supabase.from("boletos").update({ status: "pendente_confirmacao", comprovante_url: caminho, data_pagamento: null, observacoes: null }).eq("id", boletoId);
   if (erroUpdate) {
     await supabase.storage.from(BUCKET).remove([caminho]);
     return NextResponse.json({ erro: "Erro ao salvar o comprovante." }, { status: 500 });
@@ -53,5 +55,5 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
   }
 
-  return NextResponse.json({ sucesso: true, boleto_id: boletoId, status: "pago" });
+  return NextResponse.json({ sucesso: true, boleto_id: boletoId, status: "pendente_confirmacao" });
 }
