@@ -1,32 +1,61 @@
 "use client";
 
-import { LockKeyhole } from "lucide-react";
+import { Clock3, LockKeyhole, ShieldCheck } from "lucide-react";
 import { CalendarioAgendamento, DataDisponivel } from "@/components/cliente/CalendarioAgendamento";
 
-export function AgendaBloqueadaPercentual({ percentual, parcelasNecessarias, datas }: { percentual: number; parcelasNecessarias: number | null; datas: DataDisponivel[] }) {
-  return <div className="flex flex-col gap-4">
-    <section className="overflow-hidden rounded-2xl border border-rose/15 bg-white/70 p-3 shadow-[0_14px_40px_-28px_rgba(0,0,0,.25)] dark:border-white/10 dark:bg-white/[0.035] sm:p-4">
-      <div className="flex items-start gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-burgundy/8 text-burgundy"><LockKeyhole className="h-4 w-4" /></span>
-        <div className="min-w-0"><p className="text-[0.55rem] font-bold uppercase tracking-[0.15em] text-rose">Minha agenda</p><h2 className="mt-1 font-heading text-sm font-semibold leading-tight text-burgundy">Atinga o percentual mínimo para liberar sua agenda</h2><p className="mt-1.5 text-[0.72rem] leading-relaxed text-clay/65">Para liberar a escolha da data, você precisa atingir <strong className="text-burgundy">{percentual}% das parcelas mínimas pagas</strong>{parcelasNecessarias ? ` (${parcelasNecessarias} parcelas)` : ""}. Assim que atingir esse percentual, iniciaremos seu levantamento financeiro.</p></div>
-      </div>
-    </section>
+type Etapa = "percentual" | "levantamento";
 
-    <section className="relative overflow-hidden rounded-2xl border border-rose/15 bg-white/70 p-3 shadow-[0_14px_40px_-28px_rgba(0,0,0,.25)] dark:border-white/10 dark:bg-white/[0.035] sm:p-4">
-      <div className="relative">
-        <div className="pointer-events-none select-none blur-[4px] opacity-45">
-          <CalendarioAgendamento datas={datas} onConfirmar={() => {}} confirmando={false} bloqueado />
+export function AgendaBloqueadaPercentual({ percentual, parcelasNecessarias, datas, etapa = "percentual" }: { percentual: number; parcelasNecessarias: number | null; datas: DataDisponivel[]; etapa?: Etapa }) {
+  const levantamento = etapa === "levantamento";
+
+  return <section className="overflow-hidden rounded-2xl border border-rose/15 bg-white/80 shadow-[0_14px_40px_-28px_rgba(0,0,0,.35)] dark:border-white/10 dark:bg-white/[0.035]">
+    <div className="border-b border-rose/10 bg-blush/25 px-3 py-3 sm:px-4">
+      <div className="flex items-start gap-2.5">
+        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${levantamento ? "bg-gold/10 text-gold" : "bg-rose/10 text-rose"}`}>
+          {levantamento ? <Clock3 className="h-4 w-4" /> : <LockKeyhole className="h-4 w-4" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className={`text-[0.55rem] font-bold uppercase tracking-[0.14em] ${levantamento ? "text-gold" : "text-rose"}`}>Minha agenda</p>
+          <h3 className="mt-0.5 font-heading text-sm font-semibold leading-tight text-burgundy dark:text-cream">
+            {levantamento ? "Estamos realizando seu levantamento financeiro" : "Atinga o percentual mínimo para liberar sua agenda"}
+          </h3>
+          <p className="mt-0.5 text-[0.62rem] leading-[1.4] text-clay/55 dark:text-pearl/55">
+            {levantamento
+              ? "Você já atingiu o percentual necessário. Estamos conferindo seu levantamento financeiro para liberar a escolha da data."
+              : <>Para liberar a escolha da data, você precisa atingir <strong className="text-burgundy dark:text-cream">{percentual}% das parcelas mínimas pagas</strong>{parcelasNecessarias ? ` (${parcelasNecessarias} parcelas)` : ""}.</>}
+          </p>
         </div>
-        <div className="absolute inset-0 z-10 flex items-center justify-center px-3">
-          <div className="w-full max-w-[32rem] rounded-2xl border border-gold/30 bg-white/95 p-6 text-center shadow-[0_18px_55px_-25px_rgba(82,28,42,.28)] backdrop-blur-sm dark:border-white/10 dark:bg-[#25161b]/95 sm:p-8">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gold/10 text-gold">
-              <LockKeyhole className="h-5 w-5" />
-            </div>
-            <h3 className="mt-5 font-heading text-xl font-semibold text-burgundy dark:text-cream">Agenda indisponível por enquanto</h3>
-            <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-clay/65 dark:text-pearl/60">Quando seus pagamentos atingirem a porcentagem necessária, você poderá escolher sua data para a assinatura dos termos.</p>
+      </div>
+    </div>
+
+    <div className="relative p-3 sm:p-4">
+      <div className="pointer-events-none select-none blur-[3px] opacity-50">
+        <CalendarioAgendamento datas={datas} onConfirmar={() => {}} confirmando={false} bloqueado />
+      </div>
+      <div className="absolute inset-3 z-10 flex items-center justify-center sm:inset-4">
+        <div className={`w-full max-w-[31rem] rounded-2xl border bg-white/[0.97] p-5 text-center shadow-[0_20px_60px_-28px_rgba(82,28,42,.32)] backdrop-blur-md dark:bg-[#25161b]/95 sm:p-7 ${levantamento ? "border-gold/35" : "border-gold/30"}`}>
+          <div className={`mx-auto flex h-11 w-11 items-center justify-center rounded-full ${levantamento ? "bg-gold/10 text-gold" : "bg-burgundy/8 text-burgundy"}`}>
+            {levantamento ? <ShieldCheck className="h-5 w-5" /> : <LockKeyhole className="h-5 w-5" />}
+          </div>
+          <p className={`mt-4 text-[0.55rem] font-bold uppercase tracking-[0.16em] ${levantamento ? "text-gold" : "text-rose"}`}>
+            {levantamento ? "Levantamento financeiro" : "Agenda bloqueada"}
+          </p>
+          <h4 className="mt-1.5 font-heading text-lg font-semibold leading-tight text-burgundy dark:text-cream sm:text-xl">
+            {levantamento ? "Sua agenda continua reservada para você" : "Agenda da assinatura dos termos"}
+          </h4>
+          <p className="mx-auto mt-2.5 max-w-[30rem] text-[0.72rem] leading-relaxed text-clay/65 dark:text-pearl/60 sm:text-sm">
+            {levantamento
+              ? "Estamos realizando seu levantamento financeiro no prazo de até 5 dias úteis. Assim que a análise for concluída, sua agenda será liberada para você escolher a data."
+              : "Sua agenda permanece visível, porém bloqueada. Assim que você atingir o percentual necessário de pagamentos, iniciaremos seu levantamento financeiro."}
+          </p>
+          <div className={`mx-auto mt-4 flex max-w-[30rem] items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-left ${levantamento ? "border-gold/20 bg-gold/[0.06]" : "border-rose/10 bg-blush/35"}`}>
+            {levantamento ? <Clock3 className="h-3.5 w-3.5 shrink-0 text-gold" /> : <LockKeyhole className="h-3.5 w-3.5 shrink-0 text-rose" />}
+            <p className="text-[0.62rem] font-semibold leading-relaxed text-burgundy dark:text-cream">
+              {levantamento ? <>Prazo estimado: <strong>até 5 dias úteis</strong>.</> : <>Necessário atingir <strong>{percentual}%</strong> das parcelas mínimas.</>}
+            </p>
           </div>
         </div>
       </div>
-    </section>
-  </div>;
+    </div>
+  </section>;
 }
