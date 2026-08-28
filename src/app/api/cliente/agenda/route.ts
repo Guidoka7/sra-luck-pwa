@@ -27,22 +27,20 @@ export async function GET(req: NextRequest) {
   const dataAssinaturaTermos = (agendamentoAtivo as any)?.datas?.data ?? (agendamentoConcluido as any)?.datas?.data ?? null;
   const primeiraDataCirurgia = dataAssinaturaTermos ? adicionarDias(dataAssinaturaTermos, 90) : null;
   const { data: solicitacao } = await supabase.from("solicitacoes_liberacao_financeira").select("id, forma_custeio, saldo_restante, taxa_cartao, total_com_taxa, status, observacao, agendamento_id, created_at, updated_at").eq("cliente_id", cliente.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const agendamentoId = agendamentoAtivo?.id ?? agendamentoConcluido?.id ?? null;
+  const { data: remarcacoes } = agendamentoId
+    ? await supabase.from("solicitacoes_remarcacao_agendamento").select("id, tipo, status, data_solicitada, horario_termos, observacao, created_at, updated_at").eq("cliente_id", cliente.id).eq("agendamento_id", agendamentoId).order("created_at", { ascending: false })
+    : { data: [] as any[] };
 
   const testDate = req.cookies.get("sra_luck_test_date")?.value;
   const hoje = dataTesteValida(testDate) ? testDate! : new Date().toISOString().slice(0, 10);
 
-  // Primeira agenda: datas liberadas pelo Admin para assinatura dos termos.
   const { data: datasDisponiveis } = await supabase.from("datas").select("id, data, vagas_totais").eq("status", "disponivel").gte("data", hoje).order("data", { ascending: true });
   const { data: agendamentosAtivos } = await supabase.from("agendamentos").select("data_id").eq("status", "confirmado");
   const ocupacaoPorData = new Map<string, number>();
   for (const a of agendamentosAtivos ?? []) ocupacaoPorData.set(a.data_id, (ocupacaoPorData.get(a.data_id) ?? 0) + 1);
   const datas = (datasDisponiveis ?? []).map((d: { id: string; data: string; vagas_totais: number }) => ({ id: d.id, data: d.data, vagasRestantes: Math.max(0, d.vagas_totais - (ocupacaoPorData.get(d.id) ?? 0)) }));
 
-  // Segunda agenda: somente datas que o Admin liberou no calendário próprio de
-  // liberação financeira E que estejam a partir de 90 dias corridos após a
-  // data escolhida para a assinatura dos termos. Datas anteriores ao limite
-  // ficam deliberadamente fora da lista e o calendário da cliente as mostra
-  // como indisponíveis. Nenhuma data é liberada automaticamente aqui.
   const inicioBuscaCirurgia = primeiraDataCirurgia && primeiraDataCirurgia > hoje ? primeiraDataCirurgia : hoje;
   const { data: datasCirurgia } = await supabase.from("datas_liberacao_financeira").select("id, data, status").eq("status", "disponivel").gte("data", inicioBuscaCirurgia).order("data", { ascending: true });
   const { data: cirurgiasAgendadas } = await supabase.from("agendamentos").select("previsao_liberacao_financeira").eq("status", "confirmado").not("previsao_liberacao_financeira", "is", null);
@@ -54,6 +52,7 @@ export async function GET(req: NextRequest) {
     cliente: { id: cliente.id, nome: cliente.nome_completo, procedimento: cliente.procedimento },
     financeiro: { statusRevisao: cliente.status_revisao_financeira ?? null, saldoRestante: cliente.financeiro_saldo_restante ?? null, taxaCartao: cliente.financeiro_taxa_cartao ?? 5.4, totalComTaxa: cliente.financeiro_total_com_taxa ?? null, formasCusteio: Array.isArray(cliente.financeiro_formas_custeio) ? cliente.financeiro_formas_custeio : [] },
     solicitacaoLiberacaoFinanceira: solicitacao ?? null,
+    remarcacoes: remarcacoes ?? [],
     agendamentoAtivo: mapAgendamento(agendamentoAtivo),
     agendamentoConcluido: mapAgendamento(agendamentoConcluido),
     datasDisponiveis: datas,
