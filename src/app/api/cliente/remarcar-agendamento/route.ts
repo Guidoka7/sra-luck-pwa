@@ -12,24 +12,59 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const dataId = body.dataId as string | undefined;
   const horario = body.horario as string | undefined;
-  if (!dataId || !horario || !HORARIOS_VALIDOS.has(horario)) return NextResponse.json({ erro: "Escolha a data e o horário da assinatura." }, { status: 400 });
+  if (!dataId || !horario || !HORARIOS_VALIDOS.has(horario)) {
+    return NextResponse.json({ erro: "Escolha a nova data e o horário da assinatura." }, { status: 400 });
+  }
 
   const supabase = createServiceSupabaseClient();
   const { data: cliente } = await supabase.from("clientes").select("id").eq("id", sessao.clienteId).single();
   if (!cliente) return NextResponse.json({ erro: "Cliente não encontrada." }, { status: 404 });
 
-  const { data: agendamento } = await supabase.from("agendamentos").select("id, data_id").eq("cliente_id", cliente.id).eq("status", "confirmado").maybeSingle();
+  const { data: agendamento } = await supabase
+    .from("agendamentos")
+    .select("id, data_id, horario_termos, previsao_liberacao_financeira")
+    .eq("cliente_id", cliente.id)
+    .eq("status", "confirmado")
+    .maybeSingle();
   if (!agendamento) return NextResponse.json({ erro: "Não existe um agendamento confirmado para alterar." }, { status: 409 });
 
   const { data: dataAlvo } = await supabase.from("datas").select("id, data, vagas_totais, status").eq("id", dataId).single();
-  if (!dataAlvo || dataAlvo.status !== "disponivel") return NextResponse.json({ erro: "Essa data não está mais disponível." }, { status: 409 });
+  if (!dataAlvo || dataAlvo.status !== "disponivel") {
+    return NextResponse.json({ erro: "Essa data não está mais disponível." }, { status: 409 });
+  }
 
-  const { count } = await supabase.from("agendamentos").select("id", { count: "exact", head: true }).eq("data_id", dataId).eq("status", "confirmado").neq("id", agendamento.id);
-  if ((count ?? 0) >= dataAlvo.vagas_totais) return NextResponse.json({ erro: "As vagas dessa data acabaram de se esgotar." }, { status: 409 });
+  const { count } = await supabase
+    .from("agendamentos")
+    .select("id", { count: "exact", head: true })
+    .eq("data_id", dataId)
+    .eq("status", "confirmado")
+    .neq("id", agendamento.id);
+  if ((count ?? 0) >= dataAlvo.vagas_totais) {
+    return NextResponse.json({ erro: "As vagas dessa data acabaram de se esgotar." }, { status: 409 });
+  }
 
-  const { error } = await supabase.from("agendamentos").update({ data_id: dataId, horario_termos: horario, previsao_liberacao_financeira: null }).eq("id", agendamento.id).eq("cliente_id", cliente.id);
-  if (error) return NextResponse.json({ erro: "Não foi possível alterar a data dos termos." }, { status: 500 });
+  const { data: solicitacao, error } = await supabase
+    .from("solicitacoes_remarcacao_agendamento")
+    .upsert({
+      cliente_id: cliente.id,
+      agendamento_id: agendamento.id,
+      tipo: "termos",
+      data_id: dataAlvo.id,
+      horario_termos: horario,
+      status: "pendente",
+      observacao: null,
+      analisada_por: null,
+      analisada_em: null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "agendamento_id,tipo" })
+    .select("id, status, created_at")
+    .single();
 
-  try { await supabase.channel("agenda-clientes").send({ type: "broadcast", event: "datas_atualizadas", payload: { acao: "agendamento_remarcado", data: dataAlvo.data, dataId: dataAlvo.id, clienteId: cliente.id, agendamentoId: agendamento.id, cirurgiaResetada: true } }); } catch {}
-  return NextResponse.json({ ok: true, data: dataAlvo.data, horario, cirurgiaResetada: true });
+  if (error) return NextResponse.json({ erro: "Não foi possível enviar sua solicitação de alteração." }, { status: 500 });
+
+  return NextResponse.json({
+    ok: true,
+    solicitacao,
+    mensagem: "Sua solicitação de alteração foi enviada para análise. O prazo é de até 5 dias úteis.",
+  });
 }
