@@ -134,3 +134,9 @@ html.dark .admin-shell h2,
 html.dark .admin-shell h3 {
   color: revert-layer;
 }
+
+/* Correção pontual do tema escuro: a variável cream vira escura para superfícies,
+   mas não pode ser usada como foreground sobre botões burgundy/rose. */
+html.dark .text-cream {
+  color: rgb(255 253 252) !important;
+}
