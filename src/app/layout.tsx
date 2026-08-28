@@ -5,6 +5,7 @@ import "./globals.css";
 import "./responsive-fixes.css";
 import "./client-scroll-fix.css";
 import "./light-theme-fixes.css";
+import "./calendar-dark-contrast.css";
 import { ThemeProvider } from "@/components/ui/ThemeProvider";
 import { PwaRegister } from "@/components/ui/PwaRegister";
 import { DeviceRuntime } from "@/components/ui/DeviceRuntime";
