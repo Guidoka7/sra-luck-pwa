@@ -11,12 +11,9 @@ create table if not exists solicitacoes_remarcacao_agendamento (
   analisada_por uuid,
   analisada_em timestamptz,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  unique (agendamento_id, tipo)
 );
 
 create index if not exists idx_solicitacoes_remarcacao_cliente on solicitacoes_remarcacao_agendamento(cliente_id, status, created_at desc);
 create index if not exists idx_solicitacoes_remarcacao_pendentes on solicitacoes_remarcacao_agendamento(status, created_at asc);
-
-create unique index if not exists uq_solicitacao_remarcacao_pendente
-  on solicitacoes_remarcacao_agendamento(agendamento_id, tipo)
-  where status = 'pendente';
