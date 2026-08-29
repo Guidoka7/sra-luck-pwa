@@ -55,6 +55,20 @@ export function TabBoletos({ pagamento, procedimento }: TabBoletosProps) {
   const [carregando, setCarregando] = useState(true); const [progresso, setProgresso] = useState<ProgressoResponse | null>(null); const [boletoSelecionado, setBoletoSelecionado] = useState<string | null>(null); const [modalAberto, setModalAberto] = useState(false); const [resolverAberto, setResolverAberto] = useState(false); const [carteiraAberta, setCarteiraAberta] = useState(false); const [acaoComprovante, setAcaoComprovante] = useState<string | null>(null);
   async function carregar(silencioso = false) { if (!silencioso) setCarregando(true); try { const res = await fetch("/api/cliente/boletos", { cache: "no-store" }); if (!res.ok) throw new Error("Erro ao carregar"); setProgresso(await res.json()); } catch { if (!silencioso) toast.error("Erro ao carregar boletos"); } finally { if (!silencioso) setCarregando(false); } }
   useEffect(() => { carregar(); const intervalo = setInterval(() => carregar(true), 30_000); return () => clearInterval(intervalo); }, []);
+  useEffect(() => {
+    if (!progresso) return;
+    const params = new URLSearchParams(window.location.search);
+    const boletoId = params.get("abrirComprovante");
+    if (!boletoId) return;
+    const boleto = progresso.boletos.find((item) => item.id === boletoId);
+    if (!boleto || boleto.status === "pago") return;
+    setBoletoSelecionado(boleto.id);
+    setResolverAberto(false);
+    setModalAberto(true);
+    params.delete("abrirComprovante");
+    const query = params.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+  }, [progresso]);
   async function trocarComprovante(boleto: Boleto, file: File | null) { if (!file) return; if (!["application/pdf", "image/jpeg", "image/png"].includes(file.type)) { toast.error("Use PDF, JPG ou PNG."); return; } if (file.size > 5 * 1024 * 1024) { toast.error("O arquivo pode ter no máximo 5MB."); return; } setAcaoComprovante(boleto.id); try { const form = new FormData(); form.append("arquivo", file); const res = await fetch(`/api/cliente/boletos/${boleto.id}/anexar`, { method: "POST", body: form }); const data = await res.json(); if (!res.ok) throw new Error(data.erro ?? "Não foi possível trocar o comprovante."); toast.success("Comprovante substituído."); await carregar(true); } catch (e) { toast.error(e instanceof Error ? e.message : "Erro ao trocar comprovante."); } finally { setAcaoComprovante(null); } }
   async function excluirComprovante(boleto: Boleto) { if (!window.confirm(`Excluir o comprovante da parcela ${boleto.numero_parcela}/${boleto.total_parcelas}? A parcela voltará para Em aberto.`)) return; setAcaoComprovante(boleto.id); try { const res = await fetch(`/api/cliente/boletos/${boleto.id}/comprovante`, { method: "DELETE" }); const data = await res.json(); if (!res.ok) throw new Error(data.erro ?? "Não foi possível excluir o comprovante."); toast.success("Comprovante excluído. A parcela voltou para Em aberto."); await carregar(true); } catch (e) { toast.error(e instanceof Error ? e.message : "Erro ao excluir comprovante."); } finally { setAcaoComprovante(null); } }
   if (carregando) return <p className="text-center text-clay/50">Carregando boletos...</p>;
