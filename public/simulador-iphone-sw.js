@@ -1,4 +1,4 @@
-const CACHE = 'sra-luck-pwa-v11';
+const CACHE = 'sra-luck-pwa-v12';
 const SHELL = [
   '/simulador-iphone.html',
   '/simulador-iphone.webmanifest',
@@ -29,7 +29,7 @@ self.addEventListener('push', (event) => {
   let data = {}; try { data = event.data ? event.data.json() : {}; } catch (_) {}
   const title = data.title || 'Sra. Luck';
   const notificationIcon = '/brand/sra-luck-mark.png';
-  const options = { body: data.body || 'Você recebeu uma nova notificação.', icon: notificationIcon, badge: notificationIcon, tag: data.tag || 'sra-luck-notificacao', renotify: true, requireInteraction: false, data: { url: data.url || '/agenda', notificationId: data.notificationId || null } };
+  const options = { body: data.body || 'Você recebeu uma nova notificação.', icon: notificationIcon, badge: notificationIcon, tag: data.tag || 'sra-luck-notificacao', renotify: true, requireInteraction: false, data: { url: data.url || '/agenda', notificationId: data.notificationId || null, installmentId: data.installmentId || null, action: data.action || null } };
   event.waitUntil(self.registration.showNotification(title, options));
 });
 self.addEventListener('notificationclick', (event) => {
