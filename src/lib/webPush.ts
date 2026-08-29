@@ -14,7 +14,7 @@ function configurarVapid() {
 
 export function getVapidPublicKey() { const publicKey = process.env.WEB_PUSH_VAPID_PUBLIC_KEY; if (!publicKey) throw new Error("WEB_PUSH_VAPID_PUBLIC_KEY não configurada."); return publicKey; }
 
-export async function enviarWebPush(subscriptions: Array<{ endpoint: string; p256dh: string; auth: string }>, payload: { title: string; body: string; icon?: string; badge?: string; url?: string; tag?: string; notificationId?: string }) {
+export async function enviarWebPush(subscriptions: Array<{ endpoint: string; p256dh: string; auth: string }>, payload: { title: string; body: string; icon?: string; badge?: string; url?: string; tag?: string; notificationId?: string; installmentId?: string; action?: string }) {
   configurarVapid();
   const removiveis: string[] = [];
   const notificationPayload = { ...payload, icon: NOTIFICATION_ICON, badge: NOTIFICATION_ICON };
@@ -29,7 +29,7 @@ export async function enviarWebPush(subscriptions: Array<{ endpoint: string; p25
   return { resultados, removiveis };
 }
 
-export async function enviarWebPushParaCliente(serviceClient: any, clienteId: string, payload: { title: string; body: string; icon?: string; badge?: string; url?: string; tag?: string; notificationId?: string }) {
+export async function enviarWebPushParaCliente(serviceClient: any, clienteId: string, payload: { title: string; body: string; icon?: string; badge?: string; url?: string; tag?: string; notificationId?: string; installmentId?: string; action?: string }) {
   const { data: subscriptions, error } = await serviceClient.from("web_push_subscriptions").select("endpoint, p256dh, auth").eq("cliente_id", clienteId);
   if (error) throw new Error(error.message);
   if (!subscriptions?.length) return { enviadas: 0, falhas: 0, removidas: 0, erros: [] as string[] };
