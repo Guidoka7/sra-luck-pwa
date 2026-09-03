@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { classificarConfianca, normalizarDocumento, normalizarTexto, pontuarCandidato, type CandidatoBoleto, type DadosImportacao } from "@/lib/vinculacao-boletos";
 import { complementarLeituraCarne } from "@/lib/pdf/complementar-carne";
+import { extrairDadosBoletoComFallback } from "@/lib/pdf/interpretador-ia";
 
 function historicoItem(acao:string,usuario:string,detalhes:Record<string,unknown>={}){return{em:new Date().toISOString(),usuario,acao,detalhes};}
 async function autenticar(){const supabase=createServerSupabaseClient();const{data:{user}}=await supabase.auth.getUser();return{supabase,user};}
@@ -34,13 +35,31 @@ export async function POST(_req:Request,{params}:{params:{id:string}}){
   const{supabase,user}=await autenticar();if(!user)return NextResponse.json({erro:"Não autenticado."},{status:401});
   const{data:importacao,error:ie}=await supabase.from("importacoes_boletos").select("*").eq("id",params.id).maybeSingle();
   if(ie)return NextResponse.json({erro:ie.message},{status:500});if(!importacao)return NextResponse.json({erro:"Importação não encontrada."},{status:404});
-  // Importações antigas já estavam gravadas antes da correção do parser.
-  // Reprocessamos a camada estruturada a partir do texto original salvo em dados_extraidos,
-  // sem exigir novo upload e sem inventar dados.
-  const bruto:any = importacao.dados_extraidos && typeof importacao.dados_extraidos === "object" ? importacao.dados_extraidos : {};
-  const reprocessado:any = bruto.texto_extraido
-    ? complementarLeituraCarne(bruto.texto_extraido, bruto)
-    : bruto;
+  let bruto:any = importacao.dados_extraidos && typeof importacao.dados_extraidos === "object" ? importacao.dados_extraidos : {};
+  let motorLeitura = bruto.motor_leitura ?? "persistido";
+  let avisoInterpretador:any = bruto.aviso_interpretador ?? null;
+
+  // REGRA: quando o PDF original existe, analisar significa interpretar o PDF novamente.
+  // Nunca retornamos 200 fingindo que o Gemini foi executado.
+  if (importacao.arquivo_storage_path) {
+    const { data: arquivo, error: storageError } = await supabase.storage.from("boletos-pdf").download(importacao.arquivo_storage_path);
+    if (storageError || !arquivo) {
+      return NextResponse.json({ erro: "PDF original indisponível para análise visual: " + (storageError?.message ?? "arquivo não encontrado") }, { status: 409 });
+    }
+    const leitura = await extrairDadosBoletoComFallback(Buffer.from(await arquivo.arrayBuffer()));
+    motorLeitura = leitura.motor;
+    avisoInterpretador = leitura.erroIA;
+    bruto = { ...bruto, ...leitura.dados, motor_leitura: motorLeitura, aviso_interpretador: avisoInterpretador };
+    console.log("[BOLETO_ANALISE]", { id: params.id, motor: motorLeitura, aviso: avisoInterpretador, campos: Object.entries(leitura.dados).filter(([k,v])=>k!=="texto_extraido"&&k!=="dados_origem"&&v!=null&&v!=="").map(([k])=>k) });
+    if (leitura.motor !== "gemini") {
+      return NextResponse.json({ erro: "A análise visual Gemini não foi concluída.", motor: leitura.motor, detalhe: leitura.erroIA, importacao_id: params.id }, { status: 422 });
+    }
+  } else if (bruto.texto_extraido) {
+    bruto = complementarLeituraCarne(bruto.texto_extraido, bruto);
+  } else {
+    return NextResponse.json({ erro: "Esta importação não possui PDF original armazenado nem dados textuais suficientes. Reimporte o PDF.", importacao_id: params.id }, { status: 409 });
+  }
+  const reprocessado:any = complementarLeituraCarne(bruto.texto_extraido ?? "", bruto);
   const dados:DadosImportacao={
     cpf_pagador_extraido: reprocessado.cpf_pagador ?? importacao.cpf_pagador_extraido,
     nome_pagador_extraido: reprocessado.nome_pagador ?? importacao.nome_pagador_extraido,
@@ -62,7 +81,7 @@ export async function POST(_req:Request,{params}:{params:{id:string}}){
   const analise={executada_em:new Date().toISOString(),fluxo:"cliente → carnê → boleto",regras:"Cliente: CPF + nome + identificador; Carnê: instituição + identificador + parcelas + valor; Boleto: nosso número + identificador + valor + vencimento + parcela + instituição",clientes_encontradas:clientes.length,carnes_encontrados:carnes.length,candidatos:analisados.slice(0,10).map(c=>({id:c.id,cliente_id:c.cliente_id,carne_id:c.carne_id,pontuacao:c.pontuacao,percentual:c.percentual,pontuacao_cliente:c.pontuacao_cliente,pontuacao_carne:c.pontuacao_carne,pontuacao_boleto:c.pontuacao_boleto,motivos:c.motivos})),quantidade_candidatos:analisados.length};
   const historicoAtual=Array.isArray(importacao.historico)?importacao.historico:[];
   const historico=[...historicoAtual,historicoItem("Análise inteligente executada",user.id,{pontuacao:principal?.pontuacao??0,nivel,candidatos:analisados.length,cliente_sugerida:principal?.cliente_id??null,carne_sugerido:principal?.carne_id??null,boleto_sugerido:principal?.id??null,fluxo:"cliente → carnê → boleto"})];
-  const dadosExtraidosAtualizados = { ...bruto, ...reprocessado, reprocessado_em: new Date().toISOString() };
+  const dadosExtraidosAtualizados = { ...bruto, ...reprocessado, motor_leitura: motorLeitura, aviso_interpretador: avisoInterpretador, reprocessado_em: new Date().toISOString() };
   const{data,error}=await supabase.from("importacoes_boletos").update({
     nome_pagador_extraido: dados.nome_pagador_extraido ?? null,
     cpf_pagador_extraido: dados.cpf_pagador_extraido ?? null,
@@ -77,5 +96,5 @@ export async function POST(_req:Request,{params}:{params:{id:string}}){
     cliente_sugerido_id:principal?.cliente_id??null,carne_sugerido_id:principal?.carne_id??null,boleto_sugerido_id:principal?.id??null,pontuacao_confianca:principal?.pontuacao??0,nivel_confianca:nivel,status_vinculacao:status,analise_detalhada:analise,historico
   }).eq("id",params.id).select("*").single();
   if(error)return NextResponse.json({erro:error.message},{status:500});
-  return NextResponse.json({importacao:data,analise:{principal,candidatos:analisados.slice(0,10),nivel,status,clientes,carnes}});
+  return NextResponse.json({importacao:data,motor:motorLeitura,aviso:avisoInterpretador,analise:{principal,candidatos:analisados.slice(0,10),nivel,status,clientes,carnes}});
 }
