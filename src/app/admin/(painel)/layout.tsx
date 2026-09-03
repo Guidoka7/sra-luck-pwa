@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, BrainCircuit, CalendarRange, ChevronRight, CircleUserRound, Cog, FileText, LayoutDashboard, Landmark, LineChart, LogOut, Menu, Receipt, Search, ShoppingBag, Users, WalletCards, X, Files } from "lucide-react";
+import { Bell, CalendarRange, ChevronRight, CircleUserRound, Cog, LayoutDashboard, Landmark, LineChart, LogOut, Menu, Receipt, Search, ShoppingBag, Users, WalletCards, X } from "lucide-react";
 import { createClientSupabaseClient } from "@/lib/supabase/client";
 import { Wordmark } from "@/components/ui/Logo";
 import { cn } from "@/lib/utils";
@@ -18,12 +18,9 @@ const NAV = [
   { href: "/admin/agenda", label: "Agenda", icon: CalendarRange, group: "Operação" },
   { href: "/admin/clientes", label: "Clientes", icon: Users, group: "Operação" },
   { href: "/admin/novas-vendas", label: "Novas Vendas", icon: ShoppingBag, group: "Operação" },
-  { href: "/admin/carnes", label: "Carnês e Boletos", icon: Files, group: "Financeiro" },
-  { href: "/admin/importacao-boletos", label: "Importação de Boletos", icon: FileText, group: "Financeiro" },
-  { href: "/admin/vinculacao-boletos", label: "Vinculação Inteligente", icon: BrainCircuit, group: "Financeiro" },
+  { href: "/admin/central-boletos", label: "Central de Boletos", icon: Landmark, group: "Financeiro" },
   { href: "/admin/pagamentos", label: "Pagamentos", icon: Receipt, group: "Financeiro" },
   { href: "/admin/parcelas", label: "Parcelas", icon: WalletCards, group: "Financeiro" },
-  { href: "/admin/conciliacao-bancaria", label: "Conciliação Bancária", icon: Landmark, group: "Financeiro" },
   { href: "/admin/relatorios", label: "Relatórios", icon: LineChart, group: "Gestão" },
   { href: "/admin/configuracoes", label: "Configurações", icon: Cog, group: "Gestão" },
 ];
@@ -34,9 +31,7 @@ const API_PREFETCH: Record<string, string> = {
   "/admin/novas-vendas": "/api/admin/novas-vendas",
   "/admin/pagamentos": "/api/admin/boletos?",
   "/admin/configuracoes": "/api/admin/configuracoes",
-  "/admin/conciliacao-bancaria": `/api/admin/conciliacao-bancaria?data=${new Date().toISOString().slice(0, 10)}`,
-  "/admin/carnes": "/api/admin/carnes",
-  "/admin/vinculacao-boletos": "/api/admin/vinculacao-boletos",
+  "/admin/central-boletos": "/api/admin/importacao-boletos",
 };
 
 const TITLES: Record<string, string> = {
@@ -44,12 +39,9 @@ const TITLES: Record<string, string> = {
   "/admin/agenda": "Agenda",
   "/admin/clientes": "Clientes",
   "/admin/novas-vendas": "Novas Vendas",
-  "/admin/carnes": "Carnês e Boletos",
-  "/admin/importacao-boletos": "Importação de Boletos",
-  "/admin/vinculacao-boletos": "Vinculação Inteligente de Boletos",
+  "/admin/central-boletos": "Central de Boletos",
   "/admin/pagamentos": "Pagamentos",
   "/admin/parcelas": "Parcelas",
-  "/admin/conciliacao-bancaria": "Conciliação Bancária",
   "/admin/relatorios": "Relatórios",
   "/admin/configuracoes": "Configurações",
 };
