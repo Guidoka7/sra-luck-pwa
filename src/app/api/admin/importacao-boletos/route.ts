@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const status = texto(url.searchParams.get("status"));
   const busca = texto(url.searchParams.get("busca"));
-  let query = supabase.from("importacoes_boletos").select(`id,cliente_id,carne_id,boleto_id,instituicao_financeira,nosso_numero,numero_documento,identificador_externo,linha_digitavel,codigo_barras,nome_pagador_extraido,cpf_pagador_extraido,valor_extraido,vencimento_extraido,numero_parcela,status,arquivo_nome,arquivo_tamanho,arquivo_storage_path,erro_detalhes,created_at,updated_at,cliente:clientes!importacoes_boletos_cliente_id_fkey(id,nome_completo,cpf),carnes(id,identificador_externo,instituicao_financeira),boletos(id,numero_parcela,total_parcelas,valor,data_vencimento,status)`).order("created_at", { ascending: false }).limit(200);
+  let query = supabase.from("importacoes_boletos").select(`id,cliente_id,carne_id,boleto_id,instituicao_financeira,nosso_numero,numero_documento,identificador_externo,linha_digitavel,codigo_barras,nome_pagador_extraido,cpf_pagador_extraido,valor_extraido,vencimento_extraido,numero_parcela,status,arquivo_nome,arquivo_tamanho,arquivo_storage_path,erro_detalhes,created_at,updated_at,cliente:clientes!importacoes_boletos_cliente_id_fkey(id,nome_completo,cpf),carne:carnes!importacoes_boletos_carne_id_fkey(id,identificador_externo,instituicao_financeira),boleto:boletos!importacoes_boletos_boleto_id_fkey(id,numero_parcela,total_parcelas,valor,data_vencimento,status)`).order("created_at", { ascending: false }).limit(200);
   if (status) query = query.eq("status", status);
   if (busca) query = query.or(`nome_pagador_extraido.ilike.%${busca}%,cpf_pagador_extraido.ilike.%${busca}%,nosso_numero.ilike.%${busca}%,identificador_externo.ilike.%${busca}%`);
   const { data, error } = await query;
@@ -117,14 +117,7 @@ export async function POST(req: NextRequest) {
       carneId = carneMatch.carne?.id ?? null;
       carneCandidatos = carneMatch.candidatos;
       if (carneId) {
-        const boletoMatch = await localizarBoleto(supabase, {
-          clienteId,
-          carneId,
-          identificador: dados.identificador_externo,
-          parcela: dados.numero_parcela,
-          valor: dados.valor,
-          vencimento: dados.vencimento,
-        });
+        const boletoMatch = await localizarBoleto(supabase, { clienteId, carneId, identificador: dados.identificador_externo, parcela: dados.numero_parcela, valor: dados.valor, vencimento: dados.vencimento });
         boletoId = boletoMatch.boleto?.id ?? null;
         boletoCandidatos = boletoMatch.candidatos;
       }
@@ -133,27 +126,15 @@ export async function POST(req: NextRequest) {
     const status = statusInicial(clienteId, carneId, boletoId);
     const historico = [historicoItem("PDF processado", { cliente_confianca: clienteMatch.confianca })];
     const payload = {
-      cliente_id: clienteId,
-      carne_id: carneId,
-      boleto_id: boletoId,
-      instituicao_financeira: dados.instituicao_financeira,
-      nosso_numero: dados.nosso_numero,
-      numero_documento: dados.numero_documento,
-      identificador_externo: dados.identificador_externo,
-      linha_digitavel: dados.linha_digitavel,
-      codigo_barras: dados.codigo_barras,
-      nome_pagador_extraido: dados.nome_pagador,
-      cpf_pagador_extraido: dados.cpf_pagador,
-      valor_extraido: dados.valor,
-      vencimento_extraido: dados.vencimento,
-      numero_parcela: dados.numero_parcela,
+      cliente_id: clienteId, carne_id: carneId, boleto_id: boletoId,
+      instituicao_financeira: dados.instituicao_financeira, nosso_numero: dados.nosso_numero,
+      numero_documento: dados.numero_documento, identificador_externo: dados.identificador_externo,
+      linha_digitavel: dados.linha_digitavel, codigo_barras: dados.codigo_barras,
+      nome_pagador_extraido: dados.nome_pagador, cpf_pagador_extraido: dados.cpf_pagador,
+      valor_extraido: dados.valor, vencimento_extraido: dados.vencimento, numero_parcela: dados.numero_parcela,
       dados_extraidos: { ...dados, candidatos_carne: carneCandidatos.map((c) => c.id), candidatos_boleto: boletoCandidatos.map((b) => b.id) },
-      arquivo_nome: file.name,
-      arquivo_mime: file.type || "application/pdf",
-      arquivo_tamanho: file.size,
-      arquivo_sha256: sha256,
-      status,
-      historico,
+      arquivo_nome: file.name, arquivo_mime: file.type || "application/pdf", arquivo_tamanho: file.size,
+      arquivo_sha256: sha256, status, historico,
     };
 
     const { data, error } = await supabase.from("importacoes_boletos").insert(payload).select("id,status,cliente_id,carne_id,boleto_id,arquivo_nome,created_at").single();
