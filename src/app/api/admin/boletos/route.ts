@@ -9,23 +9,24 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const status = url.searchParams.get("status");
   const clienteId = url.searchParams.get("cliente_id");
+  const carneId = url.searchParams.get("carne_id");
 
   let query = supabase
     .from("boletos")
-    .select(
-      `id, cliente_id, numero_parcela, total_parcelas, valor, status,
-       data_vencimento, comprovante_url, data_pagamento, observacoes, created_at, updated_at,
-       clientes ( id, nome_completo, cpf )`
-    )
-    .order("created_at", { ascending: false });
+    .select(`
+      id, cliente_id, carne_id, numero_parcela, total_parcelas, valor, status,
+      data_vencimento, comprovante_url, data_pagamento, observacoes, created_at, updated_at,
+      instituicao_financeira, identificador_externo, origem_boleto,
+      clientes ( id, nome_completo, cpf )
+    `)
+    .order("numero_parcela", { ascending: true });
 
   if (status) query = query.eq("status", status);
   if (clienteId) query = query.eq("cliente_id", clienteId);
+  if (carneId) query = query.eq("carne_id", carneId);
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
 
-  return NextResponse.json({
-    boletos: (data ?? []).map((b) => ({ ...b, valor: Number(b.valor) })),
-  });
+  return NextResponse.json({ boletos: (data ?? []).map((b) => ({ ...b, valor: Number(b.valor) })) });
 }
