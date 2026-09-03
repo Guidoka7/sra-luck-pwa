@@ -168,32 +168,190 @@ export function identificarInstituicao(text: string, line: string | null) {
 }
 const field = (r: Candidato | null, missing: CampoExtraido["motivo"]): CampoExtraido => r ? { valor: r.valor, origem: r.origem, confianca: r.pontos >= 80 ? "alta" : r.pontos >= 55 ? "media" : "baixa", motivo: "encontrado" } : { valor: null, origem: null, confianca: null, motivo: missing };
 function parcelaContextual(t: string) { const r = choose(t, ["Parcela", "Parcela/Plano", "Parcela de"], v => { const m = v.match(/\b(\d{1,3})\s*(?:\/|de)\s*(\d{1,3})\b/i); return m ? `${m[1]}/${m[2]}` : null; }, 60); if (!r || typeof r.valor !== "string") return null; const [numero, total] = r.valor.split("/").map(Number); if (!Number.isInteger(numero) || !Number.isInteger(total) || numero < 1 || total < 1 || numero > total) return null; return { numero, total, origem: r.origem, pontos: r.pontos }; }
-export function extrairDadosBoleto(pdf: Buffer): DadosBoletoExtraidos {
-  const { texto: text, qualidade } = extrairTextoPdf(pdf), line = findLine(text), banco = identificarInstituicao(text, line), pag = nomePagador(text);
-  const cpfCandidate = cpfPagadorContextual(text), cpfValido = cpfCandidate?.valor && typeof cpfCandidate.valor === "string" && validarCpf(cpfCandidate.valor) ? cpfCandidate : null;
-  const nosso = choose(text, ["Nosso Número", "Nosso Numero"], v => digits(v, 3, 30), 70);
-  const doc = choose(text, ["Número do Documento", "Numero do Documento", "Nº do Documento"], v => digits(v, 1, 30), 65);
-  const ext = choose(text, ["Identificador Externo", "Referência Adicional", "Referencia Adicional"], textValue, 65);
-  const valor = choose(text, ["Valor do Documento", "Valor Cobrado", "Valor a Pagar", "Valor", "Total"], money, 55);
-  const venc = choose(text, ["Vencimento", "Data de Vencimento", "Venc.", "Pagar até", "Pagar ate"], date, 65);
-  const ben = choose(text, ["Beneficiário", "Beneficiario"], textValue, 55), cpfBen = choose(text, ["CNPJ/CPF", "CPF/CNPJ", "CNPJ"], v => digits(v, 11, 14), 50);
-  const parcela = parcelaContextual(text), bar = findBar(text, line), missing = qualidade.suficiente ? "nao_encontrado_no_texto" : "texto_insuficiente";
-  const origem: Record<string, CampoExtraido> = {
-    nome_pagador: field(pag, missing), cpf_pagador: cpfValido ? field(cpfValido, missing) : { valor: null, origem: cpfCandidate?.origem ?? null, confianca: null, motivo: cpfCandidate ? "campo_invalido" : missing },
-    nosso_numero: field(nosso, missing), numero_documento: field(doc, missing), identificador_externo: field(ext, missing), valor: field(valor, missing), vencimento: field(venc, missing),
-    nome_beneficiario: field(ben, missing), cpf_cnpj_beneficiario: field(cpfBen, missing), instituicao_financeira: { valor: banco.nome, origem: banco.origem, confianca: banco.nome ? banco.confianca >= 80 ? "alta" : "media" : null, motivo: banco.nome ? "encontrado" : missing },
-    linha_digitavel: { valor: line, origem: line ? "sequência de 47/48 dígitos validada" : null, confianca: line ? "alta" : null, motivo: line ? "encontrado" : missing },
-    codigo_barras: { valor: bar, origem: bar ? "código de barras bancário de 44 dígitos validado" : null, confianca: bar ? "alta" : null, motivo: bar ? "encontrado" : missing },
-    parcela: parcela ? { valor: `${parcela.numero}/${parcela.total}`, origem: parcela.origem, confianca: "alta", motivo: "encontrado" } : { valor: null, origem: null, confianca: null, motivo: missing },
-  };
+export type ParcelaExtraidaPdf = {
+  pagina: number;
+  numero_documento: string | null;
+  nosso_numero: string | null;
+  linha_digitavel: string | null;
+  codigo_barras: string | null;
+  valor: number | null;
+  vencimento: string | null;
+  numero_parcela: number | null;
+  total_parcelas: number | null;
+  texto: string;
+  confianca: number;
+};
+
+export type ResultadoLeituraPdfBoleto = {
+  tipo_documento: "boleto" | "carne";
+  quantidade_parcelas_detectadas: number;
+  paginas_detectadas: number;
+  cliente: { nome: string | null; cpf: string | null };
+  instituicao_financeira: string | null;
+  codigo_banco: string | null;
+  parcelas: ParcelaExtraidaPdf[];
+};
+
+function normalizarBlocoPagina(v: string) {
+  return spaces(v.replace(/\bRECIBO DO PAGADOR\b/gi, "RECIBO DO PAGADOR"));
+}
+
+/**
+ * PDFs de carnê normalmente repetem "FICHA DE COMPENSAÇÃO" em cada página.
+ * O extractor de baixo nível preserva a ordem dos streams; por isso usamos a
+ * repetição como fronteira e nunca tentamos misturar campos de parcelas distintas.
+ */
+function separarParcelasDoTexto(text: string): string[] {
+  const normalized = normalizarBlocoPagina(text);
+  const markers = [...normalized.matchAll(/\bFICHA DE COMPENSA(?:ÇÃO|CAO)\b/gi)].map(m => m.index ?? 0);
+  if (markers.length >= 2) {
+    const chunks: string[] = [];
+    for (let i = 0; i < markers.length; i++) {
+      const from = i === 0 ? Math.max(0, markers[i] - 1600) : markers[i - 1];
+      const to = i + 1 < markers.length ? markers[i + 1] : normalized.length;
+      const chunk = normalized.slice(from, to);
+      if (chunk.replace(/\s+/g, "").length > 80) chunks.push(chunk);
+    }
+    return deduplicarBlocos(chunks);
+  }
+  // Fallback para boletos com QR PIX ou recibo repetido.
+  const parts = normalized.split(/(?=\b(?:\d{3}|\d{1,3})[- ]?X\b|\bAUTENTICAÇÃO MECÂNICA\b)/i).filter(p => p.replace(/\s+/g, "").length > 120);
+  return parts.length ? deduplicarBlocos(parts) : [normalized];
+}
+
+function deduplicarBlocos(blocos: string[]) {
+  const seen = new Set<string>();
+  return blocos.filter(b => {
+    const key = somenteDigitos(b).slice(0, 80) + "|" + b.slice(0, 80);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function cpfEmLinhaPagador(t: string) {
+  const direct = t.match(/([A-ZÀ-Ú][A-ZÀ-Ú '\-]{3,})\s*[-–]\s*(\d{11})/i);
+  if (direct) {
+    const cpf = somenteDigitos(direct[2]);
+    return validarCpf(cpf) ? { nome: direct[1].trim(), cpf } : null;
+  }
+  const pag = nomePagador(t);
+  const cpf = cpfPagadorContextual(t);
   return {
-    instituicao_financeira: banco.nome, codigo_banco: banco.codigo, confianca_banco: banco.confianca, metodo_identificacao_banco: banco.origem,
-    nome_beneficiario: typeof ben?.valor === "string" ? ben.valor : null, cpf_cnpj_beneficiario: typeof cpfBen?.valor === "string" ? cpfBen.valor : null,
-    nome_pagador: typeof pag?.valor === "string" ? pag.valor : null, cpf_pagador: typeof cpfValido?.valor === "string" ? cpfValido.valor : null,
-    nosso_numero: typeof nosso?.valor === "string" ? nosso.valor : null, numero_documento: typeof doc?.valor === "string" ? doc.valor : null, identificador_externo: typeof ext?.valor === "string" ? ext.valor : null,
-    linha_digitavel: line, codigo_barras: bar, valor: typeof valor?.valor === "number" ? valor.valor : null, vencimento: typeof venc?.valor === "string" ? venc.valor : null,
-    numero_parcela: parcela?.numero ?? null, total_parcelas: parcela?.total ?? null, texto_extraido: text, qualidade_extracao: qualidade, dados_origem: origem,
+    nome: typeof pag?.valor === "string" ? pag.valor : null,
+    cpf: cpf?.valor && typeof cpf.valor === "string" && validarCpf(cpf.valor) ? cpf.valor : null,
   };
 }
+
+function extrairParcelaDeBloco(bloco: string, pagina: number): ParcelaExtraidaPdf {
+  const line = findLine(bloco);
+  const nosso = choose(bloco, ["Nosso Número", "Nosso Numero", "Nosso Número / Cód. do Documento"], v => {
+    const m = v.match(/\b\d{1,3}\/\d{4,12}(?:-\d)?\b/);
+    return m?.[0] ?? digits(v, 3, 30);
+  }, 85);
+  const doc = choose(bloco, ["Número do Documento", "Numero do Documento", "Nº do Documento"], v => digits(v, 1, 30), 85);
+  const valor = choose(bloco, ["Valor do Documento", "Valor Cobrado", "Valor a Pagar", "Valor"], money, 85);
+  const venc = choose(bloco, ["Vencimento", "Data de Vencimento", "Venc.", "Pagar até", "Pagar ate"], date, 85);
+  const parcela = parcelaContextual(bloco);
+  const bar = findBar(bloco, line);
+  const fields = [nosso, doc, valor, venc].filter(Boolean).length + (line ? 1 : 0);
+  return {
+    pagina,
+    numero_documento: typeof doc?.valor === "string" ? doc.valor : null,
+    nosso_numero: typeof nosso?.valor === "string" ? nosso.valor : null,
+    linha_digitavel: line,
+    codigo_barras: bar,
+    valor: typeof valor?.valor === "number" ? valor.valor : null,
+    vencimento: typeof venc?.valor === "string" ? venc.valor : null,
+    numero_parcela: parcela?.numero ?? null,
+    total_parcelas: parcela?.total ?? null,
+    texto: bloco,
+    confianca: Math.round((fields / 5) * 100),
+  };
+}
+
+export function extrairCarnêOuBoleto(pdf: Buffer): ResultadoLeituraPdfBoleto {
+  const { texto, qualidade } = extrairTextoPdf(pdf);
+  const blocos = separarParcelasDoTexto(texto);
+  const parcelas = blocos
+    .map((bloco, i) => extrairParcelaDeBloco(bloco, i + 1))
+    .filter((p, i, arr) => {
+      // Um PDF costuma conter recibo + ficha com os mesmos dados; deduplicamos por identidade.
+      const key = [p.numero_documento, p.nosso_numero, p.linha_digitavel, p.vencimento, p.valor].filter(Boolean).join("|");
+      return key ? arr.findIndex(x => [x.numero_documento, x.nosso_numero, x.linha_digitavel, x.vencimento, x.valor].filter(Boolean).join("|") === key) === i : true;
+    });
+
+  const primeiro = parcelas.find(p => p.confianca >= 40) ?? parcelas[0];
+  const clienteInfo = cpfEmLinhaPagador(texto);
+  const banco = identificarInstituicao(texto, primeiro?.linha_digitavel ?? findLine(texto));
+
+  return {
+    tipo_documento: parcelas.filter(p => p.numero_documento || p.nosso_numero || p.vencimento).length > 1 ? "carne" : "boleto",
+    quantidade_parcelas_detectadas: parcelas.filter(p => p.numero_documento || p.nosso_numero || p.vencimento).length,
+    paginas_detectadas: Math.max(1, parcelas.length),
+    cliente: { nome: clienteInfo?.nome ?? null, cpf: clienteInfo?.cpf ?? null },
+    instituicao_financeira: banco.nome,
+    codigo_banco: banco.codigo,
+    parcelas,
+  };
+}
+
+export function extrairDadosBoleto(pdf: Buffer): DadosBoletoExtraidos {
+  const { texto: text, qualidade } = extrairTextoPdf(pdf);
+  const leitura = extrairCarnêOuBoleto(pdf);
+  const principal = leitura.parcelas.find(p => p.confianca >= 40) ?? leitura.parcelas[0] ?? null;
+  const line = principal?.linha_digitavel ?? findLine(text);
+  const banco = identificarInstituicao(text, line);
+  const pag = nomePagador(text);
+  const contextual = cpfEmLinhaPagador(text);
+  const cpfCandidate = contextual?.cpf ?? cpfPagadorContextual(text)?.valor ?? null;
+  const cpfValido = typeof cpfCandidate === "string" && validarCpf(cpfCandidate) ? cpfCandidate : null;
+  const nosso = principal?.nosso_numero ?? (choose(text, ["Nosso Número", "Nosso Numero"], v => digits(v, 3, 30), 70)?.valor ?? null);
+  const doc = principal?.numero_documento ?? (choose(text, ["Número do Documento", "Numero do Documento", "Nº do Documento"], v => digits(v, 1, 30), 65)?.valor ?? null);
+  const ext = choose(text, ["Identificador Externo", "Referência Adicional", "Referencia Adicional"], textValue, 65);
+  const ben = choose(text, ["Beneficiário", "Beneficiario"], textValue, 55);
+  const cpfBen = choose(text, ["CNPJ/CPF", "CPF/CNPJ", "CNPJ"], v => digits(v, 11, 14), 50);
+  const missing = qualidade.suficiente ? "nao_encontrado_no_texto" : "texto_insuficiente";
+  const origem: Record<string, CampoExtraido> = {
+    nome_pagador: contextual?.nome ? { valor: contextual.nome, origem: "pagador identificado no bloco do boleto", confianca: "alta", motivo: "encontrado" } : field(pag, missing),
+    cpf_pagador: cpfValido ? { valor: cpfValido, origem: "CPF associado ao pagador", confianca: "alta", motivo: "encontrado" } : { valor: null, origem: null, confianca: null, motivo: missing },
+    nosso_numero: principal?.nosso_numero ? { valor: principal.nosso_numero, origem: "parcela individual", confianca: "alta", motivo: "encontrado" } : { valor: nosso as any, origem: null, confianca: nosso ? "media" : null, motivo: nosso ? "encontrado" : missing },
+    numero_documento: principal?.numero_documento ? { valor: principal.numero_documento, origem: "parcela individual", confianca: "alta", motivo: "encontrado" } : { valor: doc as any, origem: null, confianca: doc ? "media" : null, motivo: doc ? "encontrado" : missing },
+    identificador_externo: field(ext, missing),
+    valor: principal?.valor != null ? { valor: principal.valor, origem: "parcela individual", confianca: "alta", motivo: "encontrado" } : { valor: null, origem: null, confianca: null, motivo: missing },
+    vencimento: principal?.vencimento ? { valor: principal.vencimento, origem: "parcela individual", confianca: "alta", motivo: "encontrado" } : { valor: null, origem: null, confianca: null, motivo: missing },
+    nome_beneficiario: field(ben, missing),
+    cpf_cnpj_beneficiario: field(cpfBen, missing),
+  };
+
+  const result: DadosBoletoExtraidos & Record<string, unknown> = {
+    instituicao_financeira: leitura.instituicao_financeira ?? banco.nome,
+    codigo_banco: leitura.codigo_banco ?? banco.codigo,
+    confianca_banco: banco.confianca,
+    metodo_identificacao_banco: banco.origem,
+    nome_beneficiario: typeof ben?.valor === "string" ? ben.valor : null,
+    cpf_cnpj_beneficiario: typeof cpfBen?.valor === "string" ? cpfBen.valor : null,
+    nome_pagador: contextual?.nome ?? (typeof pag?.valor === "string" ? pag.valor : null),
+    cpf_pagador: cpfValido,
+    nosso_numero: typeof nosso === "string" ? nosso : null,
+    numero_documento: typeof doc === "string" ? doc : null,
+    identificador_externo: typeof ext?.valor === "string" ? ext.valor : null,
+    linha_digitavel: line,
+    codigo_barras: principal?.codigo_barras ?? findBar(text, line),
+    valor: principal?.valor ?? null,
+    vencimento: principal?.vencimento ?? null,
+    numero_parcela: principal?.numero_parcela ?? null,
+    total_parcelas: principal?.total_parcelas ?? leitura.quantidade_parcelas_detectadas || null,
+    texto_extraido: text,
+    qualidade_extracao: qualidade,
+    dados_origem: origem,
+    tipo_documento: leitura.tipo_documento,
+    quantidade_parcelas_detectadas: leitura.quantidade_parcelas_detectadas,
+    paginas_detectadas: leitura.paginas_detectadas,
+    parcelas_extraidas: leitura.parcelas.map(({ texto, ...p }) => p),
+  };
+  return result;
+}
+
 export function normalizarNome(v: string | null | undefined) { return normalizarTexto(String(v ?? "")).replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim(); }
 export function normalizarCpf(v: string | null | undefined) { return somenteDigitos(v); }
