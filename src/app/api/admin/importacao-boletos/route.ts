@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { extrairDadosBoleto, normalizarCpf, normalizarNome } from "@/lib/pdf/boletos";
+import { normalizarCpf, normalizarNome } from "@/lib/pdf/boletos";
+import { extrairDadosBoletoComFallback } from "@/lib/pdf/interpretador-ia";
 import { complementarLeituraCarne } from "@/lib/pdf/complementar-carne";
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
@@ -235,7 +236,8 @@ export async function POST(req: NextRequest) {
   const sha256 = createHash("sha256").update(buffer).digest("hex");
 
   try {
-    const dadosBrutos = extrairDadosBoleto(buffer);
+    const leituraPdf = await extrairDadosBoletoComFallback(buffer);
+    const dadosBrutos = leituraPdf.dados;
     // Segunda camada: carnês multiparcela podem ter os campos dispersos visualmente.
     // Complementamos apenas com valores efetivamente presentes no texto extraído.
     const dados = complementarLeituraCarne(dadosBrutos.texto_extraido, dadosBrutos);
@@ -262,7 +264,7 @@ export async function POST(req: NextRequest) {
       carne: { pontuacao: carneMatch?.pontuacao ?? 0, confianca: carneMatch?.confianca ?? "sem_correspondencia", motivos: carneMatch?.motivos ?? [] },
       boleto: { pontuacao: boletoMatch?.pontuacao ?? 0, confianca: boletoMatch?.confianca ?? "sem_correspondencia", motivos: boletoMatch?.motivos ?? [] },
     };
-    const historico = [historicoItem("PDF processado", { diagnostico, cliente_confianca: clienteMatch.confianca })];
+    const historico = [historicoItem("PDF processado", { diagnostico, cliente_confianca: clienteMatch.confianca, motor_leitura: leituraPdf.motor, aviso_interpretador: leituraPdf.erroIA })];
     const payload = {
       cliente_id: clienteId,
       carne_id: carneId,
