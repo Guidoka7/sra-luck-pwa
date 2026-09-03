@@ -234,8 +234,17 @@ export async function POST(req: NextRequest) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const sha256 = createHash("sha256").update(buffer).digest("hex");
+  const storagePath = `importacoes/${sha256}.pdf`;
 
   try {
+    // Guarda o PDF original em bucket privado. Sem o arquivo original não existe
+    // reprocessamento visual confiável posteriormente.
+    const { error: uploadError } = await supabase.storage
+      .from("boletos-pdf")
+      .upload(storagePath, buffer, { contentType: "application/pdf", upsert: false });
+    if (uploadError && !/already exists|duplicate/i.test(uploadError.message)) {
+      throw new Error(`Falha ao armazenar PDF para reprocessamento: ${uploadError.message}`);
+    }
     const leituraPdf = await extrairDadosBoletoComFallback(buffer);
     const dadosBrutos = leituraPdf.dados;
     // Segunda camada: carnês multiparcela podem ter os campos dispersos visualmente.
@@ -291,6 +300,7 @@ export async function POST(req: NextRequest) {
       arquivo_mime: file.type || "application/pdf",
       arquivo_tamanho: file.size,
       arquivo_sha256: sha256,
+      arquivo_storage_path: storagePath,
       status,
       historico,
     };
@@ -300,6 +310,7 @@ export async function POST(req: NextRequest) {
       .select("id,status,cliente_id,carne_id,boleto_id,arquivo_nome,created_at")
       .single();
     if (error) {
+      await supabase.storage.from("boletos-pdf").remove([storagePath]);
       if (error.code === "23505") return NextResponse.json({ erro: "Este boleto/PDF já foi importado anteriormente." }, { status: 409 });
       return NextResponse.json({ erro: error.message }, { status: 500 });
     }
