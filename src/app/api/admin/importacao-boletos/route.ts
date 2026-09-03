@@ -27,6 +27,13 @@ function similaridade(a: string, b: string) {
   const inter = [...ax].filter((v) => by.has(v)).length;
   return inter / Math.max(ax.size, by.size);
 }
+function mesmoValor(a: unknown, b: unknown) {
+  const x = numero(a), y = numero(b);
+  return x !== null && y !== null && Math.abs(x - y) < 0.01;
+}
+function mesmoTexto(a: unknown, b: unknown) {
+  return texto(a).toUpperCase() !== "" && texto(a).toUpperCase() === texto(b).toUpperCase();
+}
 
 async function autenticar() {
   const supabase = createServerSupabaseClient();
@@ -40,14 +47,18 @@ async function localizarCliente(supabase: any, cpf: string | null, nome: string 
 
   if (cpf) {
     const cpfFormatado = cpf.length === 11 ? `${cpf.slice(0, 3)}.${cpf.slice(3, 6)}.${cpf.slice(6, 9)}-${cpf.slice(9)}` : cpf;
-    const { data, error } = await supabase.from("clientes").select("id,nome_completo,cpf,telefone").or(`cpf.eq.${cpf},cpf.eq.${cpfFormatado}`).limit(20);
+    const { data, error } = await supabase.from("clientes")
+      .select("id,nome_completo,cpf,telefone")
+      .or(`cpf.eq.${cpf},cpf.eq.${cpfFormatado}`).limit(20);
     if (error) throw new Error(error.message);
     candidatos.push(...(data ?? []));
   }
 
   if (nomeNormalizado) {
     const primeiroNome = nomeNormalizado.split(" ")[0];
-    const { data, error } = await supabase.from("clientes").select("id,nome_completo,cpf,telefone").ilike("nome_completo", `%${primeiroNome}%`).limit(100);
+    const { data, error } = await supabase.from("clientes")
+      .select("id,nome_completo,cpf,telefone")
+      .ilike("nome_completo", `%${primeiroNome}%`).limit(100);
     if (error) throw new Error(error.message);
     for (const item of data ?? []) if (!candidatos.some((c) => c.id === item.id)) candidatos.push(item);
   }
@@ -55,45 +66,76 @@ async function localizarCliente(supabase: any, cpf: string | null, nome: string 
   const pontuados: Candidato[] = candidatos.map((cliente) => {
     let pontuacao = 0;
     const motivos: string[] = [];
-    if (cpf && normalizarCpf(cliente.cpf) === cpf) { pontuacao += 100; motivos.push("CPF válido e coincidente (+100)"); }
-    const sim = similaridade(nome ?? "", cliente.nome_completo);
+    if (cpf && normalizarCpf(cliente.cpf) === cpf) {
+      pontuacao += 100;
+      motivos.push("CPF válido e coincidente (+100)");
+    } else if (cpf && cliente.cpf) {
+      motivos.push("CPF do PDF diverge da cliente candidata");
+    }
+
+    const sim = similaridade(nome ?? "", cliente.nome_completo ?? "");
     if (nomeNormalizado && normalizarNome(cliente.nome_completo) === nomeNormalizado) {
-      pontuacao += 70; motivos.push("Nome normalizado exato (+70)");
+      pontuacao += 70;
+      motivos.push("Nome normalizado exato (+70)");
     } else if (sim >= 0.8) {
-      pontuacao += 60; motivos.push("Nome muito semelhante (+60)");
+      pontuacao += 60;
+      motivos.push("Nome aproximado muito semelhante (+60)");
     } else if (sim >= 0.6) {
-      pontuacao += 45; motivos.push("Nome parcialmente semelhante (+45)");
+      pontuacao += 45;
+      motivos.push("Nome aproximado semelhante (+45)");
     } else if (sim >= 0.4) {
-      pontuacao += 30; motivos.push("Nome com correspondência parcial (+30)");
+      pontuacao += 30;
+      motivos.push("Nome parcialmente semelhante (+30)");
     }
     return { id: cliente.id, pontuacao, motivos };
   }).sort((a, b) => b.pontuacao - a.pontuacao);
 
   const melhor = pontuados[0];
   const segundo = pontuados[1];
-  const confirmado = melhor && melhor.pontuacao >= 30 && (!segundo || melhor.pontuacao > segundo.pontuacao);
-  const cliente = confirmado ? candidatos.find((c) => c.id === melhor.id) ?? null : null;
+  const cliente = melhor && melhor.pontuacao >= 30 && (!segundo || melhor.pontuacao > segundo.pontuacao)
+    ? candidatos.find((c) => c.id === melhor.id) ?? null
+    : null;
+
   return {
     cliente,
     confianca: melhor ? confianca(melhor.pontuacao) : "sem_correspondencia",
     pontuacao: melhor?.pontuacao ?? 0,
     motivos: melhor?.motivos ?? [],
-    candidatos: pontuados.map((c) => ({ ...c, confianca: confianca(c.pontuacao), nome: candidatos.find((x) => x.id === c.id)?.nome_completo ?? null })),
+    candidatos: pontuados.map((c) => ({
+      ...c,
+      confianca: confianca(c.pontuacao),
+      nome: candidatos.find((x) => x.id === c.id)?.nome_completo ?? null,
+    })),
   };
 }
 
 async function localizarCarne(supabase: any, clienteId: string, dados: any) {
   const { data, error } = await supabase.from("carnes")
     .select("id,cliente_id,instituicao_financeira,identificador_externo,data_geracao,quantidade_parcelas,valor_parcela,valor_total,status")
-    .eq("cliente_id", clienteId).order("data_geracao", { ascending: false }).limit(100);
+    .eq("cliente_id", clienteId)
+    .order("data_geracao", { ascending: false })
+    .limit(100);
   if (error) throw new Error(error.message);
 
   const candidatos = (data ?? []).map((carne: any) => {
-    let pontuacao = 0; const motivos: string[] = [];
-    if (dados.instituicao_financeira && texto(carne.instituicao_financeira).toUpperCase() === texto(dados.instituicao_financeira).toUpperCase()) { pontuacao += 30; motivos.push("Instituição financeira coincidente (+30)"); }
-    if (dados.identificador_externo && texto(carne.identificador_externo) === texto(dados.identificador_externo)) { pontuacao += 100; motivos.push("Identificador externo coincidente (+100)"); }
-    if (dados.total_parcelas && numero(carne.quantidade_parcelas) === numero(dados.total_parcelas)) { pontuacao += 20; motivos.push("Quantidade de parcelas coincidente (+20)"); }
-    if (dados.valor !== null && numero(carne.valor_parcela) !== null && Math.abs(numero(carne.valor_parcela)! - dados.valor) < 0.01) { pontuacao += 20; motivos.push("Valor da parcela coincidente (+20)"); }
+    let pontuacao = 0;
+    const motivos: string[] = [];
+    if (dados.instituicao_financeira && mesmoTexto(carne.instituicao_financeira, dados.instituicao_financeira)) {
+      pontuacao += 30;
+      motivos.push("Instituição financeira coincide (+30)");
+    }
+    if (dados.identificador_externo && mesmoTexto(carne.identificador_externo, dados.identificador_externo)) {
+      pontuacao += 100;
+      motivos.push("Identificador externo coincide (+100)");
+    }
+    if (dados.total_parcelas && numero(carne.quantidade_parcelas) === numero(dados.total_parcelas)) {
+      pontuacao += 20;
+      motivos.push("Quantidade de parcelas coincide (+20)");
+    }
+    if (dados.valor !== null && mesmoValor(carne.valor_parcela, dados.valor)) {
+      pontuacao += 20;
+      motivos.push("Valor aproximado da parcela coincide (+20)");
+    }
     return { ...carne, pontuacao, motivos };
   }).sort((a: any, b: any) => b.pontuacao - a.pontuacao);
 
@@ -103,26 +145,49 @@ async function localizarCarne(supabase: any, clienteId: string, dados: any) {
   return {
     carne,
     pontuacao: melhor?.pontuacao ?? 0,
-    confianca: confianca(meior?.pontuacao ?? 0),
+    confianca: confianca(melhor?.pontuacao ?? 0),
     motivos: melhor?.motivos ?? [],
     candidatos,
   };
 }
 
 async function localizarBoleto(supabase: any, clienteId: string, carneId: string, dados: any) {
+  // REGRA CRÍTICA: a busca já está limitada ao cliente e ao carnê identificado.
   const { data, error } = await supabase.from("boletos")
     .select("id,cliente_id,carne_id,numero_parcela,total_parcelas,valor,data_vencimento,status,instituicao_financeira,identificador_externo,origem_boleto")
-    .eq("cliente_id", clienteId).eq("carne_id", carneId).limit(200);
+    .eq("cliente_id", clienteId)
+    .eq("carne_id", carneId)
+    .limit(200);
   if (error) throw new Error(error.message);
 
   const candidatos = (data ?? []).map((boleto: any) => {
-    let pontuacao = 0; const motivos: string[] = [];
-    if (dados.identificador_externo && texto(boleto.identificador_externo) === texto(dados.identificador_externo)) { pontuacao += 100; motivos.push("Identificador externo coincidente (+100)"); }
-    if (dados.nosso_numero && texto(boleto.identificador_externo) === texto(dados.nosso_numero)) { pontuacao += 100; motivos.push("Nosso Número coincidente com identificador existente (+100)"); }
-    if (dados.valor !== null && numero(boleto.valor) !== null && Math.abs(numero(boleto.valor)! - dados.valor) < 0.01) { pontuacao += 40; motivos.push("Valor coincidente (+40)"); }
-    if (dados.vencimento && texto(boleto.data_vencimento) === texto(dados.vencimento)) { pontuacao += 40; motivos.push("Vencimento coincidente (+40)"); }
-    if (dados.numero_parcela && numero(boleto.numero_parcela) === numero(dados.numero_parcela)) { pontuacao += 50; motivos.push("Parcela coincidente (+50)"); }
-    if (dados.instituicao_financeira && texto(boleto.instituicao_financeira).toUpperCase() === texto(dados.instituicao_financeira).toUpperCase()) { pontuacao += 20; motivos.push("Instituição financeira coincidente (+20)"); }
+    let pontuacao = 0;
+    const motivos: string[] = [];
+
+    if (dados.nosso_numero && mesmoTexto(boleto.identificador_externo, dados.nosso_numero)) {
+      pontuacao += 100;
+      motivos.push("Nosso Número coincide com identificador do boleto (+100)");
+    }
+    if (dados.identificador_externo && mesmoTexto(boleto.identificador_externo, dados.identificador_externo)) {
+      pontuacao += 100;
+      motivos.push("Identificador externo coincide (+100)");
+    }
+    if (dados.valor !== null && mesmoValor(boleto.valor, dados.valor)) {
+      pontuacao += 40;
+      motivos.push("Valor coincide (+40)");
+    }
+    if (dados.vencimento && texto(boleto.data_vencimento) === texto(dados.vencimento)) {
+      pontuacao += 40;
+      motivos.push("Vencimento coincide (+40)");
+    }
+    if (dados.numero_parcela !== null && dados.numero_parcela !== undefined && numero(boleto.numero_parcela) === numero(dados.numero_parcela)) {
+      pontuacao += 50;
+      motivos.push("Número da parcela coincide (+50)");
+    }
+    if (dados.instituicao_financeira && mesmoTexto(boleto.instituicao_financeira, dados.instituicao_financeira)) {
+      pontuacao += 20;
+      motivos.push("Instituição financeira coincide (+20)");
+    }
     return { ...boleto, pontuacao, motivos };
   }).sort((a: any, b: any) => b.pontuacao - a.pontuacao);
 
@@ -177,6 +242,7 @@ export async function POST(req: NextRequest) {
     let carneMatch: any = null;
     let boletoMatch: any = null;
 
+    // Encadeamento obrigatório: PDF -> cliente -> carnês da cliente -> boletos do carnê.
     if (clienteId) {
       carneMatch = await localizarCarne(supabase, clienteId, dados);
       carneId = carneMatch.carne?.id ?? null;
@@ -194,12 +260,20 @@ export async function POST(req: NextRequest) {
     };
     const historico = [historicoItem("PDF processado", { diagnostico, cliente_confianca: clienteMatch.confianca })];
     const payload = {
-      cliente_id: clienteId, carne_id: carneId, boleto_id: boletoId,
-      instituicao_financeira: dados.instituicao_financeira, nosso_numero: dados.nosso_numero,
-      numero_documento: dados.numero_documento, identificador_externo: dados.identificador_externo,
-      linha_digitavel: dados.linha_digitavel, codigo_barras: dados.codigo_barras,
-      nome_pagador_extraido: dados.nome_pagador, cpf_pagador_extraido: dados.cpf_pagador,
-      valor_extraido: dados.valor, vencimento_extraido: dados.vencimento, numero_parcela: dados.numero_parcela,
+      cliente_id: clienteId,
+      carne_id: carneId,
+      boleto_id: boletoId,
+      instituicao_financeira: dados.instituicao_financeira,
+      nosso_numero: dados.nosso_numero,
+      numero_documento: dados.numero_documento,
+      identificador_externo: dados.identificador_externo,
+      linha_digitavel: dados.linha_digitavel,
+      codigo_barras: dados.codigo_barras,
+      nome_pagador_extraido: dados.nome_pagador,
+      cpf_pagador_extraido: dados.cpf_pagador,
+      valor_extraido: dados.valor,
+      vencimento_extraido: dados.vencimento,
+      numero_parcela: dados.numero_parcela,
       dados_extraidos: {
         ...dados,
         diagnostico_vinculacao: diagnostico,
@@ -207,19 +281,44 @@ export async function POST(req: NextRequest) {
         candidatos_carne: (carneMatch?.candidatos ?? []).map((c: any) => ({ id: c.id, pontuacao: c.pontuacao, motivos: c.motivos })),
         candidatos_boleto: (boletoMatch?.candidatos ?? []).map((b: any) => ({ id: b.id, pontuacao: b.pontuacao, motivos: b.motivos })),
       },
-      arquivo_nome: file.name, arquivo_mime: file.type || "application/pdf", arquivo_tamanho: file.size,
-      arquivo_sha256: sha256, status, historico,
+      arquivo_nome: file.name,
+      arquivo_mime: file.type || "application/pdf",
+      arquivo_tamanho: file.size,
+      arquivo_sha256: sha256,
+      status,
+      historico,
     };
 
-    const { data, error } = await supabase.from("importacoes_boletos").insert(payload).select("id,status,cliente_id,carne_id,boleto_id,arquivo_nome,created_at").single();
+    const { data, error } = await supabase.from("importacoes_boletos")
+      .insert(payload)
+      .select("id,status,cliente_id,carne_id,boleto_id,arquivo_nome,created_at")
+      .single();
     if (error) {
       if (error.code === "23505") return NextResponse.json({ erro: "Este boleto/PDF já foi importado anteriormente." }, { status: 409 });
       return NextResponse.json({ erro: error.message }, { status: 500 });
     }
-    return NextResponse.json({ importacao: data, dados, diagnostico, candidatos: { cliente: clienteMatch.candidatos, carne: carneMatch?.candidatos ?? [], boleto: boletoMatch?.candidatos ?? [] } }, { status: 201 });
+    return NextResponse.json({
+      importacao: data,
+      dados,
+      diagnostico,
+      candidatos: {
+        cliente: clienteMatch.candidatos,
+        carne: carneMatch?.candidatos ?? [],
+        boleto: boletoMatch?.candidatos ?? [],
+      },
+    }, { status: 201 });
   } catch (error) {
     const mensagem = error instanceof Error ? error.message : "Falha ao processar o PDF.";
-    const { data } = await supabase.from("importacoes_boletos").insert({ arquivo_nome: file.name, arquivo_mime: file.type || "application/pdf", arquivo_tamanho: file.size, arquivo_sha256: sha256, status: "erro", erro_detalhes: mensagem, dados_extraidos: {}, historico: [historicoItem("Erro no processamento", { mensagem })] }).select("id,status,erro_detalhes,created_at").single();
+    const { data } = await supabase.from("importacoes_boletos").insert({
+      arquivo_nome: file.name,
+      arquivo_mime: file.type || "application/pdf",
+      arquivo_tamanho: file.size,
+      arquivo_sha256: sha256,
+      status: "erro",
+      erro_detalhes: mensagem,
+      dados_extraidos: {},
+      historico: [historicoItem("Erro no processamento", { mensagem })],
+    }).select("id,status,erro_detalhes,created_at").single();
     if (data) return NextResponse.json({ importacao: data, erro: mensagem }, { status: 422 });
     return NextResponse.json({ erro: mensagem }, { status: 422 });
   }
