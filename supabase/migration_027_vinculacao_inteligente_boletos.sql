@@ -27,8 +27,23 @@ alter table importacoes_boletos drop constraint if exists importacoes_boletos_st
 alter table importacoes_boletos add constraint importacoes_boletos_status_vinculacao_chk
   check (status_vinculacao in ('pendente','analisado','aguardando_confirmacao','vinculado','ignorado'));
 
--- Garante que uma importação tenha no máximo um boleto vinculado no próprio registro.
--- A unicidade entre importações é validada transacionalmente pelo backend antes da confirmação.
+-- Compatibilidade com importações já concluídas pela versão anterior.
+update importacoes_boletos
+set cliente_vinculado_id = cliente_id,
+    carne_vinculado_id = carne_id,
+    boleto_vinculado_id = boleto_id,
+    status_vinculacao = 'vinculado'
+where status = 'vinculado'
+  and boleto_id is not null
+  and status_vinculacao = 'pendente';
 
+update importacoes_boletos
+set status_vinculacao = 'aguardando_confirmacao'
+where status = 'aguardando_confirmacao'
+  and status_vinculacao = 'pendente'
+  and boleto_id is not null;
+
+-- A unicidade entre importações é validada no backend no momento da confirmação,
+-- evitando falha da migration caso o legado contenha registros repetidos.
 -- Histórico permanece no JSONB historico da importação. O backend apenas acrescenta
 -- eventos e nunca executa UPDATE/DELETE sobre eventos individuais.
