@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
 
 function texto(...valores: unknown[]) { const valor = valores.find((v) => typeof v === "string" && v.trim()); return valor ? String(valor).trim() : null; }
-function numero(valor: unknown) {
+function numero(...valores: unknown[]) {
+  const valor = valores.find((v) => v !== null && v !== undefined && v !== "");
   if (valor === null || valor === undefined || valor === "") return null;
   if (typeof valor === "number") return Number.isFinite(valor) ? valor : null;
   const bruto = String(valor).trim().replace(/\s/g, "");
