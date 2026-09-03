@@ -26,7 +26,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     .maybeSingle();
   if (importacaoError) return NextResponse.json({ erro: importacaoError.message }, { status: 500 });
   if (!importacao) return NextResponse.json({ erro: "Importação não encontrada." }, { status: 404 });
-  if (importacao.status_vinculacao === "vinculado" || importacao.boleto_vinculado_id) {
+  if (importacao.status_vinculacao === "vinculado" || importacao.boleto_vinculado_id || importacao.boleto_id) {
     return NextResponse.json({ erro: "Esta importação já está vinculada." }, { status: 409 });
   }
 
@@ -48,9 +48,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ erro: "O carnê não pertence à cliente selecionada." }, { status: 400 });
   }
 
-  // Regra crítica: o boleto confirmado precisa pertencer exatamente ao carnê escolhido.
-  // Boletos sem carne_id não podem ser usados neste fluxo, pois isso quebraria
-  // a cadeia Cliente -> Carnê -> Boleto exigida pela vinculação manual.
   const { data: boleto, error: boletoError } = await supabase
     .from("boletos")
     .select("id,cliente_id,carne_id")
@@ -65,14 +62,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ erro: "O boleto selecionado não pertence ao carnê escolhido." }, { status: 400 });
   }
 
-  const { data: conflito } = await supabase
+  const { data: conflito, error: conflitoError } = await supabase
     .from("importacoes_boletos")
     .select("id")
-    .eq("boleto_vinculado_id", boletoId)
-    .eq("status_vinculacao", "vinculado")
+    .or(`boleto_vinculado_id.eq.${boletoId},boleto_id.eq.${boletoId}`)
     .neq("id", params.id)
     .limit(1)
     .maybeSingle();
+  if (conflitoError) return NextResponse.json({ erro: conflitoError.message }, { status: 500 });
   if (conflito) {
     return NextResponse.json({ erro: "Este boleto existente já está vinculado a outra importação." }, { status: 409 });
   }
@@ -87,7 +84,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       cliente_novo: clienteId,
       carne_anterior: importacao.carne_vinculado_id,
       carne_novo: carneId,
-      boleto_anterior: importacao.boleto_vinculado_id,
+      boleto_anterior: importacao.boleto_vinculado_id ?? importacao.boleto_id,
       boleto_novo: boletoId,
       metodo: "manual",
       pontuacao: importacao.pontuacao_confianca ?? 0,
@@ -108,9 +105,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       historico,
     })
     .eq("id", params.id)
+    .is("boleto_vinculado_id", null)
+    .is("boleto_id", null)
+    .neq("status_vinculacao", "vinculado")
     .select("*")
-    .single();
+    .maybeSingle();
 
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
+  if (!data) {
+    return NextResponse.json({ erro: "A importação foi vinculada por outra operação antes da confirmação. Atualize a análise e tente novamente." }, { status: 409 });
+  }
   return NextResponse.json({ importacao: data });
 }
