@@ -130,6 +130,40 @@ function textValue(v: string) {
   if (!x || isLabel(x) || /^(não|nao|n\/a|-)$/i.test(x) || !/[\p{L}]/u.test(x)) return null;
   return x;
 }
+function cpfGlobal(t: string) {
+  const candidates = [...t.matchAll(/(?:CPF\s*[:\-]?\s*)?(\d{3}[.\s-]?\d{3}[.\s-]?\d{3}[.\s-]?\d{2})/gi)]
+    .map(m => somenteDigitos(m[1]))
+    .filter(validarCpf);
+  return candidates[0] ?? null;
+}
+function nomeProximoCpf(t: string, cpf: string | null) {
+  if (!cpf) return null;
+  const compact = t.replace(/\r/g, "\n");
+  const pos = compact.indexOf(cpf);
+  const area = pos >= 0 ? compact.slice(Math.max(0, pos - 600), pos + 80) : compact;
+  const candidates = area.match(/[A-ZÀ-Ú][A-ZÀ-Ú '\-]{5,80}/g) ?? [];
+  const ignored = /^(PAGADOR|BENEFICIARIO|BENEFICIÁRIO|CPF|CNPJ|LOCAL DE PAGAMENTO|FICHA DE COMPENSAÇÃO|RECIBO DO PAGADOR)$/;
+  return candidates.map(x => x.trim()).reverse().find(x => {
+    const words=x.split(/\s+/).length;
+    return words >= 2 && !ignored.test(normalizarCampo(x)) && !/SICREDI|BANCO|COOPERATIVA|GESTAO|SERVICOS LTDA/.test(normalizarTexto(x));
+  }) ?? null;
+}
+function findLineFlex(t: string) {
+  const strict = findLine(t); if (strict) return strict;
+  const candidates = [...t.matchAll(/(?:\d[\s.\-]?){44,52}/g)]
+    .map(m => somenteDigitos(m[0]))
+    .filter(x => (x.length === 47 || x.length === 48) && /^(001|033|070|104|237|341|364|748|8)/.test(x));
+  return candidates[0] ?? null;
+}
+function primeiroValorGlobal(t: string) {
+  const all=[...t.matchAll(/(?:R\$\s*)?(\d{1,3}(?:\.\d{3})*,\d{2})/g)]
+    .map(m=>money(m[0])).filter((x): x is number => x!==null);
+  return all.find(x=>x>0) ?? null;
+}
+function primeiraDataGlobal(t: string) {
+  const all=[...t.matchAll(/\b\d{2}[\/.-]\d{2}[\/.-]\d{2,4}\b/g)].map(m=>date(m[0])).filter((x): x is string=>!!x);
+  return all[0] ?? null;
+}
 function nomePagador(t: string) {
   const contextual = choose(t, ["Pagador", "Nome do Pagador"], v => { const x = textValue(v); if (!x || /^(CPF|CNPJ|ENDERECO|ENDEREÇO|VENCIMENTO|VALOR|DOCUMENTO|NOSSO NUMERO|LOCAL DE PAGAMENTO)\b/i.test(x)) return null; return x; }, 75);
   if (contextual) return contextual;
@@ -236,15 +270,17 @@ function cpfEmLinhaPagador(t: string) {
     return validarCpf(cpf) ? { nome: direct[1].trim(), cpf } : null;
   }
   const pag = nomePagador(t);
-  const cpf = cpfPagadorContextual(t);
+  const contextualCpf = cpfPagadorContextual(t);
+  const cpf = contextualCpf?.valor && typeof contextualCpf.valor === "string" && validarCpf(contextualCpf.valor)
+    ? contextualCpf.valor : cpfGlobal(t);
   return {
-    nome: typeof pag?.valor === "string" ? pag.valor : null,
-    cpf: cpf?.valor && typeof cpf.valor === "string" && validarCpf(cpf.valor) ? cpf.valor : null,
+    nome: (typeof pag?.valor === "string" ? pag.valor : null) ?? nomeProximoCpf(t, cpf),
+    cpf: cpf ?? null,
   };
 }
 
 function extrairParcelaDeBloco(bloco: string, pagina: number): ParcelaExtraidaPdf {
-  const line = findLine(bloco);
+  const line = findLineFlex(bloco);
   const nosso = choose(bloco, ["Nosso Número", "Nosso Numero", "Nosso Número / Cód. do Documento"], v => {
     const m = v.match(/\b\d{1,3}\/\d{4,12}(?:-\d)?\b/);
     return m?.[0] ?? digits(v, 3, 30);
@@ -281,9 +317,9 @@ export function extrairCarnêOuBoleto(pdf: Buffer): ResultadoLeituraPdfBoleto {
       return key ? arr.findIndex(x => [x.numero_documento, x.nosso_numero, x.linha_digitavel, x.vencimento, x.valor].filter(Boolean).join("|") === key) === i : true;
     });
 
-  const primeiro = parcelas.find(p => p.confianca >= 40) ?? parcelas[0];
+  const primeiro = parcelas.find(p => p.confianca >= 20) ?? parcelas[0];
   const clienteInfo = cpfEmLinhaPagador(texto);
-  const banco = identificarInstituicao(texto, primeiro?.linha_digitavel ?? findLine(texto));
+  const banco = identificarInstituicao(texto, primeiro?.linha_digitavel ?? findLineFlex(texto));
 
   return {
     tipo_documento: parcelas.filter(p => p.numero_documento || p.nosso_numero || p.vencimento).length > 1 ? "carne" : "boleto",
@@ -300,7 +336,7 @@ export function extrairDadosBoleto(pdf: Buffer): DadosBoletoExtraidos {
   const { texto: text, qualidade } = extrairTextoPdf(pdf);
   const leitura = extrairCarnêOuBoleto(pdf);
   const principal = leitura.parcelas.find(p => p.confianca >= 40) ?? leitura.parcelas[0] ?? null;
-  const line = principal?.linha_digitavel ?? findLine(text);
+  const line = principal?.linha_digitavel ?? findLineFlex(text);
   const banco = identificarInstituicao(text, line);
   const pag = nomePagador(text);
   const contextual = cpfEmLinhaPagador(text);
@@ -331,15 +367,15 @@ export function extrairDadosBoleto(pdf: Buffer): DadosBoletoExtraidos {
     metodo_identificacao_banco: banco.origem,
     nome_beneficiario: typeof ben?.valor === "string" ? ben.valor : null,
     cpf_cnpj_beneficiario: typeof cpfBen?.valor === "string" ? cpfBen.valor : null,
-    nome_pagador: contextual?.nome ?? (typeof pag?.valor === "string" ? pag.valor : null),
-    cpf_pagador: cpfValido,
+    nome_pagador: contextual?.nome ?? (typeof pag?.valor === "string" ? pag.valor : null) ?? nomeProximoCpf(text, cpfValido ?? cpfGlobal(text)),
+    cpf_pagador: cpfValido ?? cpfGlobal(text),
     nosso_numero: typeof nosso === "string" ? nosso : null,
     numero_documento: typeof doc === "string" ? doc : null,
     identificador_externo: typeof ext?.valor === "string" ? ext.valor : null,
     linha_digitavel: line,
     codigo_barras: principal?.codigo_barras ?? findBar(text, line),
-    valor: principal?.valor ?? null,
-    vencimento: principal?.vencimento ?? null,
+    valor: principal?.valor ?? primeiroValorGlobal(text),
+    vencimento: principal?.vencimento ?? primeiraDataGlobal(text),
     numero_parcela: principal?.numero_parcela ?? null,
     total_parcelas: principal?.total_parcelas ?? (leitura.quantidade_parcelas_detectadas || null),
     texto_extraido: text,
