@@ -13,7 +13,7 @@ async function autenticar() {
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const supabase = await autenticar();
   if (!supabase) return NextResponse.json({ erro: "Não autenticado." }, { status: 401 });
-  const { data, error } = await supabase.from("importacoes_boletos").select(`*,clientes(id,nome_completo,cpf,telefone,email),carnes(id,cliente_id,instituicao_financeira,identificador_externo,data_geracao,quantidade_parcelas,valor_parcela,valor_total,status),boletos(id,cliente_id,carne_id,numero_parcela,total_parcelas,valor,data_vencimento,status,instituicao_financeira,identificador_externo,origem_boleto)`).eq("id", params.id).maybeSingle();
+  const { data, error } = await supabase.from("importacoes_boletos").select(`*,cliente:clientes!importacoes_boletos_cliente_id_fkey(id,nome_completo,cpf,telefone,email),carnes(id,cliente_id,instituicao_financeira,identificador_externo,data_geracao,quantidade_parcelas,valor_parcela,valor_total,status),boletos(id,cliente_id,carne_id,numero_parcela,total_parcelas,valor,data_vencimento,status,instituicao_financeira,identificador_externo,origem_boleto)`).eq("id", params.id).maybeSingle();
   if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ erro: "Importação não encontrada." }, { status: 404 });
   return NextResponse.json({ importacao: data });
