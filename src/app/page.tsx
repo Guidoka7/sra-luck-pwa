@@ -35,6 +35,10 @@ export default function HomePage() {
       >
         Acesso administrativo
       </Link>
+
+      <div className="absolute right-4 top-4 z-20 rounded-full border border-burgundy/15 bg-white/70 px-3 py-1 text-[10px] font-medium tracking-[0.12em] uppercase text-burgundy/60 shadow-sm backdrop-blur-sm">
+        🧪 AMBIENTE DE TESTES — DEVELOP
+      </div>
     </main>
   );
 }
