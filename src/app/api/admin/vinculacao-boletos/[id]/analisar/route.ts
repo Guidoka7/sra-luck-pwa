@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { classificarConfianca, normalizarDocumento, normalizarTexto, pontuarCandidato, type CandidatoBoleto, type DadosImportacao } from "@/lib/vinculacao-boletos";
+import { complementarLeituraCarne } from "@/lib/pdf/complementar-carne";
 
 function historicoItem(acao:string,usuario:string,detalhes:Record<string,unknown>={}){return{em:new Date().toISOString(),usuario,acao,detalhes};}
 async function autenticar(){const supabase=createServerSupabaseClient();const{data:{user}}=await supabase.auth.getUser();return{supabase,user};}
@@ -33,7 +34,25 @@ export async function POST(_req:Request,{params}:{params:{id:string}}){
   const{supabase,user}=await autenticar();if(!user)return NextResponse.json({erro:"Não autenticado."},{status:401});
   const{data:importacao,error:ie}=await supabase.from("importacoes_boletos").select("*").eq("id",params.id).maybeSingle();
   if(ie)return NextResponse.json({erro:ie.message},{status:500});if(!importacao)return NextResponse.json({erro:"Importação não encontrada."},{status:404});
-  const dados:DadosImportacao={cpf_pagador_extraido:importacao.cpf_pagador_extraido,nome_pagador_extraido:importacao.nome_pagador_extraido,nosso_numero:importacao.nosso_numero,identificador_externo:importacao.identificador_externo,linha_digitavel:importacao.linha_digitavel,codigo_barras:importacao.codigo_barras,valor_extraido:importacao.valor_extraido,vencimento_extraido:importacao.vencimento_extraido,numero_parcela:importacao.numero_parcela,instituicao_financeira:importacao.instituicao_financeira};
+  // Importações antigas já estavam gravadas antes da correção do parser.
+  // Reprocessamos a camada estruturada a partir do texto original salvo em dados_extraidos,
+  // sem exigir novo upload e sem inventar dados.
+  const bruto:any = importacao.dados_extraidos && typeof importacao.dados_extraidos === "object" ? importacao.dados_extraidos : {};
+  const reprocessado:any = bruto.texto_extraido
+    ? complementarLeituraCarne(bruto.texto_extraido, bruto)
+    : bruto;
+  const dados:DadosImportacao={
+    cpf_pagador_extraido: reprocessado.cpf_pagador ?? importacao.cpf_pagador_extraido,
+    nome_pagador_extraido: reprocessado.nome_pagador ?? importacao.nome_pagador_extraido,
+    nosso_numero: reprocessado.nosso_numero ?? importacao.nosso_numero,
+    identificador_externo: reprocessado.identificador_externo ?? importacao.identificador_externo,
+    linha_digitavel: reprocessado.linha_digitavel ?? importacao.linha_digitavel,
+    codigo_barras: reprocessado.codigo_barras ?? importacao.codigo_barras,
+    valor_extraido: reprocessado.valor ?? importacao.valor_extraido,
+    vencimento_extraido: reprocessado.vencimento ?? importacao.vencimento_extraido,
+    numero_parcela: reprocessado.numero_parcela ?? importacao.numero_parcela,
+    instituicao_financeira: reprocessado.instituicao_financeira ?? importacao.instituicao_financeira
+  };
   const{clientes,carnes,boletos}=await carregarCandidatos(supabase,dados);
   const analisados=boletos.map(c=>pontuarCandidato(dados,c)).sort((a,b)=>b.pontuacao-a.pontuacao);
   const principal=analisados[0]??null;
@@ -43,7 +62,20 @@ export async function POST(_req:Request,{params}:{params:{id:string}}){
   const analise={executada_em:new Date().toISOString(),fluxo:"cliente → carnê → boleto",regras:"Cliente: CPF + nome + identificador; Carnê: instituição + identificador + parcelas + valor; Boleto: nosso número + identificador + valor + vencimento + parcela + instituição",clientes_encontradas:clientes.length,carnes_encontrados:carnes.length,candidatos:analisados.slice(0,10).map(c=>({id:c.id,cliente_id:c.cliente_id,carne_id:c.carne_id,pontuacao:c.pontuacao,percentual:c.percentual,pontuacao_cliente:c.pontuacao_cliente,pontuacao_carne:c.pontuacao_carne,pontuacao_boleto:c.pontuacao_boleto,motivos:c.motivos})),quantidade_candidatos:analisados.length};
   const historicoAtual=Array.isArray(importacao.historico)?importacao.historico:[];
   const historico=[...historicoAtual,historicoItem("Análise inteligente executada",user.id,{pontuacao:principal?.pontuacao??0,nivel,candidatos:analisados.length,cliente_sugerida:principal?.cliente_id??null,carne_sugerido:principal?.carne_id??null,boleto_sugerido:principal?.id??null,fluxo:"cliente → carnê → boleto"})];
-  const{data,error}=await supabase.from("importacoes_boletos").update({cliente_sugerido_id:principal?.cliente_id??null,carne_sugerido_id:principal?.carne_id??null,boleto_sugerido_id:principal?.id??null,pontuacao_confianca:principal?.pontuacao??0,nivel_confianca:nivel,status_vinculacao:status,analise_detalhada:analise,historico}).eq("id",params.id).select("*").single();
+  const dadosExtraidosAtualizados = { ...bruto, ...reprocessado, reprocessado_em: new Date().toISOString() };
+  const{data,error}=await supabase.from("importacoes_boletos").update({
+    nome_pagador_extraido: dados.nome_pagador_extraido ?? null,
+    cpf_pagador_extraido: dados.cpf_pagador_extraido ?? null,
+    nosso_numero: dados.nosso_numero ?? null,
+    linha_digitavel: dados.linha_digitavel ?? null,
+    codigo_barras: dados.codigo_barras ?? null,
+    valor_extraido: dados.valor_extraido ?? null,
+    vencimento_extraido: dados.vencimento_extraido ?? null,
+    numero_parcela: dados.numero_parcela ?? null,
+    instituicao_financeira: dados.instituicao_financeira ?? null,
+    dados_extraidos: dadosExtraidosAtualizados,
+    cliente_sugerido_id:principal?.cliente_id??null,carne_sugerido_id:principal?.carne_id??null,boleto_sugerido_id:principal?.id??null,pontuacao_confianca:principal?.pontuacao??0,nivel_confianca:nivel,status_vinculacao:status,analise_detalhada:analise,historico
+  }).eq("id",params.id).select("*").single();
   if(error)return NextResponse.json({erro:error.message},{status:500});
   return NextResponse.json({importacao:data,analise:{principal,candidatos:analisados.slice(0,10),nivel,status,clientes,carnes}});
 }
