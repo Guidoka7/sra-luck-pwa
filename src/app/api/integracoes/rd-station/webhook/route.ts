@@ -2,7 +2,14 @@ import { NextResponse } from "next/server";
 import { createServiceSupabaseClient } from "@/lib/supabase/server";
 
 function texto(...valores: unknown[]) { const valor = valores.find((v) => typeof v === "string" && v.trim()); return valor ? String(valor).trim() : null; }
-function numero(valor: unknown) { if (valor === null || valor === undefined || valor === "") return null; const n = Number(String(valor).replace(/\./g, "").replace(",", ".")); return Number.isFinite(n) ? n : null; }
+function numero(valor: unknown) {
+  if (valor === null || valor === undefined || valor === "") return null;
+  if (typeof valor === "number") return Number.isFinite(valor) ? valor : null;
+  const bruto = String(valor).trim().replace(/\s/g, "");
+  const normalizado = bruto.includes(",") ? bruto.replace(/\./g, "").replace(",", ".") : bruto;
+  const n = Number(normalizado);
+  return Number.isFinite(n) ? n : null;
+}
 
 function normalizarVenda(payload: Record<string, any>) {
   const dados = payload.data ?? payload.deal ?? payload.opportunity ?? payload;
