@@ -1,128 +1,23 @@
 export type NivelConfianca = "alta" | "media" | "baixa";
-
-export type CandidatoBoleto = {
-  id: string;
-  cliente_id: string;
-  carne_id: string | null;
-  numero_parcela: number | null;
-  total_parcelas: number | null;
-  valor: number | string | null;
-  data_vencimento: string | null;
-  status: string | null;
-  instituicao_financeira: string | null;
-  identificador_externo: string | null;
-  origem_boleto: string | null;
-  clientes?: { id: string; nome_completo: string | null; cpf: string | null; telefone: string | null } | null;
-  carnes?: { id: string; identificador_externo: string | null; instituicao_financeira: string | null; quantidade_parcelas: number | null } | null;
-};
-
-export type AnaliseCandidato = CandidatoBoleto & {
-  pontuacao: number;
-  percentual: number;
-  motivos: { tipo: "positivo" | "alerta"; texto: string; pontos?: number }[];
-};
-
-export type DadosImportacao = {
-  cpf_pagador_extraido: string | null;
-  nome_pagador_extraido: string | null;
-  nosso_numero: string | null;
-  identificador_externo: string | null;
-  linha_digitavel: string | null;
-  codigo_barras: string | null;
-  valor_extraido: number | string | null;
-  vencimento_extraido: string | null;
-  numero_parcela: number | null;
-  instituicao_financeira: string | null;
-};
-
-export function normalizarTexto(value: unknown) {
-  return String(value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toUpperCase();
-}
-
-export function normalizarDocumento(value: unknown) {
-  return String(value ?? "").replace(/\D/g, "");
-}
-
-function distanciaLevenshtein(a: string, b: string) {
-  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i += 1) {
-    let anterior = row[0];
-    row[0] = i;
-    for (let j = 1; j <= b.length; j += 1) {
-      const atual = row[j];
-      row[j] = a[i - 1] === b[j - 1] ? anterior : Math.min(anterior + 1, row[j - 1] + 1, atual + 1);
-      anterior = atual;
-    }
-  }
-  return row[b.length];
-}
-
-function nomeSemelhante(a: string, b: string) {
-  const na = normalizarTexto(a);
-  const nb = normalizarTexto(b);
-  if (!na || !nb) return false;
-  if (na === nb) return true;
-  const tokensA = new Set(na.split(" ").filter(Boolean));
-  const tokensB = new Set(nb.split(" ").filter(Boolean));
-  const inter = [...tokensA].filter((token) => tokensB.has(token)).length;
-  const uniao = new Set([...tokensA, ...tokensB]).size;
-  const jaccard = uniao ? inter / uniao : 0;
-  const distancia = distanciaLevenshtein(na, nb);
-  const similaridade = Math.max(jaccard, 1 - distancia / Math.max(na.length, nb.length));
-  return similaridade >= 0.84;
-}
-
-function dinheiro(value: unknown) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
-function normalizarInstituicao(value: unknown) {
-  return normalizarTexto(value).replace("EFÍ", "EFI");
-}
-
-export function pontuarCandidato(dados: DadosImportacao, candidato: CandidatoBoleto) {
-  let pontuacao = 0;
-  const motivos: AnaliseCandidato["motivos"] = [];
-  const cpfPdf = normalizarDocumento(dados.cpf_pagador_extraido);
-  const cpfCliente = normalizarDocumento(candidato.clientes?.cpf);
-  const nomePdf = normalizarTexto(dados.nome_pagador_extraido);
-  const nomeCliente = normalizarTexto(candidato.clientes?.nome_completo);
-  const idPdf = normalizarTexto(dados.identificador_externo);
-  const idBoleto = normalizarTexto(candidato.identificador_externo);
-  const nossoPdf = normalizarTexto(dados.nosso_numero);
-  const valorPdf = dinheiro(dados.valor_extraido);
-  const valorBoleto = dinheiro(candidato.valor);
-
-  if (cpfPdf && cpfCliente && cpfPdf === cpfCliente) { pontuacao += 50; motivos.push({ tipo: "positivo", texto: "CPF exato da cliente", pontos: 50 }); }
-  if (idPdf && idBoleto && idPdf === idBoleto) { pontuacao += 50; motivos.push({ tipo: "positivo", texto: "Identificador externo exato", pontos: 50 }); }
-  if (nossoPdf && idBoleto && nossoPdf === idBoleto) { pontuacao += 50; motivos.push({ tipo: "positivo", texto: "Nosso número coincide com o identificador do boleto", pontos: 50 }); }
-
-  // Linha digitável/código de barras não possuem colunas próprias no modelo atual de boletos.
-  // Não pontuamos por esses campos para evitar qualquer inferência indevida.
-  if (cpfPdf && cpfCliente && cpfPdf === cpfCliente) { pontuacao += 25; motivos.push({ tipo: "positivo", texto: "Cliente identificada pelo CPF", pontos: 25 }); }
-  if (valorPdf !== null && valorBoleto !== null && Math.abs(valorPdf - valorBoleto) < 0.011) { pontuacao += 20; motivos.push({ tipo: "positivo", texto: "Valor exato/compatível", pontos: 20 }); }
-  if (dados.vencimento_extraido && candidato.data_vencimento && dados.vencimento_extraido === candidato.data_vencimento) { pontuacao += 20; motivos.push({ tipo: "positivo", texto: "Vencimento exato", pontos: 20 }); }
-  if (normalizarInstituicao(dados.instituicao_financeira) && normalizarInstituicao(dados.instituicao_financeira) === normalizarInstituicao(candidato.instituicao_financeira)) { pontuacao += 15; motivos.push({ tipo: "positivo", texto: "Instituição financeira compatível", pontos: 15 }); }
-  if (candidato.carne_id) { pontuacao += 15; motivos.push({ tipo: "positivo", texto: "Carnê compatível com o boleto existente", pontos: 15 }); }
-  if (nomePdf && nomeCliente && nomeSemelhante(nomePdf, nomeCliente)) { pontuacao += 10; motivos.push({ tipo: "positivo", texto: nomePdf === nomeCliente ? "Nome exato" : "Nome semelhante", pontos: 10 }); }
-  if (dados.numero_parcela !== null && candidato.numero_parcela !== null && Number(dados.numero_parcela) === Number(candidato.numero_parcela)) { pontuacao += 10; motivos.push({ tipo: "positivo", texto: "Número da parcela coincide", pontos: 10 }); }
-
-  if (cpfPdf && cpfCliente && cpfPdf !== cpfCliente) motivos.push({ tipo: "alerta", texto: "CPF do PDF diverge da cliente candidata" });
-  if (valorPdf !== null && valorBoleto !== null && Math.abs(valorPdf - valorBoleto) > 0.011) motivos.push({ tipo: "alerta", texto: "Valor diferente do boleto candidato" });
-  if (dados.vencimento_extraido && candidato.data_vencimento && dados.vencimento_extraido !== candidato.data_vencimento) motivos.push({ tipo: "alerta", texto: "Vencimento diferente do boleto candidato" });
-
-  return { ...candidato, pontuacao, percentual: Math.min(100, pontuacao), motivos };
-}
-
-export function classificarConfianca(pontuacao: number): NivelConfianca {
-  if (pontuacao >= 80) return "alta";
-  if (pontuacao >= 50) return "media";
-  return "baixa";
-}
+export type CandidatoBoleto = { id:string; cliente_id:string; carne_id:string|null; numero_parcela:number|null; total_parcelas:number|null; valor:number|string|null; data_vencimento:string|null; status:string|null; instituicao_financeira:string|null; identificador_externo:string|null; origem_boleto:string|null; clientes?:{id:string;nome_completo:string|null;cpf:string|null;telefone:string|null}|null; carnes?:{id:string;identificador_externo:string|null;instituicao_financeira:string|null;quantidade_parcelas:number|null;valor_parcela?:number|string|null;valor_total?:number|string|null}|null };
+export type AnaliseCandidato=CandidatoBoleto&{pontuacao:number;percentual:number;motivos:{tipo:"positivo"|"alerta";texto:string;pontos?:number}[]};
+export type DadosImportacao={cpf_pagador_extraido:string|null;nome_pagador_extraido:string|null;nosso_numero:string|null;identificador_externo:string|null;linha_digitavel:string|null;codigo_barras:string|null;valor_extraido:number|string|null;vencimento_extraido:string|null;numero_parcela:number|null;instituicao_financeira:string|null};
+export function normalizarTexto(value:unknown){return String(value??"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9\s]/g," ").replace(/\s+/g," ").trim().toUpperCase();}
+export function normalizarDocumento(value:unknown){return String(value??"").replace(/\D/g,"");}
+function distancia(a:string,b:string){const r=Array.from({length:b.length+1},(_,i)=>i);for(let i=1;i<=a.length;i++){let p=r[0];r[0]=i;for(let j=1;j<=b.length;j++){const q=r[j];r[j]=a[i-1]===b[j-1]?p:Math.min(p+1,r[j-1]+1,q+1);p=q;}}return r[b.length];}
+function nomeSemelhante(a:string,b:string){const x=normalizarTexto(a),y=normalizarTexto(b);if(!x||!y)return false;if(x===y)return true;const ax=new Set(x.split(" ").filter(Boolean)),by=new Set(y.split(" ").filter(Boolean));const inter=[...ax].filter(t=>by.has(t)).length,uniao=new Set([...ax,...by]).size;return Math.max(uniao?inter/uniao:0,1-distancia(x,y)/Math.max(x.length,y.length))>=.84;}
+function dinheiro(v:unknown){const n=Number(v);return Number.isFinite(n)?n:null;}
+function inst(v:unknown){return normalizarTexto(v).replace("EFI","EFI");}
+export function pontuarCandidato(d:DadosImportacao,c:CandidatoBoleto){let p=0;const m:AnaliseCandidato["motivos"]=[];const cpf=normalizarDocumento(d.cpf_pagador_extraido),ccpf=normalizarDocumento(c.clientes?.cpf),id=normalizarDocumento(d.identificador_externo),cid=normalizarDocumento(c.identificador_externo),nosso=normalizarDocumento(d.nosso_numero),vp=dinheiro(d.valor_extraido),vc=dinheiro(c.valor),b1=inst(d.instituicao_financeira),b2=inst(c.instituicao_financeira);
+if(cpf&&ccpf&&cpf===ccpf){p+=40;m.push({tipo:"positivo",texto:"Cliente encontrada pelo CPF exato",pontos:40});}else if(cpf&&ccpf){m.push({tipo:"alerta",texto:"CPF do PDF diverge da cliente candidata"});}
+if(id&&cid&&id===cid){p+=35;m.push({tipo:"positivo",texto:"Identificador externo exato",pontos:35});}
+if(nosso&&cid&&nosso===cid){p+=35;m.push({tipo:"positivo",texto:"Nosso número coincide com identificador existente",pontos:35});}
+if(vp!==null&&vc!==null&&Math.abs(vp-vc)<.011){p+=15;m.push({tipo:"positivo",texto:"Valor coincide",pontos:15});}else if(vp!==null&&vc!==null){m.push({tipo:"alerta",texto:"Valor diferente"});}
+if(d.vencimento_extraido&&c.data_vencimento&&d.vencimento_extraido===c.data_vencimento){p+=15;m.push({tipo:"positivo",texto:"Vencimento coincide",pontos:15});}else if(d.vencimento_extraido&&c.data_vencimento){m.push({tipo:"alerta",texto:"Vencimento diferente"});}
+if(b1&&b2&&b1===b2){p+=10;m.push({tipo:"positivo",texto:"Instituição financeira compatível",pontos:10});}
+if(c.carne_id){p+=5;m.push({tipo:"positivo",texto:"Boleto pertence a um carnê existente",pontos:5});}
+if(d.numero_parcela!==null&&c.numero_parcela!==null&&Number(d.numero_parcela)===Number(c.numero_parcela)){p+=10;m.push({tipo:"positivo",texto:"Número da parcela coincide",pontos:10});}
+if(d.nome_pagador_extraido&&c.clientes?.nome_completo&&nomeSemelhante(d.nome_pagador_extraido,c.clientes.nome_completo)){p+=10;m.push({tipo:"positivo",texto:normalizarTexto(d.nome_pagador_extraido)===normalizarTexto(c.clientes.nome_completo)?"Nome coincide":"Nome semelhante",pontos:10});}
+if(!d.cpf_pagador_extraido)m.push({tipo:"alerta",texto:"CPF não identificado no PDF"});if(!d.nosso_numero)m.push({tipo:"alerta",texto:"Nosso número não identificado no PDF"});if(d.valor_extraido===null||d.valor_extraido===undefined)m.push({tipo:"alerta",texto:"Valor não identificado no PDF"});if(!d.vencimento_extraido)m.push({tipo:"alerta",texto:"Vencimento não identificado no PDF"});
+return {...c,pontuacao:p,percentual:Math.min(100,p),motivos:m};}
+export function classificarConfianca(p:number):NivelConfianca{return p>=80?"alta":p>=50?"media":"baixa";}
