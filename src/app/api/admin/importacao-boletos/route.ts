@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { extrairDadosBoleto, normalizarCpf, normalizarNome } from "@/lib/pdf/boletos";
+import { complementarLeituraCarne } from "@/lib/pdf/complementar-carne";
 
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
 
@@ -234,7 +235,10 @@ export async function POST(req: NextRequest) {
   const sha256 = createHash("sha256").update(buffer).digest("hex");
 
   try {
-    const dados = extrairDadosBoleto(buffer);
+    const dadosBrutos = extrairDadosBoleto(buffer);
+    // Segunda camada: carnês multiparcela podem ter os campos dispersos visualmente.
+    // Complementamos apenas com valores efetivamente presentes no texto extraído.
+    const dados = complementarLeituraCarne(dadosBrutos.texto_extraido, dadosBrutos);
     const clienteMatch = await localizarCliente(supabase, normalizarCpf(dados.cpf_pagador), dados.nome_pagador);
     const clienteId = clienteMatch.cliente?.id ?? null;
     let carneId: string | null = null;
