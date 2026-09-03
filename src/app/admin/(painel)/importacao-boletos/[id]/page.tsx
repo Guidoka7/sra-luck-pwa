@@ -28,7 +28,7 @@ export default function ImportacaoBoletoDetalhePage({ params }: { params: { id: 
   const [clienteId, setClienteId] = useState("");
   const [carneId, setCarneId] = useState("");
   const [boletoId, setBoletoId] = useState("");
-  const [salvando, setSalvando] = useState(false);
+  const [salvando, setSalvando] = useState(false);\n  const [reprocessando, setReprocessando] = useState(false);
 
   async function carregar() {
     const response = await fetch(`/api/admin/importacao-boletos/${params.id}`, { cache: "no-store" });
@@ -60,6 +60,19 @@ export default function ImportacaoBoletoDetalhePage({ params }: { params: { id: 
 
   const boletosFiltrados = useMemo(() => carneId ? boletos.filter((boleto) => boleto.carne_id === carneId) : [], [boletos, carneId]);
 
+  async function reprocessar() {
+    setReprocessando(true);
+    try {
+      const response = await fetch(`/api/admin/importacao-boletos/${params.id}/reprocessar`, { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.erro);
+      setItem(data.importacao);
+      toast.success(data.motor === "gemini" ? "PDF reinterpretado pela análise visual." : "PDF reprocessado pelo parser local.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível reprocessar o PDF.");
+    } finally { setReprocessando(false); }
+  }
+
   async function salvar(confirmar: boolean) {
     if (!clienteId || !carneId || !boletoId) { toast.error("Selecione cliente, carnê e boleto existente antes de confirmar."); return; }
     setSalvando(true);
@@ -86,7 +99,7 @@ export default function ImportacaoBoletoDetalhePage({ params }: { params: { id: 
       {item.status === "erro" && <Panel><div className="flex gap-3"><CircleAlert className="mt-0.5 h-5 w-5 shrink-0 text-burgundy" /><div><p className="text-sm font-semibold text-burgundy">PDF não processado</p><p className="mt-1 text-xs text-clay/55">{item.erro_detalhes ?? "Erro não identificado."}</p></div></div></Panel>}
 
       <Panel>
-        <SectionHeading title="Dados extraídos" description="Somente informações encontradas no PDF são exibidas; o restante permanece como Não identificado." />
+        <div className="flex items-start justify-between gap-3"><SectionHeading title="Dados extraídos" description="Somente informações encontradas no PDF são exibidas; o restante permanece como Não identificado." /><Button variant="secondary" onClick={reprocessar} disabled={reprocessando}>{reprocessando ? "Reprocessando…" : "Reprocessar PDF"}</Button></div>
         <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {campo("Banco", item.instituicao_financeira)}
           {campo("Nome do pagador", item.nome_pagador_extraido)}
