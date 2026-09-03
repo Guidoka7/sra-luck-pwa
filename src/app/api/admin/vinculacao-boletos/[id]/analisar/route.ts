@@ -27,7 +27,7 @@ async function carregarCandidatos(supabase: any, dados: DadosImportacao) {
   }
 
   const clienteIds = clientes.map((c) => c.id);
-  let query = supabase.from("boletos").select("id,cliente_id,carne_id,numero_parcela,total_parcelas,valor,data_vencimento,status,instituicao_financeira,identificador_externo,origem_boleto,clientes(id,nome_completo,cpf,telefone),carnes(id,identificador_externo,instituicao_financeira,quantidade_parcelas)").limit(500);
+  let query = supabase.from("boletos").select("id,cliente_id,carne_id,numero_parcela,total_parcelas,valor,data_vencimento,status,instituicao_financeira,identificador_externo,origem_boleto,cliente:clientes!boletos_cliente_id_fkey(id,nome_completo,cpf,telefone),carne:carnes!boletos_carne_id_fkey(id,identificador_externo,instituicao_financeira,quantidade_parcelas)").limit(500);
   if (clienteIds.length) query = query.in("cliente_id", clienteIds);
   else {
     if (dados.vencimento_extraido) query = query.eq("data_vencimento", dados.vencimento_extraido);
