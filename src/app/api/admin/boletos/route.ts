@@ -11,6 +11,13 @@ export async function GET(req: NextRequest) {
   const clienteId = url.searchParams.get("cliente_id");
   const carneId = url.searchParams.get("carne_id");
 
+  // No fluxo dependente de vinculação manual, o boleto só deve ser consultado
+  // depois que o carnê foi escolhido. Exigir cliente + carnê evita consultas
+  // amplas e impede que a UI receba boletos de outros carnês.
+  if (carneId && !clienteId) {
+    return NextResponse.json({ erro: "cliente_id é obrigatório quando carne_id é informado." }, { status: 400 });
+  }
+
   let query = supabase
     .from("boletos")
     .select(`
