@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const status = texto(url.searchParams.get("status"));
   const busca = texto(url.searchParams.get("busca"));
-  let query = supabase.from("importacoes_boletos").select(`id,cliente_id,carne_id,boleto_id,instituicao_financeira,nosso_numero,numero_documento,identificador_externo,linha_digitavel,codigo_barras,nome_pagador_extraido,cpf_pagador_extraido,valor_extraido,vencimento_extraido,numero_parcela,status,arquivo_nome,arquivo_tamanho,arquivo_storage_path,erro_detalhes,created_at,updated_at,clientes(id,nome_completo,cpf),carnes(id,identificador_externo,instituicao_financeira),boletos(id,numero_parcela,total_parcelas,valor,data_vencimento,status)`).order("created_at", { ascending: false }).limit(200);
+  let query = supabase.from("importacoes_boletos").select(`id,cliente_id,carne_id,boleto_id,instituicao_financeira,nosso_numero,numero_documento,identificador_externo,linha_digitavel,codigo_barras,nome_pagador_extraido,cpf_pagador_extraido,valor_extraido,vencimento_extraido,numero_parcela,status,arquivo_nome,arquivo_tamanho,arquivo_storage_path,erro_detalhes,created_at,updated_at,cliente:clientes!importacoes_boletos_cliente_id_fkey(id,nome_completo,cpf),carnes(id,identificador_externo,instituicao_financeira),boletos(id,numero_parcela,total_parcelas,valor,data_vencimento,status)`).order("created_at", { ascending: false }).limit(200);
   if (status) query = query.eq("status", status);
   if (busca) query = query.or(`nome_pagador_extraido.ilike.%${busca}%,cpf_pagador_extraido.ilike.%${busca}%,nosso_numero.ilike.%${busca}%,identificador_externo.ilike.%${busca}%`);
   const { data, error } = await query;
