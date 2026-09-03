@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, CalendarRange, ChevronRight, CircleUserRound, Cog, FileText, LayoutDashboard, Landmark, LineChart, LogOut, Menu, Receipt, Search, ShoppingBag, Users, WalletCards, X, Files } from "lucide-react";
+import { Bell, BrainCircuit, CalendarRange, ChevronRight, CircleUserRound, Cog, FileText, LayoutDashboard, Landmark, LineChart, LogOut, Menu, Receipt, Search, ShoppingBag, Users, WalletCards, X, Files } from "lucide-react";
 import { createClientSupabaseClient } from "@/lib/supabase/client";
 import { Wordmark } from "@/components/ui/Logo";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,7 @@ const NAV = [
   { href: "/admin/novas-vendas", label: "Novas Vendas", icon: ShoppingBag, group: "Operação" },
   { href: "/admin/carnes", label: "Carnês e Boletos", icon: Files, group: "Financeiro" },
   { href: "/admin/importacao-boletos", label: "Importação de Boletos", icon: FileText, group: "Financeiro" },
+  { href: "/admin/vinculacao-boletos", label: "Vinculação Inteligente", icon: BrainCircuit, group: "Financeiro" },
   { href: "/admin/pagamentos", label: "Pagamentos", icon: Receipt, group: "Financeiro" },
   { href: "/admin/parcelas", label: "Parcelas", icon: WalletCards, group: "Financeiro" },
   { href: "/admin/conciliacao-bancaria", label: "Conciliação Bancária", icon: Landmark, group: "Financeiro" },
@@ -35,6 +36,7 @@ const API_PREFETCH: Record<string, string> = {
   "/admin/configuracoes": "/api/admin/configuracoes",
   "/admin/conciliacao-bancaria": `/api/admin/conciliacao-bancaria?data=${new Date().toISOString().slice(0, 10)}`,
   "/admin/carnes": "/api/admin/carnes",
+  "/admin/vinculacao-boletos": "/api/admin/vinculacao-boletos",
 };
 
 const TITLES: Record<string, string> = {
@@ -44,6 +46,7 @@ const TITLES: Record<string, string> = {
   "/admin/novas-vendas": "Novas Vendas",
   "/admin/carnes": "Carnês e Boletos",
   "/admin/importacao-boletos": "Importação de Boletos",
+  "/admin/vinculacao-boletos": "Vinculação Inteligente de Boletos",
   "/admin/pagamentos": "Pagamentos",
   "/admin/parcelas": "Parcelas",
   "/admin/conciliacao-bancaria": "Conciliação Bancária",
