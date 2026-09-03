@@ -48,22 +48,22 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     return NextResponse.json({ erro: "O carnê não pertence à cliente selecionada." }, { status: 400 });
   }
 
+  // Regra crítica: o boleto confirmado precisa pertencer exatamente ao carnê escolhido.
+  // Boletos sem carne_id não podem ser usados neste fluxo, pois isso quebraria
+  // a cadeia Cliente -> Carnê -> Boleto exigida pela vinculação manual.
   const { data: boleto, error: boletoError } = await supabase
     .from("boletos")
     .select("id,cliente_id,carne_id")
     .eq("id", boletoId)
     .maybeSingle();
   if (boletoError) return NextResponse.json({ erro: boletoError.message }, { status: 500 });
-  if (!boleto || boleto.cliente_id !== clienteId) {
+  if (!boleto) return NextResponse.json({ erro: "O boleto selecionado não existe." }, { status: 400 });
+  if (boleto.cliente_id !== clienteId) {
     return NextResponse.json({ erro: "O boleto não pertence à cliente selecionada." }, { status: 400 });
   }
-
-  // Boletos modernos precisam pertencer ao carnê escolhido. Boletos antigos
-  // sem carne_id continuam selecionáveis manualmente, desde que pertençam à cliente.
-  if (boleto.carne_id && boleto.carne_id !== carneId) {
-    return NextResponse.json({ erro: "O boleto pertence a outro carnê." }, { status: 400 });
+  if (boleto.carne_id !== carneId) {
+    return NextResponse.json({ erro: "O boleto selecionado não pertence ao carnê escolhido." }, { status: 400 });
   }
-  const boletoSemCarne = !boleto.carne_id;
 
   const { data: conflito } = await supabase
     .from("importacoes_boletos")
@@ -89,8 +89,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       carne_novo: carneId,
       boleto_anterior: importacao.boleto_vinculado_id,
       boleto_novo: boletoId,
-      metodo: boletoSemCarne ? "manual" : "sugestao_confirmada",
-      boleto_legado_sem_carne: boletoSemCarne,
+      metodo: "manual",
       pontuacao: importacao.pontuacao_confianca ?? 0,
     }),
   ];
