@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CalendarRange, Cog, LayoutDashboard, LineChart, LogOut, Menu, Receipt, Users, X, WalletCards } from "lucide-react";
+import { CalendarRange, Cog, LayoutDashboard, LineChart, LogOut, Menu, Receipt, Users, X, WalletCards, ShoppingBag } from "lucide-react";
 import { createClientSupabaseClient } from "@/lib/supabase/client";
 import { Wordmark } from "@/components/ui/Logo";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,7 @@ const NAV = [
   { href: "/admin/visao-geral", label: "Visão Geral", icon: LayoutDashboard, group: "Operação" },
   { href: "/admin/agenda", label: "Agenda", icon: CalendarRange, group: "Operação" },
   { href: "/admin/clientes", label: "Clientes", icon: Users, group: "Operação" },
+  { href: "/admin/novas-vendas", label: "Novas Vendas", icon: ShoppingBag, group: "Operação" },
   { href: "/admin/pagamentos", label: "Pagamentos", icon: Receipt, group: "Gestão" },
   { href: "/admin/parcelas", label: "Parcelas", icon: WalletCards, group: "Gestão" },
   { href: "/admin/relatorios", label: "Relatórios", icon: LineChart, group: "Gestão" },
@@ -26,6 +27,7 @@ const NAV = [
 const API_PREFETCH: Record<string, string> = {
   "/admin/visao-geral": "/api/admin/visao-geral",
   "/admin/clientes": "/api/admin/clientes",
+  "/admin/novas-vendas": "/api/admin/novas-vendas",
   "/admin/pagamentos": "/api/admin/boletos?",
   "/admin/configuracoes": "/api/admin/configuracoes",
 };
@@ -72,7 +74,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <aside className={cn("fixed inset-y-0 left-0 z-50 flex w-[268px] max-w-[88vw] flex-col rounded-r-2xl border-r border-white/60 bg-white/88 px-3.5 py-3.5 text-clay shadow-[0_30px_100px_-40px_rgba(122,38,50,0.28)] backdrop-blur-2xl transition-transform duration-300 ease-out dark:border-white/8 dark:bg-[#151317]/96 dark:text-[#e8dcda] dark:shadow-[0_30px_90px_-28px_rgba(0,0,0,0.72)]", "lg:sticky lg:top-3 lg:h-[calc(100vh-1.5rem)] lg:translate-x-0 lg:rounded-2xl lg:border", menuAberto ? "translate-x-0" : "-translate-x-full lg:translate-x-0")}>
           <div>
             <div className="mb-4 flex items-center justify-between"><div className="min-w-0 flex-1"><Wordmark maxWidth={158} /><p className="mt-1 text-[9px] font-medium uppercase tracking-[0.26em] text-burgundy/45 dark:text-[#cda5a2]/58">Painel premium</p></div><button onClick={() => setMenuAberto(false)} aria-label="Fechar menu" className="rounded-lg p-1.5 text-clay/45 hover:bg-blush/70 hover:text-burgundy dark:text-white/35 dark:hover:bg-white/8 dark:hover:text-white lg:hidden"><X className="h-4 w-4" /></button></div>
-            <nav className="mt-4 space-y-4">{Array.from(new Set(NAV.map((item) => item.group))).map((group) => <div key={group}><p className="mb-1.5 px-2 text-[9px] font-semibold uppercase tracking-[0.24em] text-burgundy/38 dark:text-white/35">{group}</p><div className="space-y-1">{NAV.filter((item) => item.group === group).map((item) => { const ativo = pathname.startsWith(item.href); return <Link key={item.href} href={item.href} prefetch onMouseEnter={() => prefetchAdminTab(router, item.href)} onFocus={() => prefetchAdminTab(router, item.href)} className={cn("group flex items-center gap-3 rounded-xl px-2.5 py-2.5 text-[13px] transition-all duration-200", ativo ? "bg-burgundy text-pearl shadow-[0_10px_24px_-12px_rgba(122,38,50,0.72)] dark:bg-[#7f3546] dark:text-[#fff7f4] dark:shadow-[0_10px_26px_-12px_rgba(0,0,0,0.8)]" : "text-clay/78 hover:bg-white/70 hover:text-burgundy dark:text-[#d5c8c6]/72 dark:hover:bg-white/7 dark:hover:text-[#f3e3df]")}><span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all duration-200", ativo ? "bg-white/16 text-pearl ring-1 ring-white/10 dark:bg-white/10 dark:text-[#fff8f5]" : "bg-blush/60 text-burgundy group-hover:bg-blush dark:bg-white/6 dark:text-[#d9a5a3] dark:group-hover:bg-white/10")}><item.icon className="h-[17px] w-[17px]" strokeWidth={1.8} /></span><div className="min-w-0 flex-1"><p className="truncate font-semibold tracking-[-0.01em]">{item.label}</p><p className={cn("truncate text-[9px]", ativo ? "text-pearl/72 dark:text-white/62" : "text-burgundy/40 dark:text-white/32")}>{item.group}</p></div></Link>; })}</div></div>)}</nav>
+            <nav className="mt-4 space-y-4">{Array.from(new Set(NAV.map((item) => item.group))).map((group) => <div key={group}><p className="mb-1.5 px-2 text-[9px] font-semibold uppercase tracking-[0.24em] text-burgundy/38 dark:text-white/35">{group}</p><div className="space-y-1">{NAV.filter((item) => item.group === group).map((item) => { const ativo = pathname.startsWith(item.href); return <Link key={item.href} href={item.href} prefetch onMouseEnter={() => prefetchAdminTab(router, item.href)} onFocus={() => prefetchAdminTab(router, item.href)} className={cn("group flex items-center gap-3 rounded-xl px-2.5 py-2.5 text-[13px] transition-all duration-200", ativo ? "bg-burgundy text-pearl shadow-[0_10px_24px_-12px_rgba(122,38,50,0.72)] dark:bg-[#7f3546] dark:text-[#fff7f4] dark:shadow-[0_10px_26px_-12px_rgba(0,0,0,0.8)]" : "text-clay/78 hover:bg-white/70 hover:text-burgundy dark:text-[#d5c8c6]/72 dark:hover:bg-white/7 dark:hover:text-[#f3e3df")}><span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all duration-200", ativo ? "bg-white/16 text-pearl ring-1 ring-white/10 dark:bg-white/10 dark:text-[#fff8f5]" : "bg-blush/60 text-burgundy group-hover:bg-blush dark:bg-white/6 dark:text-[#d9a5a3] dark:group-hover:bg-white/10")}><item.icon className="h-[17px] w-[17px]" strokeWidth={1.8} /></span><div className="min-w-0 flex-1"><p className="truncate font-semibold tracking-[-0.01em]">{item.label}</p><p className={cn("truncate text-[9px]", ativo ? "text-pearl/72 dark:text-white/62" : "text-burgundy/40 dark:text-white/32")}>{item.group}</p></div></Link>; })}</div></div>)}</nav>
           </div>
           <div className="mt-auto space-y-2"><ThemeToggle /><button onClick={sair} className="flex w-full items-center justify-center gap-2 rounded-xl border border-rose/12 bg-white/72 px-2.5 py-2.5 text-[13px] font-medium text-burgundy/78 transition-colors duration-200 hover:bg-blush/70 hover:text-burgundy dark:border-white/8 dark:bg-white/5 dark:text-[#ddcfcc]/76 dark:hover:bg-white/9 dark:hover:text-[#fff5f1]"><LogOut className="h-[16px] w-[16px]" strokeWidth={1.8} /> Sair</button></div>
         </aside>
