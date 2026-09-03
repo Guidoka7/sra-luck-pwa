@@ -341,7 +341,7 @@ export function extrairDadosBoleto(pdf: Buffer): DadosBoletoExtraidos {
     valor: principal?.valor ?? null,
     vencimento: principal?.vencimento ?? null,
     numero_parcela: principal?.numero_parcela ?? null,
-    total_parcelas: principal?.total_parcelas ?? leitura.quantidade_parcelas_detectadas || null,
+    total_parcelas: principal?.total_parcelas ?? (leitura.quantidade_parcelas_detectadas || null),
     texto_extraido: text,
     qualidade_extracao: qualidade,
     dados_origem: origem,
