@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { Bell, CalendarRange, ChevronRight, CircleUserRound, Cog, LayoutDashboard, Landmark, LineChart, LogOut, Menu, Receipt, Search, ShoppingBag, Users, WalletCards, X, Files } from "lucide-react";
+import { Bell, CalendarRange, ChevronRight, CircleUserRound, Cog, FileText, LayoutDashboard, Landmark, LineChart, LogOut, Menu, Receipt, Search, ShoppingBag, Users, WalletCards, X, Files } from "lucide-react";
 import { createClientSupabaseClient } from "@/lib/supabase/client";
 import { Wordmark } from "@/components/ui/Logo";
 import { cn } from "@/lib/utils";
@@ -19,6 +18,7 @@ const NAV = [
   { href: "/admin/clientes", label: "Clientes", icon: Users, group: "Operação" },
   { href: "/admin/novas-vendas", label: "Novas Vendas", icon: ShoppingBag, group: "Operação" },
   { href: "/admin/carnes", label: "Carnês e Boletos", icon: Files, group: "Financeiro" },
+  { href: "/admin/importacao-boletos", label: "Importação de Boletos", icon: FileText, group: "Financeiro" },
   { href: "/admin/pagamentos", label: "Pagamentos", icon: Receipt, group: "Financeiro" },
   { href: "/admin/parcelas", label: "Parcelas", icon: WalletCards, group: "Financeiro" },
   { href: "/admin/conciliacao-bancaria", label: "Conciliação Bancária", icon: Landmark, group: "Financeiro" },
@@ -42,6 +42,7 @@ const TITLES: Record<string, string> = {
   "/admin/clientes": "Clientes",
   "/admin/novas-vendas": "Novas Vendas",
   "/admin/carnes": "Carnês e Boletos",
+  "/admin/importacao-boletos": "Importação de Boletos",
   "/admin/pagamentos": "Pagamentos",
   "/admin/parcelas": "Parcelas",
   "/admin/conciliacao-bancaria": "Conciliação Bancária",
