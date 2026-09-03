@@ -91,7 +91,7 @@ export function validarCpf(v: string | null | undefined) {
 function lines(t: string) { return t.split(/\r?\n/).map(x => x.trim()).filter(Boolean); }
 function normalizarCampo(v: string) { return normalizarTexto(v).replace(/[^A-Z0-9/ ]/g, " ").replace(/\s+/g, " ").trim(); }
 function fragmented(v: string) { return v.replace(/(?<=\d)[ .-]+(?=\d)/g, ""); }
-const LABELS = ["PAGADOR", "NOME DO PAGADOR", "BENEFICIARIO", "BENEFICIÁRIO", "VENCIMENTO", "DATA DE VENCIMENTO", "VENC.", "PAGAR ATE", "PAGAR ATÉ", "VALOR DO DOCUMENTO", "VALOR COBRADO", "VALOR A PAGAR", "VALOR", "TOTAL", "NOSSO NUMERO", "NOSSO NÚMERO", "Nº DO DOCUMENTO", "NUMERO DO DOCUMENTO", "NÚMERO DO DOCUMENTO", "IDENTIFICADOR EXTERNO", "REFERENCIA ADICIONAL", "REFERÊNCIA ADICIONAL", "CNPJ/CPF", "CPF/CNPJ", "CPF", "PARCELA", "PARCELA/PLANO", "PARCELA/ PLANO", "DATA DE PROCESSAMENTO", "DATA DO DOCUMENTO", "DATA DE EMISSÃO", "DATA DE EMISSAO", "FICHA DE COMPENSAÇÃO"];
+const LABELS = ["PAGADOR", "NOME DO PAGADOR", "CLIENTE", "NOME", "BENEFICIARIO", "BENEFICIÁRIO", "VENCIMENTO", "DATA DE VENCIMENTO", "VENC.", "PAGAR ATE", "PAGAR ATÉ", "VALOR DO DOCUMENTO", "VALOR COBRADO", "VALOR A PAGAR", "VALOR", "TOTAL", "NOSSO NUMERO", "NOSSO NÚMERO", "Nº DO DOCUMENTO", "NUMERO DO DOCUMENTO", "NÚMERO DO DOCUMENTO", "IDENTIFICADOR EXTERNO", "REFERENCIA ADICIONAL", "REFERÊNCIA ADICIONAL", "CNPJ/CPF", "CPF/CNPJ", "CPF DO PAGADOR", "CPF", "PARCELA", "PARCELA/PLANO", "PARCELA/ PLANO", "DATA DE PROCESSAMENTO", "DATA DO DOCUMENTO", "DATA DE EMISSÃO", "DATA DE EMISSAO", "FICHA DE COMPENSAÇÃO", "LOCAL DE PAGAMENTO"];
 const LABEL_SET = new Set(LABELS.map(normalizarCampo));
 function isLabel(v: string) { return LABEL_SET.has(normalizarCampo(v)); }
 function escapeRegExp(v: string) { return v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
@@ -100,13 +100,17 @@ function stripLabel(line: string, labels: string[]) {
   const match = line.match(new RegExp(`^(?:\\s*)(?:${pattern})\\s*[:\\-]?\\s*(.*)$`, "i"));
   return match?.[1]?.trim() ?? null;
 }
-function candidateLines(t: string, labels: string[], maxAhead = 4) {
+function candidateLines(t: string, labels: string[], maxAhead = 10) {
   const ls = lines(t), wanted = labels.map(normalizarCampo), out: Array<{ value: string; origin: string; distance: number; label: string }> = [];
   for (let i = 0; i < ls.length; i++) {
     const current = normalizarCampo(ls[i]), label = wanted.find(x => current === x || current.startsWith(`${x} `) || current.includes(x));
     if (!label) continue;
-    const inline = stripLabel(ls[i], labels); if (inline && !isLabel(inline)) out.push({ value: inline, origin: ls[i], distance: 0, label });
-    for (let j = i + 1; j < Math.min(ls.length, i + 1 + maxAhead); j++) { if (isLabel(ls[j])) continue; out.push({ value: ls[j], origin: `${ls[i]} → ${ls[j]}`, distance: j - i, label }); }
+    const inline = stripLabel(ls[i], labels);
+    if (inline && !isLabel(inline)) out.push({ value: inline, origin: ls[i], distance: 0, label });
+    for (let j = i + 1; j < Math.min(ls.length, i + 1 + maxAhead); j++) {
+      if (isLabel(ls[j])) break;
+      out.push({ value: ls[j], origin: `${ls[i]} → ${ls[j]}`, distance: j - i, label });
+    }
   }
   return out;
 }
@@ -121,8 +125,41 @@ function money(v: string) {
 }
 function date(v: string) { const m = v.match(/\b(\d{2})[\/.-](\d{2})[\/.-](\d{2,4})\b/); if (!m) return null; const day = Number(m[1]), month = Number(m[2]); if (month < 1 || month > 12 || day < 1 || day > 31) return null; const year = m[3].length === 2 ? Number(m[3]) >= 50 ? `19${m[3]}` : `20${m[3]}` : m[3]; return `${year}-${m[2]}-${m[1]}`; }
 function digits(v: string, min: number, max: number) { const d = somenteDigitos(fragmented(v)); return d.length >= min && d.length <= max ? d : null; }
-function textValue(v: string) { const x = v.trim().replace(/^[|:;\-]+\s*/, ""); if (!x || isLabel(x) || /^(não|nao|n\/a|-)$/i.test(x) || !/[\p{L}]/u.test(x)) return null; return x; }
-function nomePagador(t: string) { return choose(t, ["Pagador", "Nome do Pagador", "Cliente", "Nome"], v => { const x = textValue(v); if (!x || /^(CPF|CNPJ|ENDERECO|ENDEREÇO|VENCIMENTO|VALOR|DOCUMENTO)\b/i.test(x)) return null; return x; }, 55); }
+function textValue(v: string) {
+  const x = v.trim().replace(/^[|:;\-]+\s*/, "");
+  if (!x || isLabel(x) || /^(não|nao|n\/a|-)$/i.test(x) || !/[\p{L}]/u.test(x)) return null;
+  const withoutId = x.replace(/\s*[-–—:]?\s*(?:CPF|CNPJ)?\s*[:=]?\s*\d{2,3}[.\s-]?\d{3}[.\s-]?\d{3}[./\s-]?\d{0,2}[\s-]?\d{0,2}\s*$/i, "").trim();
+  if (!withoutId || isLabel(withoutId)) return null;
+  return withoutId;
+}
+function nomePagador(t: string) {
+  const contextual = choose(t, ["Pagador", "Nome do Pagador"], v => {
+    const x = textValue(v);
+    if (!x || /^(CPF|CNPJ|ENDERECO|ENDEREÇO|VENCIMENTO|VALOR|DOCUMENTO|NOSSO NUMERO|LOCAL DE PAGAMENTO)\b/i.test(x)) return null;
+    return x;
+  }, 75);
+  if (contextual) return contextual;
+  return choose(t, ["Cliente", "Nome"], v => textValue(v), 45);
+}
+function cpfPagadorContextual(t: string) {
+  const explicit = choose(t, ["CPF do Pagador"], v => {
+    const d = digits(v, 11, 11); return d && validarCpf(d) ? d : null;
+  }, 90);
+  if (explicit) return explicit;
+  const ls = lines(t);
+  const out: Candidato[] = [];
+  for (let i = 0; i < ls.length; i++) {
+    if (!/^(?:PAGADOR|NOME DO PAGADOR)$/i.test(normalizarCampo(ls[i]))) continue;
+    for (let j = i; j < Math.min(ls.length, i + 8); j++) {
+      const d = digits(ls[j], 11, 11);
+      if (d && validarCpf(d)) out.push({ valor: d, origem: `${ls[i]} → ${ls[j]}`, pontos: 95 - (j - i) * 5 });
+      const embedded = ls[j].match(/\b\d{3}[.\s-]?\d{3}[.\s-]?\d{3}[.\s-]?\d{2}\b/);
+      if (embedded) { const e = somenteDigitos(embedded[0]); if (validarCpf(e)) out.push({ valor: e, origem: `${ls[i]} → ${ls[j]}`, pontos: 95 - (j - i) * 5 }); }
+    }
+  }
+  out.sort((a, b) => b.pontos - a.pontos);
+  return out[0] ?? null;
+}
 function modulo10(value: string) { let sum = 0, mult = 2; for (let i = value.length - 1; i >= 0; i--) { const n = Number(value[i]) * mult; sum += Math.floor(n / 10) + (n % 10); mult = mult === 2 ? 1 : 2; } return (10 - (sum % 10)) % 10; }
 function modulo11Boleto(value: string) { let sum = 0, weight = 2; for (let i = value.length - 1; i >= 0; i--) { sum += Number(value[i]) * weight; weight = weight === 9 ? 2 : weight + 1; } const r = sum % 11; return r === 0 || r === 10 || r === 11 ? 1 : 11 - r; }
 function validarLinha47(v: string) {
@@ -148,7 +185,7 @@ const field = (r: Candidato | null, missing: CampoExtraido["motivo"]): CampoExtr
 function parcelaContextual(t: string) { const r = choose(t, ["Parcela", "Parcela/Plano", "Parcela de"], v => { const m = v.match(/\b(\d{1,3})\s*(?:\/|de)\s*(\d{1,3})\b/i); return m ? `${m[1]}/${m[2]}` : null; }, 60); if (!r || typeof r.valor !== "string") return null; const [numero, total] = r.valor.split("/").map(Number); if (!numero || !total || numero > total) return null; return { numero, total, origem: r.origem, pontos: r.pontos }; }
 export function extrairDadosBoleto(pdf: Buffer): DadosBoletoExtraidos {
   const { texto: text, qualidade } = extrairTextoPdf(pdf), line = findLine(text), banco = identificarInstituicao(text, line), pag = nomePagador(text);
-  const cpfCandidate = choose(text, ["CPF do Pagador", "CPF"], v => digits(v, 11, 11), 55), cpfValido = cpfCandidate?.valor && typeof cpfCandidate.valor === "string" && validarCpf(cpfCandidate.valor) ? cpfCandidate : null;
+  const cpfCandidate = cpfPagadorContextual(text), cpfValido = cpfCandidate?.valor && typeof cpfCandidate.valor === "string" && validarCpf(cpfCandidate.valor) ? cpfCandidate : null;
   const nosso = choose(text, ["Nosso Número", "Nosso Numero"], v => digits(v, 3, 30), 70);
   const doc = choose(text, ["Número do Documento", "Numero do Documento", "Nº do Documento"], v => digits(v, 1, 30), 65);
   const ext = choose(text, ["Identificador Externo", "Referência Adicional", "Referencia Adicional"], textValue, 65);
