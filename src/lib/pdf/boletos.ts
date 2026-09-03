@@ -30,10 +30,39 @@ const BANCOS: Banco[] = [
 ];
 
 function latin1(bytes: Uint8Array) { return Buffer.from(bytes).toString("latin1"); }
-function decodificarLiteral(value: string) {
-  return value.replace(/\\([\\()])/g, "$1").replace(/\\n/g, "\n").replace(/\\r/g, "\r").replace(/\\t/g, "\t").replace(/\\b/g, "\b").replace(/\\f/g, "\f").replace(/\\([0-7]{1,3})/g, (_, octal: string) => String.fromCharCode(parseInt(octal, 8)));
+
+/**
+ * PDF pode carregar bytes de controle dentro de strings literais (inclusive
+ * via escapes octais). Eles são tolerados pelo parser de PDF, mas alguns,
+ * especialmente NUL (\\u0000), não são aceitos pelo jsonb do PostgreSQL.
+ * Mantemos whitespace útil e removemos somente caracteres de controle.
+ */
+function sanitizarTexto(value: string) {
+  return value
+    .replace(/\u0000/g, "")
+    .replace(/[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .replace(/\uFFFE|\uFFFF/g, "")
+    .replace(/[\uD800-\uDFFF]/g, "");
 }
-function decodificarHex(value: string) { const clean = value.replace(/\s+/g, ""); const even = clean.length % 2 ? `${clean}0` : clean; return Buffer.from(even, "hex").toString("latin1"); }
+
+function decodificarLiteral(value: string) {
+  return sanitizarTexto(
+    value
+      .replace(/\\([\\()])/g, "$1")
+      .replace(/\\n/g, "\n")
+      .replace(/\\r/g, "\r")
+      .replace(/\\t/g, "\t")
+      .replace(/\\b/g, "\b")
+      .replace(/\\f/g, "\f")
+      .replace(/\\([0-7]{1,3})/g, (_, octal: string) => String.fromCharCode(parseInt(octal, 8)))
+  );
+}
+
+function decodificarHex(value: string) {
+  const clean = value.replace(/\s+/g, "");
+  const even = clean.length % 2 ? `${clean}0` : clean;
+  return sanitizarTexto(Buffer.from(even, "hex").toString("latin1"));
+}
 
 function extrairStringsDeOperadores(stream: string) {
   const out: string[] = [];
@@ -56,7 +85,7 @@ function extrairStringsDeOperadores(stream: string) {
   for (const match of stream.matchAll(/\((?:\\.|[^\\)])*\)\s*(?:Tj|TJ|'|\")/gs)) pushLiteralStrings(match[0]);
   for (const match of stream.matchAll(/\[(.*?)\]\s*TJ/gs)) pushLiteralStrings(match[1]);
   for (const match of stream.matchAll(/<([0-9A-Fa-f\s]+)>\s*(?:Tj|TJ|'|\")/gs)) out.push(decodificarHex(match[1]));
-  return out.filter((value) => value.trim());
+  return out.map(sanitizarTexto).filter((value) => value.trim());
 }
 
 function extrairStreams(pdf: Buffer) {
@@ -76,8 +105,8 @@ export function extrairTextoPdf(pdf: Buffer) {
   if (pdf.length < 5 || pdf.subarray(0, 5).toString("ascii") !== "%PDF-") throw new Error("O arquivo enviado não é um PDF válido.");
   const chunks = extrairStreams(pdf);
   const textos = chunks.flatMap((chunk) => extrairStringsDeOperadores(latin1(chunk)));
-  const fallback = latin1(pdf).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ");
-  const text = [...textos, fallback.match(/[\x20-\x7E\xC0-\xFF\n\r\t]{4,}/g)?.join(" ") ?? ""].join("\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  const fallback = sanitizarTexto(latin1(pdf)).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ");
+  const text = sanitizarTexto([...textos, fallback.match(/[\x20-\x7E\xC0-\xFF\n\r\t]{4,}/g)?.join(" ") ?? ""].join("\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim());
   if (text.replace(/[^\p{L}\p{N}]/gu, "").length < 20) throw new Error("PDF SEM TEXTO EXTRAÍVEL");
   return text;
 }
