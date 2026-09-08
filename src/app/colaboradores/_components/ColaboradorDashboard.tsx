@@ -40,7 +40,30 @@ export function ColaboradorDashboard({ cargo }: { cargo: Cargo }) {
     setCarregando(false);
   }
 
-  useEffect(() => { void carregar(); }, []);
+  useEffect(() => {
+    void carregar();
+
+    const supabase = createClientSupabaseClient();
+    const channel = supabase
+      .channel(`colaborador-comissoes-${cargo}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "comissoes" }, () => {
+        void carregar();
+      })
+      .subscribe();
+
+    const atualizarAoRetomar = () => void carregar();
+    const atualizarAoFicarVisivel = () => {
+      if (document.visibilityState === "visible") void carregar();
+    };
+    window.addEventListener("focus", atualizarAoRetomar);
+    document.addEventListener("visibilitychange", atualizarAoFicarVisivel);
+
+    return () => {
+      window.removeEventListener("focus", atualizarAoRetomar);
+      document.removeEventListener("visibilitychange", atualizarAoFicarVisivel);
+      void supabase.removeChannel(channel);
+    };
+  }, [cargo]);
 
   async function sair() {
     await createClientSupabaseClient().auth.signOut();
