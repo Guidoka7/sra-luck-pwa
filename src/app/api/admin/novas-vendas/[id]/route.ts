@@ -17,7 +17,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (!user) return NextResponse.json({ erro: "Não autenticado." }, { status: 401 });
   const body = await req.json().catch(() => ({}));
   const updates: Record<string, unknown> = {};
-  const fields = ["nome_completo", "cpf", "telefone", "email", "data_venda", "vendedora_responsavel", "valor_contrato", "quantidade_parcelas", "valor_parcela", "taxa_administrativa", "tipo_venda", "origem_venda"];
+  const fields = ["nome_completo", "cpf", "telefone", "email", "data_venda", "vendedora_responsavel", "vendedora_id", "valor_contrato", "quantidade_parcelas", "valor_parcela", "taxa_administrativa", "tipo_venda", "origem_venda"];
   for (const field of fields) if (body[field] !== undefined) updates[field] = body[field] === "" ? null : body[field];
   if (body.status && ["aguardando_cadastro", "aguardando_boletos", "financeiro_concluido"].includes(body.status)) updates.status = body.status;
   if (!Object.keys(updates).length) return NextResponse.json({ erro: "Nenhuma alteração informada." }, { status: 400 });

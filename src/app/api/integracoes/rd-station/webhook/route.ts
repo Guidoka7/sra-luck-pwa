@@ -28,6 +28,7 @@ function normalizarVenda(payload: Record<string, any>) {
     email: texto(dados.email, dados.contact?.email, dados.person?.email, dados.customer?.email),
     data_venda: texto(dados.won_at, dados.closed_at, dados.sale_date, payload.timestamp) ?? new Date().toISOString(),
     vendedora_responsavel: texto(dados.owner_name, dados.seller_name, dados.salesperson, dados.owner?.name, dados.user?.name),
+    vendedora_id: null as string | null,
     valor_contrato: numero(dados.amount, dados.value, dados.deal_value, dados.contract_value) ?? 0,
     quantidade_parcelas: numero(dados.installments, dados.installment_count, dados.quantity_installments),
     valor_parcela: numero(dados.installment_value, dados.monthly_payment, dados.parcela),
@@ -50,6 +51,10 @@ export async function POST(req: Request) {
     if (!venda) return NextResponse.json({ ok: true, ignorado: true, motivo: "Evento não representa venda concluída." });
     if (!venda.nome_completo) return NextResponse.json({ erro: "Nome da cliente não encontrado no payload." }, { status: 400 });
     const service = createServiceSupabaseClient();
+    if (venda.vendedora_responsavel) {
+      const { data: vendedora } = await service.from("colaboradores").select("id").eq("cargo", "vendedora").ilike("nome", venda.vendedora_responsavel).maybeSingle();
+      if (vendedora?.id) venda.vendedora_id = vendedora.id;
+    }
     const { data, error } = await service.from("novas_vendas").upsert(venda, { onConflict: "rd_station_id" }).select("id, rd_station_id, status").single();
     if (error) return NextResponse.json({ erro: error.message }, { status: 500 });
     return NextResponse.json({ ok: true, novaVendaId: data.id, rdStationId: data.rd_station_id, status: data.status });

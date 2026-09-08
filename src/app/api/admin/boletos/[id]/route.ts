@@ -58,6 +58,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     }
   }
 
+  // A confirmação da primeira parcela é o evento oficial da comissão da vendedora.
+  // A função SQL possui chave idempotente por cliente e não duplica em reprocessamentos.
+  if (!rejeitado && novoStatus === "pago") {
+    const service = createServiceSupabaseClient();
+    const { error: erroComissao } = await service.rpc("gerar_comissao_vendedora_primeira_parcela", { p_boleto_id: params.id, p_usuario_id: user.id });
+    if (erroComissao) console.error("Falha ao gerar comissão da primeira parcela:", erroComissao.message);
+  }
+
   await supabase.from("logs_alteracoes").insert({ usuario: user.email ?? "admin", acao: rejeitado ? "rejeitou_pagamento" : "confirmou_pagamento", entidade: "boleto", entidade_id: params.id, detalhes: { cliente_id: boleto.cliente_id, numero_parcela: boleto.numero_parcela, retorno_para_aberto: rejeitado } });
   await avisarCliente(boleto.cliente_id, { tipo: "status_parcela_atualizado", parcela: boleto.numero_parcela, rejeitado });
   return NextResponse.json({ boleto: { ...data, valor: Number(data.valor) } });

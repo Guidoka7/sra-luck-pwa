@@ -20,11 +20,12 @@ async function executarAcao(acao) {
 
 async function executar() {
   try {
-    const [atrasos, momentos] = await Promise.all([
+    const [atrasos, momentos, colaboradores] = await Promise.all([
       executarAcao('verificar_atrasos'),
       executarAcao('verificar_momentos_especiais'),
+      executarAcao('resumo_colaboradores'),
     ]);
-    console.log(`[notificacoes] ${new Date().toISOString()}`, { atrasos, momentos });
+    console.log(`[notificacoes] ${new Date().toISOString()}`, { atrasos, momentos, colaboradores });
   } catch (error) {
     console.error('[notificacoes] falha:', error.message);
   }

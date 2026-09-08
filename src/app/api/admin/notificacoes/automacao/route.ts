@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { enviarWebPushParaCliente } from "@/lib/webPush";
+import { dataSaoPaulo, inicioMesSaoPaulo } from "@/lib/colaboradores";
 
 const DEFAULT_CONFIG = { atraso_habilitado: true, frequencia_atraso_horas: 24, max_tentativas: 3 };
 function cronAuthorized(req: NextRequest) { const secret = process.env.NOTIFICACOES_CRON_SECRET; return Boolean(secret && req.headers.get("x-notificacoes-cron-secret") === secret); }
@@ -88,8 +89,47 @@ async function runMomentosEspeciais(supabase: any) {
   return { executado: true, enviadas, ignoradas, falhas, data: hoje };
 }
 
+function horaSaoPaulo(date = new Date()) {
+  return Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", hour: "2-digit", hour12: false }).format(date));
+}
+
+async function runResumoColaboradores(supabase: any) {
+  const hoje = dataSaoPaulo();
+  if (horaSaoPaulo() !== 18) return { executado: false, motivo: "fora_do_horario", timezone: "America/Sao_Paulo" };
+  const { data: colaboradores, error } = await supabase.from("colaboradores").select("id, nome, cargo").eq("ativo", true).in("cargo", ["vendedora", "sdr", "financeiro"]);
+  if (error) throw new Error(error.message);
+  const inicioMes = inicioMesSaoPaulo();
+  let enviadas = 0;
+  for (const colaborador of colaboradores ?? []) {
+    const { data: anterior } = await supabase.from("notificacoes_colaboradores").select("id").eq("colaborador_id", colaborador.id).eq("tipo", "resumo_diario").eq("data_referencia", hoje).maybeSingle();
+    if (anterior) continue;
+    let titulo = "Seu resumo de hoje está disponível";
+    let mensagem = "";
+    if (colaborador.cargo === "vendedora") {
+      const { data: comissoes } = await supabase.from("comissoes").select("valor").eq("colaborador_id", colaborador.id).eq("cargo", "vendedora").gte("created_at", `${inicioMes}T00:00:00-03:00`);
+      const total = (comissoes ?? []).reduce((s: number, item: any) => s + Number(item.valor ?? 0), 0);
+      const { count } = await supabase.from("comissoes").select("id", { count: "exact", head: true }).eq("colaborador_id", colaborador.id).eq("evento", "primeira_parcela_confirmada").gte("created_at", `${inicioMes}T00:00:00-03:00`);
+      mensagem = `Clientes com primeira parcela confirmada: ${count ?? 0}. Comissão gerada no mês: ${total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}. Continue acompanhando seus resultados.`;
+    } else if (colaborador.cargo === "sdr") {
+      const { data: agendamentos } = await supabase.from("agendamentos").select("comparecimento_status").eq("sdr_id", colaborador.id).gte("created_at", `${hoje}T00:00:00-03:00`);
+      const compareceram = (agendamentos ?? []).filter((item: any) => item.comparecimento_status === "compareceu").length;
+      const { data: comissoes } = await supabase.from("comissoes").select("valor").eq("colaborador_id", colaborador.id).eq("cargo", "sdr").gte("created_at", `${inicioMes}T00:00:00-03:00`);
+      const total = (comissoes ?? []).reduce((s: number, item: any) => s + Number(item.valor ?? 0), 0);
+      mensagem = `Agendamentos realizados hoje: ${(agendamentos ?? []).length}. Clientes que compareceram: ${compareceram}. Comissão gerada no mês: ${total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.`;
+    } else {
+      const { data: pagamentos } = await supabase.from("boletos").select("valor").eq("status", "pago").eq("data_pagamento", hoje);
+      const valor = (pagamentos ?? []).reduce((s: number, item: any) => s + Number(item.valor ?? 0), 0);
+      const { data: meta } = await supabase.from("metas_colaboradores").select("meta_minima").eq("colaborador_id", colaborador.id).eq("ano", Number(hoje.slice(0, 4))).eq("mes", Number(hoje.slice(5, 7))).maybeSingle();
+      mensagem = `Valor recuperado hoje: ${valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}. Meta atual: ${Number(meta?.meta_minima ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}. Comissão estimada: regra ainda não definida pelo Administrativo.`;
+    }
+    const { error: insertError } = await supabase.from("notificacoes_colaboradores").insert({ colaborador_id: colaborador.id, tipo: "resumo_diario", titulo, mensagem, data_referencia: hoje });
+    if (!insertError) enviadas++;
+  }
+  return { executado: true, enviadas, timezone: "America/Sao_Paulo", horario: "18:00" };
+}
+
 export async function GET(req: NextRequest) { const supabase = await adminOrCron(req); if (!supabase) return NextResponse.json({ erro: "Não autenticado." }, { status: 401 }); const config = await getConfig(supabase); const { data: logs } = await supabase.from("notificacao_logs").select("id, cliente_id, notificacao_id, tipo, titulo, corpo, status, erro_mensagem, created_at, clientes(nome_completo)").order("created_at", { ascending: false }).limit(200); const { data: templates } = await supabase.from("notificacao_templates").select("id, tipo, dias_referencia, titulo, corpo, emoji, is_active, updated_at").order("tipo").order("dias_referencia", { ascending: true }); const { data: clientes } = await supabase.from("clientes").select("id, nome_completo, telefone, ativo").eq("ativo", true).order("nome_completo"); const { count: atrasadas } = await supabase.from("boletos").select("id", { count: "exact", head: true }).eq("status", "nao_pago").lt("data_vencimento", new Date().toISOString().slice(0, 10)); return NextResponse.json({ config, logs: logs ?? [], templates: templates ?? [], clientes: clientes ?? [], atrasadas: atrasadas ?? 0 }); }
 
 export async function PATCH(req: NextRequest) { const supabase = await adminOrCron(req); if (!supabase) return NextResponse.json({ erro: "Não autenticado." }, { status: 401 }); const body = await req.json().catch(() => ({})); const allowed: Record<string, string> = { atraso_habilitado: "boolean", frequencia_atraso_horas: "number", max_tentativas: "number" }; for (const [chave, tipo] of Object.entries(allowed)) { if (!(chave in body)) continue; const value = body[chave]; if (tipo === "number" && (!Number.isFinite(Number(value)) || Number(value) < 1)) return NextResponse.json({ erro: `Valor inválido para ${chave}.` }, { status: 400 }); await supabase.from("notificacoes_config").upsert({ chave, valor: String(value), tipo }, { onConflict: "chave" }); } return NextResponse.json({ ok: true, config: await getConfig(supabase) }); }
 
-export async function POST(req: NextRequest) { const supabase = await adminOrCron(req); if (!supabase) return NextResponse.json({ erro: "Não autenticado." }, { status: 401 }); const body = await req.json().catch(() => ({})); if (!["verificar_atrasos", "enviar_agora_todas", "verificar_momentos_especiais"].includes(body.acao)) return NextResponse.json({ erro: "Ação inválida." }, { status: 400 }); try { if (body.acao === "verificar_momentos_especiais") return NextResponse.json(await runMomentosEspeciais(supabase)); const forcar = body.acao === "enviar_agora_todas"; return NextResponse.json(await runAtrasos(supabase, { ignorarIntervalo: forcar })); } catch (error: any) { return NextResponse.json({ erro: error?.message ?? "Falha ao executar a automação." }, { status: 500 }); } }
+export async function POST(req: NextRequest) { const supabase = await adminOrCron(req); if (!supabase) return NextResponse.json({ erro: "Não autenticado." }, { status: 401 }); const body = await req.json().catch(() => ({})); if (!["verificar_atrasos", "enviar_agora_todas", "verificar_momentos_especiais", "resumo_colaboradores"].includes(body.acao)) return NextResponse.json({ erro: "Ação inválida." }, { status: 400 }); try { if (body.acao === "verificar_momentos_especiais") return NextResponse.json(await runMomentosEspeciais(supabase)); if (body.acao === "resumo_colaboradores") return NextResponse.json(await runResumoColaboradores(supabase)); const forcar = body.acao === "enviar_agora_todas"; return NextResponse.json(await runAtrasos(supabase, { ignorarIntervalo: forcar })); } catch (error: any) { return NextResponse.json({ erro: error?.message ?? "Falha ao executar a automação." }, { status: 500 }); } }

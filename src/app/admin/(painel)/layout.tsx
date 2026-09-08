@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, CalendarRange, ChevronRight, CircleUserRound, Cog, LayoutDashboard, Landmark, LineChart, LogOut, Menu, Receipt, Search, ShoppingBag, Users, WalletCards, X } from "lucide-react";
+import { Bell, CalendarRange, ChevronRight, CircleUserRound, Cog, LayoutDashboard, Landmark, LineChart, LogOut, Menu, Receipt, Search, ShoppingBag, Users, WalletCards, X, UserCog, BadgeDollarSign, Link2 } from "lucide-react";
 import { createClientSupabaseClient } from "@/lib/supabase/client";
 import { Wordmark } from "@/components/ui/Logo";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,9 @@ const NAV = [
   { href: "/admin/pagamentos", label: "Pagamentos", icon: Receipt, group: "Financeiro" },
   { href: "/admin/parcelas", label: "Parcelas", icon: WalletCards, group: "Financeiro" },
   { href: "/admin/relatorios", label: "Relatórios", icon: LineChart, group: "Gestão" },
+  { href: "/admin/colaboradores", label: "Colaboradores", icon: UserCog, group: "Gestão" },
+  { href: "/admin/vinculos-colaboradores", label: "Vínculos da Equipe", icon: Link2, group: "Gestão" },
+  { href: "/admin/comissoes", label: "Comissões", icon: BadgeDollarSign, group: "Gestão" },
   { href: "/admin/configuracoes", label: "Configurações", icon: Cog, group: "Gestão" },
 ];
 
@@ -43,6 +46,9 @@ const TITLES: Record<string, string> = {
   "/admin/pagamentos": "Pagamentos",
   "/admin/parcelas": "Parcelas",
   "/admin/relatorios": "Relatórios",
+  "/admin/colaboradores": "Colaboradores",
+  "/admin/vinculos-colaboradores": "Vínculos da Equipe",
+  "/admin/comissoes": "Comissões",
   "/admin/configuracoes": "Configurações",
 };
 
@@ -114,7 +120,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
             <div className="mt-5 rounded-xl border border-rose/10 bg-blush/30 px-3 py-2.5 dark:border-white/8 dark:bg-white/5"><p className="text-[9px] font-semibold uppercase tracking-[0.22em] text-burgundy/45 dark:text-white/35">Ambiente</p><div className="mt-1 flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-success shadow-[0_0_0_3px_rgba(59,122,78,0.10)]" /><span className="text-xs font-medium text-clay/75 dark:text-white/65">Operação administrativa</span></div></div>
             <nav className="mt-5 min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
-              {grupos.map((group) => <div key={group}><p className="mb-2 px-2 text-[9px] font-bold uppercase tracking-[0.24em] text-burgundy/38 dark:text-white/35">{group}</p><div className="space-y-1">{NAV.filter((item) => item.group === group).map((item) => { const ativo = pathname === item.href || pathname.startsWith(`${item.href}/`); return <Link key={item.href} href={item.href} prefetch onMouseEnter={() => prefetchAdminTab(router, item.href)} onFocus={() => prefetchAdminTab(router, item.href)} className={cn("group flex items-center gap-3 rounded-xl border px-2.5 py-2.5 transition-all duration-200", ativo ? "border-burgundy/10 bg-burgundy text-pearl shadow-[0_10px_24px_-12px_rgba(122,38,50,0.72)] dark:border-white/10 dark:bg-[#7f3546] dark:text-[#fff7f4]" : "border-transparent text-clay/72 hover:border-rose/8 hover:bg-blush/55 hover:text-burgundy dark:text-[#d5c8c6]/72 dark:hover:border-white/8 dark:hover:bg-white/6 dark:hover:text-[#f3e3df]")}><span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all", ativo ? "bg-white/15 text-pearl ring-1 ring-white/10" : "bg-blush/65 text-burgundy group-hover:bg-blush dark:bg-white/6 dark:text-[#d9a5a3] dark:group-hover:bg-white/10")}><item.icon className="h-[16px] w-[16px]" strokeWidth={1.8} /></span><span className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-[-0.01em]">{item.label}</span>{ativo && <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-60" />}</Link>; })}</div></div>)}
+              {grupos.map((group) => <div key={group}><p className="mb-2 px-2 text-[9px] font-bold uppercase tracking-[0.24em] text-burgundy/38 dark:text-white/35">{group}</p><div className="space-y-1">{NAV.filter((item) => item.group === group).map((item) => { const ativo = pathname === item.href || pathname.startsWith(`${item.href}/`); return <Link data-testid={`admin-nav-${item.href.split("/").filter(Boolean).join("-")}`} key={item.href} href={item.href} prefetch onMouseEnter={() => prefetchAdminTab(router, item.href)} onFocus={() => prefetchAdminTab(router, item.href)} className={cn("group flex items-center gap-3 rounded-xl border px-2.5 py-2.5 transition-all duration-200", ativo ? "border-burgundy/10 bg-burgundy text-pearl shadow-[0_10px_24px_-12px_rgba(122,38,50,0.72)] dark:border-white/10 dark:bg-[#7f3546] dark:text-[#fff7f4]" : "border-transparent text-clay/72 hover:border-rose/8 hover:bg-blush/55 hover:text-burgundy dark:text-[#d5c8c6]/72 dark:hover:border-white/8 dark:hover:bg-white/6 dark:hover:text-[#f3e3df]")}><span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all", ativo ? "bg-white/15 text-pearl ring-1 ring-white/10" : "bg-blush/65 text-burgundy group-hover:bg-blush dark:bg-white/6 dark:text-[#d9a5a3] dark:group-hover:bg-white/10")}><item.icon className="h-[16px] w-[16px]" strokeWidth={1.8} /></span><span className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-[-0.01em]">{item.label}</span>{ativo && <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-60" />}</Link>; })}</div></div>)}
             </nav>
             <div className="mt-4 border-t border-rose/10 pt-3 dark:border-white/8"><ThemeToggle /><button onClick={sair} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-rose/12 bg-white/72 px-2.5 py-2.5 text-[13px] font-medium text-burgundy/78 transition-colors hover:bg-blush/70 hover:text-burgundy dark:border-white/8 dark:bg-white/5 dark:text-[#ddcfcc]/76 dark:hover:bg-white/9 dark:hover:text-[#fff5f1]"><LogOut className="h-[16px] w-[16px]" strokeWidth={1.8} /> Sair</button></div>
           </div>

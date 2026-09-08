@@ -19,8 +19,8 @@ const heading = Fraunces({ subsets: ["latin"], weight: ["400", "500", "600"], va
 const script = Fraunces({ subsets: ["latin"], weight: ["500", "600"], style: ["italic"], variable: "--font-script" });
 
 export const metadata: Metadata = {
-  title: "Sra. Luck — Cirurgia Programada",
-  description: "Agenda exclusiva de crédito programado.",
+  title: "Sra. Luck — Ecossistema",
+  description: "Experiências conectadas para clientes, colaboradores e administração Sra. Luck.",
   manifest: "/simulador-iphone.webmanifest",
   icons: {
     icon: [

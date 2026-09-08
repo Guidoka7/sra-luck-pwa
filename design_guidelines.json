@@ -1,0 +1,111 @@
+{
+  "theme_and_identity": {
+    "emotional_tone": "Premium, Exclusive, Focused, and Motivating",
+    "archetype": "ARCHETYPE 5: LUXURY mixed with ARCHETYPE 4: SWISS HIGH-CONTRAST. A mobile-first workspace that feels like a high-end command center for Sra. Luck collaborators.",
+    "design_context": "DASHBOARDS & ADMIN PANELS (Mobile-First)",
+    "color_mode": "System default with a highly polished Light theme (Pearl & Charcoal) and a deep, immersive Dark theme (Midnight & Gold)."
+  },
+  "typography": {
+    "primary_heading_font": "Outfit",
+    "secondary_body_font": "Manrope",
+    "rules": [
+      "NO Inter, Roboto, Open Sans, or Lato for headings. Use Outfit for a premium, sleek feel.",
+      "Headlines (H1-H2) MUST use tight letter spacing: tracking-tight.",
+      "Overlines and Labels MUST be uppercase, text-xs, and wide spacing: tracking-[0.2em].",
+      "Line height: leading-none for headers, leading-relaxed for body."
+    ]
+  },
+  "colors": {
+    "light_mode": {
+      "background": "#FAFAFA",
+      "surface": "#FFFFFF",
+      "primary": "#1A1A1A",
+      "accent": "#C5A880",
+      "success_metric": "#059669",
+      "text_main": "#1A1A1A",
+      "text_muted": "#737373",
+      "border": "#E5E5E5"
+    },
+    "dark_mode": {
+      "background": "#0F0F12",
+      "surface": "#18181B",
+      "primary": "#FAFAFA",
+      "accent": "#D4AF37",
+      "success_metric": "#10B981",
+      "text_main": "#FAFAFA",
+      "text_muted": "#A1A1AA",
+      "border": "#27272A"
+    },
+    "rules": [
+      "Never use pure #000000. Use tinted darks like #0F0F12.",
+      "Success metrics (commissions, hits) must use the success_metric color for dopamine hits.",
+      "Primary CTA buttons must be high-contrast (Black in light mode, White in dark mode) with Accent color text/icons.",
+      "NO generic full-screen gradients. Use solid colors or subtle radial highlights."
+    ]
+  },
+  "layouts": {
+    "global": "Mobile-first responsive. Container max-width for desktop is max-w-5xl to keep the CRM dashboard tight and readable.",
+    "spacing": "Generous spacing. Use p-6 to p-8 inside cards. gap-6 for grid items.",
+    "grid_system": "Bento Grid Protocol: High Density Grid (MODE B) adapted for mobile. Mobile: grid-cols-1. Tablet: grid-cols-2. Desktop: grid-cols-3 or 4.",
+    "surfaces": [
+      "Cards: Flat solid surfaces. 1px subtle border. No heavy drop shadows. max 12px border-radius (rounded-xl).",
+      "Headers: Sticky top with Crystal Glassmorphism (backdrop-blur-xl bg-background/70 border-b). CRITICAL: NEVER use a completely transparent background for headers or overlays."
+    ]
+  },
+  "components_instructions": {
+    "Shadcn_UI": "Use Shadcn for interactive logic (Dialogs, Tabs, Select, Form, Calendar, Charts).",
+    "Customization": "Strip the 'Vercel-look'. Make borders sharper or slightly rounded (rounded-xl). Replace default ring colors with the Accent color.",
+    "Data_Display": "Use Shadcn Charts (Recharts) for sales/commissions trends. Keep charts minimal (hide axes where obvious, emphasize the trend line).",
+    "Cards": "Do NOT overuse standard Shadcn Cards. Use raw divs with tight borders and bento-box layouts to avoid 'card soup'.",
+    "Navigation": "Mobile: Bottom tab bar (glassmorphism). Desktop: Left sidebar or top navigation. Always visible.",
+    "Login_Screen": "Single, unified login screen. Minimal bento layout. Elegant abstract background texture or blurred office environment.",
+    "Role_Dashboards": "Render different widgets based on role (Vendedora, SDR, Financeiro) post-login. Use Tabs or distinct routes."
+  },
+  "motion": {
+    "rules": [
+      "Hover states MUST exist for all interactive elements (e.g., -translate-y-1, shadow-lg, text color shift).",
+      "List items and dashboard widgets must use staggered entrance animations (Framer Motion).",
+      "Micro-interactions on commission milestones (e.g., tiny confetti or scale-up on 'Meta atingida')."
+    ]
+  },
+  "accessibility": {
+    "rules": [
+      "Text contrast must meet WCAG AA (APCA preferred).",
+      "Focus states must be highly visible (ring-2 ring-accent ring-offset-2).",
+      "Add aria-hidden='true' to decorative icons.",
+      "All interactive elements MUST include a data-testid attribute (e.g., data-testid='login-submit-btn').",
+      "No transparent backgrounds behind text."
+    ]
+  },
+  "images": {
+    "login_background": {
+      "url": "https://images.unsplash.com/photo-1758208974170-3a3037da0c69?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2ODl8MHwxfHNlYXJjaHw0fHxwcm9mZXNzaW9uYWwlMjBtb2Rlcm4lMjBvZmZpY2UlMjBibHVyfGVufDB8fHx8MTc4ODg3NDQzOHww&ixlib=rb-4.1.0&q=85",
+      "description": "Blurred figures in a bright, abstract blue and white space - use as a subtle overlay or login background."
+    },
+    "abstract_texture": {
+      "url": "https://images.unsplash.com/photo-1637625854255-d893202554f4?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2NDN8MHwxfHNlYXJjaHw0fHxlbGVnYW50JTIwbWluaW1hbCUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzg4ODc0NDM4fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Abstract white vertical lines - good for elegant light mode background textures."
+    },
+    "office_ambient": {
+      "url": "https://images.unsplash.com/photo-1771147445405-153493dca398?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2ODl8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBtb2Rlcm4lMjBvZmZpY2UlMjBibHVyfGVufDB8fHx8MTc4ODg3NDQzOHww&ixlib=rb-4.1.0&q=85",
+      "description": "Blurred hallway with lights - ambient texture for dark/premium sections."
+    }
+  },
+  "specific_flows": {
+    "login_routing": "A single `/login` route. On success, check the user's role payload. If 'vendedora' -> `/dashboard/vendedora`, if 'sdr' -> `/dashboard/sdr`, if 'financeiro' -> `/dashboard/financeiro`.",
+    "commission_logic": "Vendedora gets R$100 on first installment. SDR gets R$10 on attendance. No duplicates. Display these clearly in their respective dashboards using high-contrast metric cards.",
+    "notifications": "Dedicated slide-over or dropdown panel for daily personalized messages and motivational history."
+  },
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Do not use generic centered layouts or simplistic gradients.",
+    "Create depth through layered design elements and 1px borders.",
+    "Use glass-morphism effects (12-24px blur, solid inner borders) for sticky headers and navigation.",
+    "You MUST NOT apply universal transitions (e.g., transition: all). Target specific properties.",
+    "You MUST NOT center align the app container (.App { text-align: center; } is FORBIDDEN).",
+    "Use sonner for toasts.",
+    "Use Phosphor Icons (@phosphor-icons/react) for a premium, duotone tech look. Run: yarn add @phosphor-icons/react",
+    "All interactive and key informational elements MUST include a `data-testid` attribute for automated testing.",
+    "Prioritize HTML/Tailwind for main structural bento grids, and Shadcn for complex forms, charts, and dialogs.",
+    "Write valid .js files, NOT .tsx (since the environment uses .js)."
+  ]
+}

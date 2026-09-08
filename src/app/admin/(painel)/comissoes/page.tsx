@@ -1,0 +1,17 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { BadgeDollarSign } from "lucide-react";
+import { PageHeader, Panel, SectionHeading, StatusPill } from "@/components/admin/ExecutiveUI";
+import { formatarMoeda } from "@/lib/utils";
+
+type Comissao = { id: string; cargo: string; evento: string; valor: number; status: "pendente" | "aprovada" | "paga"; created_at: string; colaboradores: { nome?: string } | null; clientes: { nome_completo?: string } | null };
+
+export default function ComissoesAdminPage() {
+  const [comissoes, setComissoes] = useState<Comissao[]>([]);
+  async function carregar() { const response = await fetch("/api/admin/comissoes", { cache: "no-store" }); const data = await response.json(); if (!response.ok) toast.error(data.erro ?? "Não foi possível carregar comissões."); else setComissoes(data.comissoes ?? []); }
+  useEffect(() => { void carregar(); }, []);
+  async function atualizar(id: string, status: Comissao["status"]) { const response = await fetch(`/api/admin/comissoes/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) }); const data = await response.json().catch(() => ({})); if (!response.ok) toast.error(data.erro ?? "Não foi possível atualizar a comissão."); else { toast.success("Status da comissão atualizado."); await carregar(); } }
+  return <div data-testid="admin-commissions-page" className="space-y-5 pb-8"><PageHeader eyebrow="Gestão" title="Comissões" description="Histórico gerado automaticamente pelos eventos reais do sistema." /><Panel className="p-5"><SectionHeading title="Histórico completo" description="Vendedora: primeira parcela confirmada. SDR: comparecimento confirmado." />{comissoes.length === 0 ? <p data-testid="admin-commissions-empty" className="rounded-xl bg-blush/35 p-5 text-sm text-clay/55">Nenhuma comissão gerada até o momento.</p> : <div className="space-y-2">{comissoes.map((item) => <div data-testid={`admin-commission-${item.id}`} key={item.id} className="grid gap-3 rounded-xl border border-rose/8 p-3 sm:grid-cols-[auto_1fr_auto_auto] sm:items-center"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-success/10 text-success"><BadgeDollarSign className="h-4 w-4" /></span><div><p className="text-xs font-semibold text-burgundy">{item.colaboradores?.nome ?? "Colaborador"} · {item.cargo}</p><p className="text-[0.6rem] text-clay/45">{item.clientes?.nome_completo ?? "Sem cliente"} · {item.evento.replaceAll("_", " ")} · {new Date(item.created_at).toLocaleDateString("pt-BR")}</p></div><div className="text-right"><p className="text-sm font-semibold text-success">{formatarMoeda(Number(item.valor))}</p><StatusPill tone={item.status === "paga" ? "success" : item.status === "aprovada" ? "gold" : "neutral"}>{item.status}</StatusPill></div><select data-testid={`admin-commission-status-${item.id}`} value={item.status} onChange={(event) => void atualizar(item.id, event.target.value as Comissao["status"])} className="h-9 rounded-lg border border-burgundy/10 bg-white px-2 text-xs"><option value="pendente">Pendente</option><option value="aprovada">Aprovada</option><option value="paga">Paga</option></select></div>)}</div>}</Panel></div>;
+}

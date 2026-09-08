@@ -28,7 +28,8 @@ export default function ImportacaoBoletoDetalhePage({ params }: { params: { id: 
   const [clienteId, setClienteId] = useState("");
   const [carneId, setCarneId] = useState("");
   const [boletoId, setBoletoId] = useState("");
-  const [salvando, setSalvando] = useState(false);\n  const [reprocessando, setReprocessando] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [reprocessando, setReprocessando] = useState(false);
 
   async function carregar() {
     const response = await fetch(`/api/admin/importacao-boletos/${params.id}`, { cache: "no-store" });

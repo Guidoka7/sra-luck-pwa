@@ -1,0 +1,80 @@
+{
+  "iteration": 1,
+  "summary": "Verified public login screen and route protection for /colaboradores. All Supabase-dependent authenticated flows remain externally blocked per briefing (no NEXT_PUBLIC_SUPABASE_URL/ANON_KEY, no SUPABASE_SERVICE_ROLE_KEY, migration_029 not applied, no test credentials). No mocked auth/data was used to approve any authenticated criterion.",
+  "passed": 3,
+  "failed": 0,
+  "checks": [
+    {
+      "criterion": "Frontend público do login de colaboradores",
+      "name": "colaboradores-login-page-renders",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Navigated to /colaboradores/login (mobile viewport 390x844). Title, email/password fields and 'Entrar no workspace' button visible (data-testid=colaboradores-login-title/email/password/submit). Submitted with tscheck-login@example.com; since Supabase env vars are absent, form displayed data-testid=colaboradores-login-error with text matching 'A autenticação corporativa ainda não está configurada neste ambiente.' — explicit unavailability message, no fabricated auth. Screenshots captured."
+    },
+    {
+      "criterion": "Proteção pública sem sessão",
+      "name": "colaboradores-protected-routes-redirect",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Navigated to /colaboradores/vendedora, /colaboradores/sdr and /colaboradores/financeiro without a session; each request returned via server component redirect() to /colaboradores/login (confirmed page.url matches /\\/colaboradores\\/login/ and login page test-id visible) for all three roles. Source confirmed in src/app/colaboradores/[cargo]/page.tsx: redirect('/colaboradores/login') when sessao.user is null."
+    },
+    {
+      "criterion": "Frontend público do login de colaboradores (ingress)",
+      "name": "colaboradores-login-preview-ingress",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Verified same login screen renders correctly through the public ingress URL https://staff-hub-215.preview.emergentagent.com/colaboradores/login on mobile viewport (title + submit visible)."
+    },
+    {
+      "criterion": "Autenticação real e roteamento automático",
+      "name": "n/a - externally blocked",
+      "lane": "browser",
+      "status": "blocked",
+      "evidence": "Cannot exercise real Supabase sign-in and role-based routing: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY are absent from env and migration_029_colaboradores_comissoes.sql has not been applied. Per briefing this criterion must not be approved via mock; login form correctly surfaces 'autenticação corporativa ainda não está configurada' instead of faking a session."
+    },
+    {
+      "criterion": "Isolamento entre Vendedora, SDR e Financeiro",
+      "name": "n/a - externally blocked",
+      "lane": "browser",
+      "status": "blocked",
+      "evidence": "Requires three real Supabase test accounts (one per role) plus migration_029 applied. None available in this environment; no test_credentials.md and no credentials in briefing. Not approved by code inspection per instructions."
+    },
+    {
+      "criterion": "Dados conectados ao Admin",
+      "name": "n/a - externally blocked",
+      "lane": "backend",
+      "status": "blocked",
+      "evidence": "/api/colaboradores/dashboard and /api/colaboradores/me require an authenticated Supabase session; without SUPABASE_* env vars and migration_029, no real clientes/vendas/agendamentos/pagamentos/metas data can be validated end-to-end."
+    },
+    {
+      "criterion": "Comissão da Vendedora (R$100)",
+      "name": "n/a - externally blocked",
+      "lane": "backend",
+      "status": "blocked",
+      "evidence": "Requires a real first-installment payment event tied to migration_029 commission logic and a live Supabase-backed sale/payment; unavailable in this environment."
+    },
+    {
+      "criterion": "Comissão da SDR (R$10)",
+      "name": "n/a - externally blocked",
+      "lane": "backend",
+      "status": "blocked",
+      "evidence": "Requires a real appointment attendance event linked to an SDR account under migration_029; unavailable without Supabase credentials/migration."
+    },
+    {
+      "criterion": "Ausência de dados mockados",
+      "name": "colaboradores-login-page-renders / colaboradores-protected-routes-redirect",
+      "lane": "browser",
+      "status": "passed",
+      "evidence": "Confirmed no fictitious accounts or mocked auth were used: the login attempt with a fabricated e-mail correctly failed with an explicit unavailability message rather than granting access; protected routes redirected to login rather than rendering fake dashboards."
+    }
+  ],
+  "bugs": [],
+  "action_items": [
+    {
+      "item": "test_credentials_missing",
+      "severity": "high",
+      "detail": "No Supabase test credentials or env vars (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, CLIENTE_SESSION_SECRET, NOTIFICACOES_CRON_SECRET) are configured; migration_029_colaboradores_comissoes.sql is not applied. All authenticated criteria (auth/routing, role isolation, admin data linkage, vendedora/SDR commissions) remain blocked until these are provisioned externally, per briefing instructions to never approve via mock."
+    }
+  ],
+  "retest_needed": true
+}

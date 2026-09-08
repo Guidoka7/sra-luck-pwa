@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient, createServiceSupabaseClient } from "@/lib/supabase/server";
 import { apenasDigitos, cpfValido } from "@/lib/cpf";
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
@@ -21,6 +21,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const quantidade = venda.quantidade_parcelas && [12, 18, 24, 36, 48, 60, 72].includes(venda.quantidade_parcelas) ? venda.quantidade_parcelas : null;
   const taxa = venda.taxa_administrativa == null ? 0 : Number(venda.taxa_administrativa);
+  const service = createServiceSupabaseClient();
+  let vendedoraId = body.vendedoraId ?? venda.vendedora_id ?? null;
+  if (!vendedoraId && (body.vendedoraResponsavel ?? venda.vendedora_responsavel)) {
+    const { data: vendedora } = await service.from("colaboradores").select("id").eq("cargo", "vendedora").ilike("nome", String(body.vendedoraResponsavel ?? venda.vendedora_responsavel)).maybeSingle();
+    vendedoraId = vendedora?.id ?? null;
+  }
   const { data: cliente, error } = await supabase.from("clientes").insert({
     nome_completo: venda.nome_completo,
     cpf,
@@ -28,6 +34,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     telefone: body.telefone ?? venda.telefone ?? null,
     email: body.email ?? venda.email ?? null,
     consultora: body.vendedoraResponsavel ?? venda.vendedora_responsavel ?? null,
+    ...(vendedoraId ? { vendedora_id: vendedoraId } : {}),
     valor_contrato: Number(venda.valor_contrato) || 0,
     taxa_administrativa_percentual: taxa,
     quantidade_parcelas: quantidade,
@@ -38,7 +45,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   }).select("*").single();
   if (error) return NextResponse.json({ erro: error.code === "23505" ? "Já existe uma cliente cadastrada com este CPF." : error.message }, { status: 400 });
 
-  const { error: updateError } = await supabase.from("novas_vendas").update({ cliente_id: cliente.id, cpf, status: "aguardando_boletos" }).eq("id", params.id);
+  const { error: updateError } = await supabase.from("novas_vendas").update({ cliente_id: cliente.id, cpf, status: "aguardando_boletos", ...(vendedoraId ? { vendedora_id: vendedoraId } : {}) }).eq("id", params.id);
   if (updateError) return NextResponse.json({ erro: updateError.message }, { status: 500 });
   await supabase.from("logs_alteracoes").insert({ usuario: user.email ?? "admin", acao: "converteu_nova_venda_em_cliente", entidade: "novas_vendas", entidade_id: params.id, detalhes: { cliente_id: cliente.id, rd_station_id: venda.rd_station_id } });
   return NextResponse.json({ clienteId: cliente.id, status: "aguardando_boletos" });
