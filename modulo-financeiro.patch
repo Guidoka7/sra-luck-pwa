@@ -1,0 +1,3469 @@
+From abe46721f62912081fbf49adc36250b6bab1423d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?M=C3=B3dulo=20Financeiro?=
+ <sraluck-financeiro@emergent.local>
+Date: Tue, 8 Sep 2026 20:14:14 +0000
+Subject: [PATCH] =?UTF-8?q?feat(financeiro):=20m=C3=B3dulo=20Financeiro=20?=
+ =?UTF-8?q?completo=20em=20/admin/financeiro?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Nova entrada Financeiro no sidebar admin (grupo Financeiro)
+- 7 seções reais: Visão geral, Contas a receber, Clientes (+ perfil dinâmico),
+  Recebimentos, Comissões, Integrações e Histórico
+- Arquitetura Adapter Pattern isolada em src/features/financeiro:
+  * types.ts, utils.ts, services.ts, hooks.ts
+  * data/mockData.ts com ~80 parcelas realistas
+  * adapters/{MockAdapter,ApiAdapter,index}.ts
+  * components/{badges,Modal,dialogs,ParcelaDetailDrawer}.tsx
+- Dados mock temporários, isolados, prontos para troca por API real
+  (Sra. Luck / Conta Azul / Mercado Pago) alterando apenas adapters/index.ts
+- Nenhuma integração externa está conectada — status refletem estado real
+- Design 100% aderente ao design system existente (burgundy, gold, blush,
+  clay, pearl, rose) com dark mode completo
+- Zero alterações em módulos existentes (parcelas, comissões, clientes,
+  agenda, boletos, colaboradores)
+---
+ package-lock.json                             |   2 +-
+ .../financeiro/clientes/[id]/page.tsx         | 275 ++++++++++++++++++
+ .../(painel)/financeiro/clientes/page.tsx     | 161 ++++++++++
+ .../(painel)/financeiro/comissoes/page.tsx    | 105 +++++++
+ .../financeiro/contas-receber/page.tsx        | 266 +++++++++++++++++
+ .../(painel)/financeiro/historico/page.tsx    | 101 +++++++
+ .../(painel)/financeiro/integracoes/page.tsx  | 114 ++++++++
+ src/app/admin/(painel)/financeiro/layout.tsx  |  83 ++++++
+ src/app/admin/(painel)/financeiro/page.tsx    | 217 ++++++++++++++
+ .../(painel)/financeiro/recebimentos/page.tsx |  73 +++++
+ src/app/admin/(painel)/layout.tsx             |   4 +-
+ .../financeiro/adapters/ApiAdapter.ts         |  66 +++++
+ .../financeiro/adapters/MockAdapter.ts        | 248 ++++++++++++++++
+ src/features/financeiro/adapters/index.ts     |  13 +
+ src/features/financeiro/components/Modal.tsx  | 148 ++++++++++
+ .../components/ParcelaDetailDrawer.tsx        | 258 ++++++++++++++++
+ src/features/financeiro/components/badges.tsx | 141 +++++++++
+ .../financeiro/components/dialogs.tsx         | 259 +++++++++++++++++
+ src/features/financeiro/data/mockData.ts      | 250 ++++++++++++++++
+ src/features/financeiro/hooks.ts              |  57 ++++
+ src/features/financeiro/services.ts           | 165 +++++++++++
+ src/features/financeiro/types.ts              | 169 +++++++++++
+ src/features/financeiro/utils.ts              |  57 ++++
+ 23 files changed, 3230 insertions(+), 2 deletions(-)
+ create mode 100644 src/app/admin/(painel)/financeiro/clientes/[id]/page.tsx
+ create mode 100644 src/app/admin/(painel)/financeiro/clientes/page.tsx
+ create mode 100644 src/app/admin/(painel)/financeiro/comissoes/page.tsx
+ create mode 100644 src/app/admin/(painel)/financeiro/contas-receber/page.tsx
+ create mode 100644 src/app/admin/(painel)/financeiro/historico/page.tsx
+ create mode 100644 src/app/admin/(painel)/financeiro/integracoes/page.tsx
+ create mode 100644 src/app/admin/(painel)/financeiro/layout.tsx
+ create mode 100644 src/app/admin/(painel)/financeiro/page.tsx
+ create mode 100644 src/app/admin/(painel)/financeiro/recebimentos/page.tsx
+ create mode 100644 src/features/financeiro/adapters/ApiAdapter.ts
+ create mode 100644 src/features/financeiro/adapters/MockAdapter.ts
+ create mode 100644 src/features/financeiro/adapters/index.ts
+ create mode 100644 src/features/financeiro/components/Modal.tsx
+ create mode 100644 src/features/financeiro/components/ParcelaDetailDrawer.tsx
+ create mode 100644 src/features/financeiro/components/badges.tsx
+ create mode 100644 src/features/financeiro/components/dialogs.tsx
+ create mode 100644 src/features/financeiro/data/mockData.ts
+ create mode 100644 src/features/financeiro/hooks.ts
+ create mode 100644 src/features/financeiro/services.ts
+ create mode 100644 src/features/financeiro/types.ts
+ create mode 100644 src/features/financeiro/utils.ts
+
+diff --git a/package-lock.json b/package-lock.json
+index d469bda..b40ebe9 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -22,7 +22,7 @@
+         "web-push": "^3.6.7"
+       },
+       "devDependencies": {
+-        "@netlify/plugin-nextjs": "latest",
++        "@netlify/plugin-nextjs": "^5.15.5",
+         "@types/node": "^20.14.0",
+         "@types/react": "^18.3.3",
+         "@types/react-dom": "^18.3.0",
+diff --git a/src/app/admin/(painel)/financeiro/clientes/[id]/page.tsx b/src/app/admin/(painel)/financeiro/clientes/[id]/page.tsx
+new file mode 100644
+index 0000000..ebb326c
+--- /dev/null
++++ b/src/app/admin/(painel)/financeiro/clientes/[id]/page.tsx
+@@ -0,0 +1,275 @@
++"use client";
++
++import { useState } from "react";
++import Link from "next/link";
++import { useParams } from "next/navigation";
++import { ChevronLeft, Mail, Phone, FileText } from "lucide-react";
++import { useClienteResumo } from "@/features/financeiro/hooks";
++import {
++  formatCurrency,
++  formatCPF,
++  formatDateBR,
++  formatPhoneBR,
++} from "@/features/financeiro/utils";
++import {
++  StatusBadge,
++  FormaPagamentoBadge,
++  OrigemBadge,
++} from "@/features/financeiro/components/badges";
++import ParcelaDetailDrawer from "@/features/financeiro/components/ParcelaDetailDrawer";
++import { Parcela } from "@/features/financeiro/types";
++import { cn } from "@/lib/utils";
++
++const SUBTABS = ["parcelas", "historico", "comprovantes", "pagamentos"] as const;
++type SubTab = (typeof SUBTABS)[number];
++const LABEL: Record<SubTab, string> = {
++  parcelas: "Parcelas",
++  historico: "Histórico",
++  comprovantes: "Comprovantes",
++  pagamentos: "Pagamentos",
++};
++
++export default function ClienteDetalhePage() {
++  const params = useParams<{ id: string }>();
++  const id = params?.id ?? "";
++  const { data, loading } = useClienteResumo(id);
++  const [selected, setSelected] = useState<Parcela | null>(null);
++  const [drawerOpen, setDrawerOpen] = useState(false);
++  const [tab, setTab] = useState<SubTab>("parcelas");
++
++  if (loading || !data) {
++    return <div className="text-sm text-clay/60 dark:text-white/50">Carregando perfil financeiro…</div>;
++  }
++
++  const { cliente, parcelas, totalContratado, totalRecebido, saldoPendente } = data;
++  const recebimentos = parcelas
++    .filter((p) => p.recebidoEm)
++    .sort((a, b) => new Date(b.recebidoEm!).getTime() - new Date(a.recebidoEm!).getTime());
++  const comprovantes = parcelas.flatMap((p) =>
++    (p.comprovantes || []).map((c) => ({
++      ...c,
++      parcelaNumero: `${p.numero}/${p.totalParcelas}`,
++    })),
++  );
++
++  return (
++    <div className="space-y-4">
++      <Link
++        href="/admin/financeiro/clientes"
++        className="inline-flex items-center gap-1 text-xs font-semibold text-clay/55 hover:text-burgundy dark:text-white/45"
++      >
++        <ChevronLeft className="h-3.5 w-3.5" /> Voltar para clientes
++      </Link>
++
++      <div className="rounded-3xl border border-rose/10 bg-white/70 p-6 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4">
++        <div className="flex flex-wrap items-start justify-between gap-4">
++          <div>
++            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-clay/55 dark:text-white/45">
++              {cliente.contrato}
++            </p>
++            <h2 className="mt-1 text-2xl font-semibold tracking-[-0.02em] text-burgundy dark:text-[#f0d9d4]">
++              {cliente.nome}
++            </h2>
++            <p className="mt-1 text-sm text-clay/70 dark:text-white/55">{formatCPF(cliente.cpf)}</p>
++            <div className="mt-3 flex flex-wrap gap-4 text-xs text-clay/70 dark:text-white/55">
++              <span className="inline-flex items-center gap-1.5">
++                <Mail className="h-3.5 w-3.5" />
++                {cliente.email}
++              </span>
++              <span className="inline-flex items-center gap-1.5">
++                <Phone className="h-3.5 w-3.5" />
++                {formatPhoneBR(cliente.telefone)}
++              </span>
++            </div>
++          </div>
++          <div className="grid grid-cols-3 gap-6 text-right">
++            <div>
++              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-clay/55 dark:text-white/45">
++                Contratado
++              </div>
++              <div className="text-lg font-semibold tabular-nums text-burgundy dark:text-[#f0d9d4]">
++                {formatCurrency(totalContratado)}
++              </div>
++            </div>
++            <div>
++              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-clay/55 dark:text-white/45">
++                Recebido
++              </div>
++              <div className="text-lg font-semibold tabular-nums text-success">
++                {formatCurrency(totalRecebido)}
++              </div>
++            </div>
++            <div>
++              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-clay/55 dark:text-white/45">
++                Saldo aberto
++              </div>
++              <div className="text-lg font-semibold tabular-nums text-burgundy dark:text-[#f0d9d4]">
++                {formatCurrency(saldoPendente)}
++              </div>
++            </div>
++          </div>
++        </div>
++      </div>
++
++      <div className="flex gap-1 overflow-x-auto">
++        {SUBTABS.map((k) => (
++          <button
++            key={k}
++            onClick={() => setTab(k)}
++            className={cn(
++              "rounded-xl px-3 py-2 text-xs font-semibold transition-colors",
++              tab === k
++                ? "bg-burgundy text-pearl dark:bg-[#7f3546] dark:text-[#fff7f4]"
++                : "text-clay/60 hover:bg-blush/60 hover:text-burgundy dark:text-white/50 dark:hover:bg-white/6",
++            )}
++          >
++            {LABEL[k]}
++            {k === "parcelas" && ` (${parcelas.length})`}
++          </button>
++        ))}
++      </div>
++
++      {tab === "parcelas" && (
++        <div className="overflow-hidden rounded-3xl border border-rose/10 bg-white/80 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4">
++          <div className="overflow-x-auto">
++            <table className="w-full border-collapse text-left">
++              <thead className="bg-blush/40 text-[10px] font-semibold uppercase tracking-[0.16em] text-burgundy/60 dark:bg-white/[0.05] dark:text-white/50">
++                <tr>
++                  <th className="px-3 py-3 text-center">#</th>
++                  <th className="px-3 py-3">Descrição</th>
++                  <th className="px-3 py-3 text-right">Valor</th>
++                  <th className="px-3 py-3">Vencimento</th>
++                  <th className="px-3 py-3">Status</th>
++                  <th className="px-3 py-3">Recebido em</th>
++                </tr>
++              </thead>
++              <tbody className="divide-y divide-rose/8 text-sm text-clay dark:divide-white/6 dark:text-white/85">
++                {parcelas.map((p) => (
++                  <tr
++                    key={p.id}
++                    onClick={() => {
++                      setSelected(p);
++                      setDrawerOpen(true);
++                    }}
++                    className="cursor-pointer transition-colors hover:bg-blush/25 dark:hover:bg-white/[0.03]"
++                  >
++                    <td className="px-3 py-3 text-center tabular-nums">
++                      {p.numero}/{p.totalParcelas}
++                    </td>
++                    <td className="px-3 py-3">{p.descricao}</td>
++                    <td className="px-3 py-3 text-right tabular-nums">{formatCurrency(p.valor)}</td>
++                    <td className="px-3 py-3 tabular-nums">{formatDateBR(p.vencimento)}</td>
++                    <td className="px-3 py-3">
++                      <StatusBadge status={p.status} />
++                    </td>
++                    <td className="px-3 py-3 tabular-nums">
++                      {p.recebidoEm ? formatDateBR(p.recebidoEm) : "—"}
++                    </td>
++                  </tr>
++                ))}
++              </tbody>
++            </table>
++          </div>
++        </div>
++      )}
++
++      {tab === "historico" && (
++        <div className="rounded-3xl border border-rose/10 bg-white/70 p-4 text-sm text-clay/70 shadow-card dark:border-white/8 dark:bg-white/4 dark:text-white/55">
++          Histórico consolidado do cliente será exibido aqui quando o backend real do Sra. Luck fornecer eventos.
++          O Histórico geral do módulo já registra todas as ações executadas.
++        </div>
++      )}
++
++      {tab === "comprovantes" && (
++        <div className="overflow-hidden rounded-3xl border border-rose/10 bg-white/80 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4">
++          <div className="overflow-x-auto">
++            <table className="w-full border-collapse text-left">
++              <thead className="bg-blush/40 text-[10px] font-semibold uppercase tracking-[0.16em] text-burgundy/60 dark:bg-white/[0.05] dark:text-white/50">
++                <tr>
++                  <th className="px-3 py-3">Arquivo</th>
++                  <th className="px-3 py-3">Parcela</th>
++                  <th className="px-3 py-3">Data</th>
++                  <th className="px-3 py-3">Origem</th>
++                  <th className="px-3 py-3">Status</th>
++                </tr>
++              </thead>
++              <tbody className="divide-y divide-rose/8 text-sm text-clay dark:divide-white/6 dark:text-white/85">
++                {comprovantes.length === 0 && (
++                  <tr>
++                    <td colSpan={5} className="py-8 text-center text-clay/55 dark:text-white/45">
++                      Nenhum comprovante para este cliente.
++                    </td>
++                  </tr>
++                )}
++                {comprovantes.map((c) => (
++                  <tr key={c.id}>
++                    <td className="px-3 py-3">
++                      <span className="inline-flex items-center gap-2">
++                        <FileText className="h-3.5 w-3.5 text-clay/50 dark:text-white/40" />
++                        {c.nome}
++                      </span>
++                    </td>
++                    <td className="px-3 py-3 tabular-nums">{c.parcelaNumero}</td>
++                    <td className="px-3 py-3 tabular-nums">{formatDateBR(c.data)}</td>
++                    <td className="px-3 py-3">
++                      <OrigemBadge origem={c.origem as any} />
++                    </td>
++                    <td className="px-3 py-3 text-xs text-clay/70 dark:text-white/55">
++                      {c.status.replace(/_/g, " ")}
++                    </td>
++                  </tr>
++                ))}
++              </tbody>
++            </table>
++          </div>
++        </div>
++      )}
++
++      {tab === "pagamentos" && (
++        <div className="overflow-hidden rounded-3xl border border-rose/10 bg-white/80 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4">
++          <div className="overflow-x-auto">
++            <table className="w-full border-collapse text-left">
++              <thead className="bg-blush/40 text-[10px] font-semibold uppercase tracking-[0.16em] text-burgundy/60 dark:bg-white/[0.05] dark:text-white/50">
++                <tr>
++                  <th className="px-3 py-3">Data</th>
++                  <th className="px-3 py-3">Parcela</th>
++                  <th className="px-3 py-3 text-right">Valor</th>
++                  <th className="px-3 py-3">Forma</th>
++                  <th className="px-3 py-3">Origem</th>
++                </tr>
++              </thead>
++              <tbody className="divide-y divide-rose/8 text-sm text-clay dark:divide-white/6 dark:text-white/85">
++                {recebimentos.length === 0 && (
++                  <tr>
++                    <td colSpan={5} className="py-8 text-center text-clay/55 dark:text-white/45">
++                      Sem recebimentos.
++                    </td>
++                  </tr>
++                )}
++                {recebimentos.map((p) => (
++                  <tr key={p.id}>
++                    <td className="px-3 py-3 tabular-nums">{formatDateBR(p.recebidoEm)}</td>
++                    <td className="px-3 py-3 tabular-nums">
++                      {p.numero}/{p.totalParcelas}
++                    </td>
++                    <td className="px-3 py-3 text-right tabular-nums">
++                      {formatCurrency(p.valorRecebido ?? p.valor)}
++                    </td>
++                    <td className="px-3 py-3">
++                      <FormaPagamentoBadge forma={p.formaPagamento} />
++                    </td>
++                    <td className="px-3 py-3">
++                      <OrigemBadge origem={p.origem} />
++                    </td>
++                  </tr>
++                ))}
++              </tbody>
++            </table>
++          </div>
++        </div>
++      )}
++
++      <ParcelaDetailDrawer parcela={selected} open={drawerOpen} onOpenChange={setDrawerOpen} />
++    </div>
++  );
++}
+diff --git a/src/app/admin/(painel)/financeiro/clientes/page.tsx b/src/app/admin/(painel)/financeiro/clientes/page.tsx
+new file mode 100644
+index 0000000..998087c
+--- /dev/null
++++ b/src/app/admin/(painel)/financeiro/clientes/page.tsx
+@@ -0,0 +1,161 @@
++"use client";
++
++import { useMemo, useState } from "react";
++import Link from "next/link";
++import { Search, ArrowUpRight } from "lucide-react";
++import { useClientes, useContasReceber } from "@/features/financeiro/hooks";
++import { formatCurrency, formatCPF, formatDateBR, isOverdue } from "@/features/financeiro/utils";
++import { STATUS_PARCELA } from "@/features/financeiro/types";
++import { inputClass } from "@/features/financeiro/components/Modal";
++import { cn } from "@/lib/utils";
++
++const situacao = {
++  em_dia: { className: "bg-success/12 text-success border-success/25", label: "Em dia" },
++  com_pendencias: { className: "bg-gold/15 text-clay border-gold/30", label: "Com pendências" },
++  inadimplente: { className: "bg-alert/10 text-alert border-alert/25", label: "Inadimplente" },
++  quitado: { className: "bg-clay/10 text-clay/70 border-clay/20", label: "Quitado" },
++} as const;
++
++export default function ClientesPage() {
++  const { data: clientes, loading: lc } = useClientes();
++  const { data: parcelas, loading: lp } = useContasReceber();
++  const [q, setQ] = useState("");
++
++  const rows = useMemo(() => {
++    if (!clientes || !parcelas) return [];
++    return clientes.map((c) => {
++      const ps = parcelas.filter((p) => p.clienteId === c.id);
++      const totalContratado = ps.reduce((s, p) => s + p.valor, 0);
++      const totalRecebido = ps
++        .filter((p) => p.status === STATUS_PARCELA.recebido)
++        .reduce((s, p) => s + (p.valorRecebido ?? p.valor), 0);
++      const saldo = totalContratado - totalRecebido;
++      const pagas = ps.filter((p) => p.status === STATUS_PARCELA.recebido).length;
++      const pendentes = ps.filter(
++        (p) => p.status === STATUS_PARCELA.pendente || p.status === STATUS_PARCELA.aguardando,
++      ).length;
++      const atrasadas = ps.filter((p) => isOverdue(p) || p.status === STATUS_PARCELA.atrasado).length;
++      const ultimoPagamento =
++        ps
++          .filter((p) => p.recebidoEm)
++          .sort((a, b) => new Date(b.recebidoEm!).getTime() - new Date(a.recebidoEm!).getTime())[0]
++          ?.recebidoEm ?? null;
++      const proximoVencimento =
++        ps
++          .filter((p) => p.status !== STATUS_PARCELA.recebido && p.status !== STATUS_PARCELA.cancelado)
++          .sort((a, b) => new Date(a.vencimento).getTime() - new Date(b.vencimento).getTime())[0]
++          ?.vencimento ?? null;
++      let s: keyof typeof situacao = "em_dia";
++      if (atrasadas > 0) s = "inadimplente";
++      else if (pendentes > 0) s = "com_pendencias";
++      if (ps.length > 0 && pagas === ps.length) s = "quitado";
++      return {
++        ...c,
++        totalContratado,
++        totalRecebido,
++        saldo,
++        pagas,
++        pendentes,
++        atrasadas,
++        ultimoPagamento,
++        proximoVencimento,
++        situacao: s,
++      };
++    });
++  }, [clientes, parcelas]);
++
++  const filtered = rows.filter((r) => {
++    if (!q) return true;
++    const hay = `${r.nome} ${r.cpf} ${r.contrato}`.toLowerCase();
++    return hay.includes(q.toLowerCase());
++  });
++
++  return (
++    <div className="space-y-4">
++      <div className="rounded-3xl border border-rose/10 bg-white/70 p-4 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4">
++        <div className="relative max-w-sm">
++          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-clay/45 dark:text-white/40" />
++          <input
++            placeholder="Buscar cliente ou CPF"
++            value={q}
++            onChange={(e) => setQ(e.target.value)}
++            className={inputClass + " pl-9"}
++            data-testid="clientes-search"
++          />
++        </div>
++      </div>
++
++      <div className="overflow-hidden rounded-3xl border border-rose/10 bg-white/80 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4">
++        <div className="overflow-x-auto">
++          <table className="w-full min-w-[960px] border-collapse text-left">
++            <thead className="bg-blush/40 text-[10px] font-semibold uppercase tracking-[0.16em] text-burgundy/60 dark:bg-white/[0.05] dark:text-white/50">
++              <tr>
++                <th className="px-3 py-3">Cliente</th>
++                <th className="px-3 py-3 text-right">Contratado</th>
++                <th className="px-3 py-3 text-right">Recebido</th>
++                <th className="px-3 py-3 text-right">Saldo</th>
++                <th className="px-3 py-3 text-center">Pagas / Pend / Atr</th>
++                <th className="px-3 py-3">Último pgto</th>
++                <th className="px-3 py-3">Próx. venc.</th>
++                <th className="px-3 py-3">Situação</th>
++                <th className="w-[50px] px-3 py-3" />
++              </tr>
++            </thead>
++            <tbody className="divide-y divide-rose/8 text-sm text-clay dark:divide-white/6 dark:text-white/85">
++              {(lc || lp) && (
++                <tr>
++                  <td colSpan={9} className="py-8 text-center text-clay/55 dark:text-white/45">
++                    Carregando…
++                  </td>
++                </tr>
++              )}
++              {filtered.map((r) => {
++                const s = situacao[r.situacao];
++                return (
++                  <tr key={r.id} className="transition-colors hover:bg-blush/25 dark:hover:bg-white/[0.03]">
++                    <td className="px-3 py-3">
++                      <div className="font-semibold text-burgundy dark:text-[#f0d9d4]">{r.nome}</div>
++                      <div className="text-[10px] uppercase tracking-[0.14em] text-clay/55 dark:text-white/45">
++                        {formatCPF(r.cpf)} · {r.contrato}
++                      </div>
++                    </td>
++                    <td className="px-3 py-3 text-right tabular-nums">{formatCurrency(r.totalContratado)}</td>
++                    <td className="px-3 py-3 text-right tabular-nums text-success">{formatCurrency(r.totalRecebido)}</td>
++                    <td className="px-3 py-3 text-right font-semibold tabular-nums">{formatCurrency(r.saldo)}</td>
++                    <td className="px-3 py-3 text-center text-xs">
++                      <span className="text-success">{r.pagas}</span> · <span className="text-clay">{r.pendentes}</span> ·{" "}
++                      <span className="text-alert">{r.atrasadas}</span>
++                    </td>
++                    <td className="px-3 py-3 tabular-nums">{r.ultimoPagamento ? formatDateBR(r.ultimoPagamento) : "—"}</td>
++                    <td className="px-3 py-3 tabular-nums">
++                      {r.proximoVencimento ? formatDateBR(r.proximoVencimento) : "—"}
++                    </td>
++                    <td className="px-3 py-3">
++                      <span
++                        className={cn(
++                          "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]",
++                          s.className,
++                        )}
++                      >
++                        {s.label}
++                      </span>
++                    </td>
++                    <td className="px-3 py-3">
++                      <Link
++                        href={`/admin/financeiro/clientes/${r.id}`}
++                        className="inline-flex items-center gap-1 text-burgundy/70 hover:text-burgundy dark:text-[#d5c8c6]/70 dark:hover:text-[#f0d9d4]"
++                        data-testid={`cliente-open-${r.id}`}
++                      >
++                        <ArrowUpRight className="h-4 w-4" />
++                      </Link>
++                    </td>
++                  </tr>
++                );
++              })}
++            </tbody>
++          </table>
++        </div>
++      </div>
++    </div>
++  );
++}
+diff --git a/src/app/admin/(painel)/financeiro/comissoes/page.tsx b/src/app/admin/(painel)/financeiro/comissoes/page.tsx
+new file mode 100644
+index 0000000..c8dade1
+--- /dev/null
++++ b/src/app/admin/(painel)/financeiro/comissoes/page.tsx
+@@ -0,0 +1,105 @@
++"use client";
++
++import { AlertCircle } from "lucide-react";
++import { useComissoes } from "@/features/financeiro/hooks";
++import { formatCurrency } from "@/features/financeiro/utils";
++import { cn } from "@/lib/utils";
++
++const STATUS = {
++  liberada: { className: "bg-success/12 text-success border-success/25", label: "Liberada" },
++  paga: { className: "bg-burgundy/8 text-burgundy border-burgundy/20", label: "Paga" },
++  aguardando_recebimento: { className: "bg-gold/15 text-clay border-gold/30", label: "Aguardando" },
++  cancelada: { className: "bg-clay/10 text-clay/70 border-clay/20", label: "Cancelada" },
++} as const;
++
++export default function ComissoesPage() {
++  const { data, loading } = useComissoes();
++  const list = data || [];
++  const total = list.reduce((s, c) => s + c.valor, 0);
++  const liberadas = list
++    .filter((c) => c.status === "liberada" || c.status === "paga")
++    .reduce((s, c) => s + c.valor, 0);
++
++  return (
++    <div className="space-y-4">
++      <div className="flex items-start gap-3 rounded-3xl border border-gold/25 bg-gold/12 p-4 text-sm text-clay dark:border-gold/30 dark:bg-gold/15 dark:text-[#f5dcbf]">
++        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
++        <span>
++          A lógica real de cálculo e pagamento das comissões do Sra. Luck permanece inalterada nesta etapa.
++          Esta tela apenas exibe o relacionamento entre parcelas e comissões.
++        </span>
++      </div>
++
++      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
++        <Stat label="Total geral" value={formatCurrency(total)} />
++        <Stat label="Liberadas / Pagas" value={formatCurrency(liberadas)} accent="success" />
++        <Stat label="Quantidade" value={String(list.length)} />
++        <Stat
++          label="Aguardando"
++          value={String(list.filter((c) => c.status === "aguardando_recebimento").length)}
++          accent="gold"
++        />
++      </div>
++
++      <div className="overflow-hidden rounded-3xl border border-rose/10 bg-white/80 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4">
++        <div className="overflow-x-auto">
++          <table className="w-full border-collapse text-left">
++            <thead className="bg-blush/40 text-[10px] font-semibold uppercase tracking-[0.16em] text-burgundy/60 dark:bg-white/[0.05] dark:text-white/50">
++              <tr>
++                <th className="px-3 py-3">Vendedora</th>
++                <th className="px-3 py-3">Cliente</th>
++                <th className="px-3 py-3 text-center">%</th>
++                <th className="px-3 py-3 text-right">Valor</th>
++                <th className="px-3 py-3">Status</th>
++              </tr>
++            </thead>
++            <tbody className="divide-y divide-rose/8 text-sm text-clay dark:divide-white/6 dark:text-white/85">
++              {loading && (
++                <tr><td colSpan={5} className="py-8 text-center text-clay/55 dark:text-white/45">Carregando…</td></tr>
++              )}
++              {list.map((c) => {
++                const s = STATUS[c.status];
++                return (
++                  <tr key={c.id}>
++                    <td className="px-3 py-3 font-semibold text-burgundy dark:text-[#f0d9d4]">{c.vendedora}</td>
++                    <td className="px-3 py-3">{c.clienteNome}</td>
++                    <td className="px-3 py-3 text-center">{c.percentual}%</td>
++                    <td className="px-3 py-3 text-right font-semibold tabular-nums">{formatCurrency(c.valor)}</td>
++                    <td className="px-3 py-3">
++                      <span
++                        className={cn(
++                          "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]",
++                          s.className,
++                        )}
++                      >
++                        {s.label}
++                      </span>
++                    </td>
++                  </tr>
++                );
++              })}
++            </tbody>
++          </table>
++        </div>
++      </div>
++    </div>
++  );
++}
++
++function Stat({
++  label,
++  value,
++  accent,
++}: {
++  label: string;
++  value: string;
++  accent?: "success" | "gold";
++}) {
++  const color = accent === "success" ? "text-success" : accent === "gold" ? "text-clay" : "text-burgundy dark:text-[#f0d9d4]";
++  return (
++    <div className="rounded-3xl border border-rose/10 bg-white/70 p-4 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4">
++      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-clay/55 dark:text-white/45">{label}</div>
++      <div className={`mt-1 text-xl font-semibold tabular-nums ${color}`}>{value}</div>
++    </div>
++  );
++}
+diff --git a/src/app/admin/(painel)/financeiro/contas-receber/page.tsx b/src/app/admin/(painel)/financeiro/contas-receber/page.tsx
+new file mode 100644
+index 0000000..7c4fff7
+--- /dev/null
++++ b/src/app/admin/(painel)/financeiro/contas-receber/page.tsx
+@@ -0,0 +1,266 @@
++"use client";
++
++import { useMemo, useState } from "react";
++import { Search, Download, Filter, MoreHorizontal } from "lucide-react";
++import { useContasReceber } from "@/features/financeiro/hooks";
++import {
++  formatCurrency,
++  formatDateBR,
++  formatCPF,
++} from "@/features/financeiro/utils";
++import {
++  FORMA_LABEL,
++  ORIGEM_LABEL,
++  STATUS_LABEL,
++  STATUS_PARCELA,
++  Parcela,
++  StatusParcela,
++} from "@/features/financeiro/types";
++import { StatusBadge, FormaPagamentoBadge, OrigemBadge } from "@/features/financeiro/components/badges";
++import ParcelaDetailDrawer from "@/features/financeiro/components/ParcelaDetailDrawer";
++import { inputClass, selectClass } from "@/features/financeiro/components/Modal";
++
++const PERIODOS = {
++  todos: "Todos os períodos",
++  hoje: "Hoje",
++  semana: "Próximos 7 dias",
++  mes: "Este mês",
++  atrasadas: "Em atraso",
++};
++
++export default function ContasReceberPage() {
++  const { data, loading } = useContasReceber();
++  const [q, setQ] = useState("");
++  const [statusFiltro, setStatusFiltro] = useState<string>("todos");
++  const [periodo, setPeriodo] = useState<string>("todos");
++  const [forma, setForma] = useState<string>("todos");
++  const [origem, setOrigem] = useState<string>("todos");
++  const [selected, setSelected] = useState<Parcela | null>(null);
++  const [drawerOpen, setDrawerOpen] = useState(false);
++
++  const filtered = useMemo<Parcela[]>(() => {
++    if (!data) return [];
++    const now = new Date();
++    return data.filter((p) => {
++      if (q) {
++        const query = q.toLowerCase();
++        const hay = [
++          p.clienteNome,
++          p.clienteCpf,
++          p.clienteContrato,
++          `${p.numero}/${p.totalParcelas}`,
++        ]
++          .join(" ")
++          .toLowerCase();
++        if (!hay.includes(query)) return false;
++      }
++      if (statusFiltro !== "todos" && p.status !== statusFiltro) return false;
++      if (forma !== "todos" && p.formaPagamento !== forma) return false;
++      if (origem !== "todos" && p.origem !== origem) return false;
++      const venc = new Date(p.vencimento);
++      if (periodo === "hoje" && venc.toDateString() !== now.toDateString()) return false;
++      if (periodo === "semana") {
++        const diff = (venc.getTime() - now.getTime()) / 86400000;
++        if (diff < 0 || diff > 7) return false;
++      }
++      if (
++        periodo === "mes" &&
++        (venc.getMonth() !== now.getMonth() || venc.getFullYear() !== now.getFullYear())
++      )
++        return false;
++      if (periodo === "atrasadas" && p.status !== STATUS_PARCELA.atrasado) return false;
++      return true;
++    });
++  }, [data, q, statusFiltro, periodo, forma, origem]);
++
++  const totais = useMemo(() => {
++    const total = filtered.reduce((s, p) => s + p.valor, 0);
++    const recebido = filtered
++      .filter((p) => p.status === STATUS_PARCELA.recebido)
++      .reduce((s, p) => s + (p.valorRecebido ?? p.valor), 0);
++    const atrasado = filtered
++      .filter((p) => p.status === STATUS_PARCELA.atrasado)
++      .reduce((s, p) => s + p.valor, 0);
++    return { total, recebido, atrasado };
++  }, [filtered]);
++
++  const abrir = (p: Parcela) => {
++    setSelected(p);
++    setDrawerOpen(true);
++  };
++
++  return (
++    <div className="space-y-4">
++      {/* Filtros */}
++      <div className="rounded-3xl border border-rose/10 bg-white/70 p-4 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4">
++        <div className="flex flex-wrap items-center gap-2">
++          <div className="relative min-w-[220px] flex-1">
++            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-clay/45 dark:text-white/40" />
++            <input
++              placeholder="Buscar por cliente, CPF, contrato ou parcela"
++              value={q}
++              onChange={(e) => setQ(e.target.value)}
++              className={inputClass + " pl-9"}
++              data-testid="contas-receber-search"
++            />
++          </div>
++          <select
++            value={statusFiltro}
++            onChange={(e) => setStatusFiltro(e.target.value)}
++            className={selectClass + " w-[170px]"}
++            data-testid="filter-status"
++          >
++            <option value="todos">Todos os status</option>
++            {Object.entries(STATUS_LABEL).map(([k, v]) => (
++              <option key={k} value={k}>{v}</option>
++            ))}
++          </select>
++          <select
++            value={periodo}
++            onChange={(e) => setPeriodo(e.target.value)}
++            className={selectClass + " w-[170px]"}
++          >
++            {Object.entries(PERIODOS).map(([k, v]) => (
++              <option key={k} value={k}>{v}</option>
++            ))}
++          </select>
++          <select
++            value={forma}
++            onChange={(e) => setForma(e.target.value)}
++            className={selectClass + " w-[180px]"}
++          >
++            <option value="todos">Todas as formas</option>
++            {Object.entries(FORMA_LABEL).map(([k, v]) => (
++              <option key={k} value={k}>{v}</option>
++            ))}
++          </select>
++          <select
++            value={origem}
++            onChange={(e) => setOrigem(e.target.value)}
++            className={selectClass + " w-[160px]"}
++          >
++            <option value="todos">Todas as origens</option>
++            {Object.entries(ORIGEM_LABEL).map(([k, v]) => (
++              <option key={k} value={k}>{v}</option>
++            ))}
++          </select>
++          <button
++            className="inline-flex items-center gap-2 rounded-xl border border-rose/15 bg-white/70 px-3 py-2 text-xs font-semibold text-burgundy hover:bg-blush dark:border-white/10 dark:bg-white/5 dark:text-[#f0d9d4]"
++            data-testid="btn-exportar"
++          >
++            <Download className="h-3.5 w-3.5" /> Exportar
++          </button>
++        </div>
++
++        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[11px] text-clay/70 dark:text-white/55">
++          <span>
++            <span className="font-semibold tabular-nums text-burgundy dark:text-[#f0d9d4]">{filtered.length}</span> parcelas exibidas
++          </span>
++          <span>
++            Total: <span className="font-semibold tabular-nums text-burgundy dark:text-[#f0d9d4]">{formatCurrency(totais.total)}</span>
++          </span>
++          <span className="text-success">
++            Recebido: <span className="font-semibold tabular-nums">{formatCurrency(totais.recebido)}</span>
++          </span>
++          <span className="text-alert">
++            Em atraso: <span className="font-semibold tabular-nums">{formatCurrency(totais.atrasado)}</span>
++          </span>
++        </div>
++      </div>
++
++      {/* Tabela */}
++      <div className="overflow-hidden rounded-3xl border border-rose/10 bg-white/80 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4">
++        <div className="overflow-x-auto">
++          <table className="w-full min-w-[1080px] border-collapse text-left">
++            <thead className="bg-blush/40 text-[10px] font-semibold uppercase tracking-[0.16em] text-burgundy/60 dark:bg-white/[0.05] dark:text-white/50">
++              <tr>
++                <Th>Cliente</Th>
++                <Th>Descrição</Th>
++                <Th className="text-center">Parcela</Th>
++                <Th className="text-right">Valor</Th>
++                <Th>Vencimento</Th>
++                <Th>Status</Th>
++                <Th>Forma</Th>
++                <Th>Origem</Th>
++                <Th>Recebido em</Th>
++                <Th />
++              </tr>
++            </thead>
++            <tbody className="divide-y divide-rose/8 text-sm text-clay dark:divide-white/6 dark:text-white/85">
++              {loading && (
++                <tr>
++                  <td colSpan={10} className="py-8 text-center text-clay/55 dark:text-white/45">Carregando…</td>
++                </tr>
++              )}
++              {!loading && filtered.length === 0 && (
++                <tr>
++                  <td colSpan={10} className="py-10 text-center text-clay/55 dark:text-white/45">
++                    <Filter className="mr-1 inline h-4 w-4" /> Nenhuma parcela com os filtros atuais.
++                  </td>
++                </tr>
++              )}
++              {filtered.map((p) => (
++                <tr
++                  key={p.id}
++                  onClick={() => abrir(p)}
++                  className="cursor-pointer transition-colors hover:bg-blush/25 dark:hover:bg-white/[0.03]"
++                  data-testid={`row-parcela-${p.id}`}
++                >
++                  <Td>
++                    <div className="font-semibold text-burgundy dark:text-[#f0d9d4]">{p.clienteNome}</div>
++                    <div className="text-[10px] uppercase tracking-[0.14em] text-clay/55 dark:text-white/45">
++                      {formatCPF(p.clienteCpf)}
++                    </div>
++                  </Td>
++                  <Td>
++                    <div className="line-clamp-1 max-w-[280px]">{p.descricao}</div>
++                    <div className="text-[10px] uppercase tracking-[0.14em] text-clay/55 dark:text-white/45">
++                      {p.clienteContrato}
++                    </div>
++                  </Td>
++                  <Td className="text-center tabular-nums">{p.numero}/{p.totalParcelas}</Td>
++                  <Td className="text-right font-semibold tabular-nums">{formatCurrency(p.valor)}</Td>
++                  <Td className="tabular-nums">{formatDateBR(p.vencimento)}</Td>
++                  <Td><StatusBadge status={p.status as StatusParcela} /></Td>
++                  <Td><FormaPagamentoBadge forma={p.formaPagamento} /></Td>
++                  <Td><OrigemBadge origem={p.origem} /></Td>
++                  <Td className="tabular-nums">{p.recebidoEm ? formatDateBR(p.recebidoEm) : "—"}</Td>
++                  <Td onClick={(e) => e.stopPropagation()} className="w-[40px]">
++                    <button
++                      className="rounded-lg p-1.5 text-clay/50 hover:bg-blush hover:text-burgundy dark:text-white/45 dark:hover:bg-white/8"
++                      onClick={() => abrir(p)}
++                      aria-label="Ações"
++                    >
++                      <MoreHorizontal className="h-4 w-4" />
++                    </button>
++                  </Td>
++                </tr>
++              ))}
++            </tbody>
++          </table>
++        </div>
++      </div>
++
++      <ParcelaDetailDrawer parcela={selected} open={drawerOpen} onOpenChange={setDrawerOpen} />
++    </div>
++  );
++}
++
++function Th({ children, className }: { children?: React.ReactNode; className?: string }) {
++  return <th className={`px-3 py-3 ${className ?? ""}`}>{children}</th>;
++}
++function Td({
++  children,
++  className,
++  onClick,
++}: {
++  children?: React.ReactNode;
++  className?: string;
++  onClick?: (e: React.MouseEvent<HTMLTableCellElement>) => void;
++}) {
++  return (
++    <td className={`px-3 py-3 ${className ?? ""}`} onClick={onClick}>
++      {children}
++    </td>
++  );
++}
+diff --git a/src/app/admin/(painel)/financeiro/historico/page.tsx b/src/app/admin/(painel)/financeiro/historico/page.tsx
+new file mode 100644
+index 0000000..7317db7
+--- /dev/null
++++ b/src/app/admin/(painel)/financeiro/historico/page.tsx
+@@ -0,0 +1,101 @@
++"use client";
++
++import { useMemo, useState } from "react";
++import {
++  Search,
++  UserPlus,
++  Receipt,
++  Edit,
++  ArrowDownToLine,
++  ClipboardCheck,
++  XCircle,
++  RefreshCw,
++  Plug,
++  Radio,
++  RefreshCcw,
++  Paperclip,
++  Percent,
++  LucideIcon,
++} from "lucide-react";
++import { useHistorico } from "@/features/financeiro/hooks";
++import { formatDateTimeBR } from "@/features/financeiro/utils";
++import { HISTORICO_TIPOS, HistoricoTipo } from "@/features/financeiro/types";
++import { inputClass } from "@/features/financeiro/components/Modal";
++
++const TIPO_META: Record<HistoricoTipo, { icon: LucideIcon; label: string; color: string }> = {
++  [HISTORICO_TIPOS.cliente_criado]: { icon: UserPlus, label: "Cliente criado", color: "text-burgundy" },
++  [HISTORICO_TIPOS.parcela_criada]: { icon: Receipt, label: "Parcela criada", color: "text-clay" },
++  [HISTORICO_TIPOS.parcela_alterada]: { icon: Edit, label: "Parcela alterada", color: "text-clay" },
++  [HISTORICO_TIPOS.recebimento]: { icon: ArrowDownToLine, label: "Recebimento", color: "text-success" },
++  [HISTORICO_TIPOS.baixa]: { icon: ClipboardCheck, label: "Baixa", color: "text-success" },
++  [HISTORICO_TIPOS.cancelamento]: { icon: XCircle, label: "Cancelamento", color: "text-alert" },
++  [HISTORICO_TIPOS.negociacao]: { icon: RefreshCw, label: "Negociação", color: "text-burgundy" },
++  [HISTORICO_TIPOS.integracao]: { icon: Plug, label: "Integração", color: "text-clay" },
++  [HISTORICO_TIPOS.webhook]: { icon: Radio, label: "Webhook", color: "text-clay" },
++  [HISTORICO_TIPOS.sincronizacao]: { icon: RefreshCcw, label: "Sincronização", color: "text-clay" },
++  [HISTORICO_TIPOS.comprovante]: { icon: Paperclip, label: "Comprovante", color: "text-clay" },
++  [HISTORICO_TIPOS.comissao]: { icon: Percent, label: "Comissão", color: "text-burgundy" },
++};
++
++export default function HistoricoPage() {
++  const { data, loading } = useHistorico();
++  const [q, setQ] = useState("");
++
++  const filtered = useMemo(
++    () => (data || []).filter((h) => !q || h.descricao.toLowerCase().includes(q.toLowerCase())),
++    [data, q],
++  );
++
++  return (
++    <div className="space-y-4">
++      <div className="rounded-3xl border border-rose/10 bg-white/70 p-4 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4">
++        <div className="relative max-w-sm">
++          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-clay/45 dark:text-white/40" />
++          <input
++            placeholder="Buscar no histórico"
++            value={q}
++            onChange={(e) => setQ(e.target.value)}
++            className={inputClass + " pl-9"}
++          />
++        </div>
++      </div>
++
++      <div className="rounded-3xl border border-rose/10 bg-white/80 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4">
++        {loading && <div className="p-6 text-sm text-clay/60 dark:text-white/50">Carregando…</div>}
++        {!loading && filtered.length === 0 && (
++          <div className="p-6 text-sm text-clay/60 dark:text-white/50">Nenhum registro.</div>
++        )}
++        <ul className="divide-y divide-rose/8 dark:divide-white/6">
++          {filtered.map((h) => {
++            const meta = TIPO_META[h.tipo] ?? {
++              icon: Receipt,
++              label: h.tipo,
++              color: "text-clay",
++            };
++            const Icon = meta.icon;
++            return (
++              <li key={h.id} className="flex items-start gap-3 p-4">
++                <div
++                  className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-rose/10 bg-blush/40 dark:border-white/8 dark:bg-white/6 ${meta.color}`}
++                >
++                  <Icon className="h-4 w-4" />
++                </div>
++                <div className="min-w-0 flex-1">
++                  <div className="mb-0.5 flex items-center gap-2">
++                    <span className="inline-flex items-center rounded-full border border-rose/12 bg-white/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-clay dark:border-white/10 dark:bg-white/6 dark:text-white/70">
++                      {meta.label}
++                    </span>
++                    <span className="text-[10px] tabular-nums text-clay/55 dark:text-white/45">
++                      {formatDateTimeBR(h.data)}
++                    </span>
++                  </div>
++                  <div className="text-sm text-clay dark:text-white/85">{h.descricao}</div>
++                </div>
++              </li>
++            );
++          })}
++        </ul>
++      </div>
++    </div>
++  );
++}
+diff --git a/src/app/admin/(painel)/financeiro/integracoes/page.tsx b/src/app/admin/(painel)/financeiro/integracoes/page.tsx
+new file mode 100644
+index 0000000..2c13dc9
+--- /dev/null
++++ b/src/app/admin/(painel)/financeiro/integracoes/page.tsx
+@@ -0,0 +1,114 @@
++"use client";
++
++import { Plug, RefreshCw, Building2, CreditCard, Landmark, ShieldAlert, LucideIcon } from "lucide-react";
++import { toast } from "sonner";
++import { Button } from "@/components/ui/Button";
++import { useIntegracoes, useSincronizacao } from "@/features/financeiro/hooks";
++import { IntegracaoStatusBadge } from "@/features/financeiro/components/badges";
++import { formatDateTimeBR } from "@/features/financeiro/utils";
++
++const ICON: Record<string, LucideIcon> = {
++  conta_azul: Building2,
++  mercado_pago: CreditCard,
++  banco: Landmark,
++};
++
++export default function IntegracoesPage() {
++  const { data: integracoes, loading } = useIntegracoes();
++  const { data: sinc } = useSincronizacao();
++
++  return (
++    <div className="space-y-5">
++      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
++        {loading && <div className="text-sm text-clay/60 dark:text-white/50">Carregando integrações…</div>}
++        {(integracoes || []).map((i) => {
++          const Icon = ICON[i.id] || Plug;
++          return (
++            <div
++              key={i.id}
++              className="rounded-3xl border border-rose/10 bg-white/70 p-5 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4"
++            >
++              <div className="flex items-start justify-between">
++                <div className="grid h-10 w-10 place-items-center rounded-xl bg-blush/60 text-burgundy dark:bg-white/6 dark:text-[#d9a5a3]">
++                  <Icon className="h-5 w-5" />
++                </div>
++                <IntegracaoStatusBadge status={i.status} />
++              </div>
++              <h3 className="mt-3 text-base font-semibold text-burgundy dark:text-[#f0d9d4]">{i.nome}</h3>
++              <p className="mt-1 text-xs text-clay/70 dark:text-white/55">{i.descricao}</p>
++              <Button
++                size="sm"
++                variant="secondary"
++                className="mt-4 w-full"
++                onClick={() =>
++                  toast.info("Integração ainda não conectada", {
++                    description: "Configuração real será feita quando a API estiver disponível.",
++                  })
++                }
++                data-testid={`btn-integrar-${i.id}`}
++              >
++                Configurar
++              </Button>
++            </div>
++          );
++        })}
++      </div>
++
++      <div className="flex items-start gap-3 rounded-3xl border border-gold/25 bg-gold/12 p-4 text-sm text-clay dark:border-gold/30 dark:bg-gold/15 dark:text-[#f5dcbf]">
++        <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
++        <span>
++          Nenhuma integração externa está conectada nesta etapa. Todos os status refletem estritamente o estado real:
++          em preparação, planejado ou em desenvolvimento.
++        </span>
++      </div>
++
++      <div className="rounded-3xl border border-rose/10 bg-white/70 p-5 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4">
++        <div className="mb-4 flex items-center justify-between">
++          <div>
++            <h3 className="text-sm font-semibold text-burgundy dark:text-[#f0d9d4]">Central de sincronização</h3>
++            <p className="text-[11px] text-clay/60 dark:text-white/50">
++              Última sincronização: {sinc?.ultima ? formatDateTimeBR(sinc.ultima) : "nunca"}
++            </p>
++          </div>
++          <Button
++            size="sm"
++            variant="secondary"
++            onClick={() =>
++              toast.info("Sincronização indisponível", {
++                description: "Aguardando conexão com Conta Azul.",
++              })
++            }
++            data-testid="btn-sincronizar"
++          >
++            <RefreshCw className="h-3.5 w-3.5" /> Sincronizar agora
++          </Button>
++        </div>
++        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
++          <SyncStat label="Clientes" value={sinc?.clientesSincronizados ?? 0} />
++          <SyncStat label="Parcelas" value={sinc?.parcelasSincronizadas ?? 0} />
++          <SyncStat label="Recebimentos" value={sinc?.recebimentosSincronizados ?? 0} />
++          <SyncStat label="Pendências" value={sinc?.pendencias ?? 0} accent="gold" />
++          <SyncStat label="Erros" value={sinc?.erros ?? 0} accent="alert" />
++        </div>
++      </div>
++    </div>
++  );
++}
++
++function SyncStat({
++  label,
++  value,
++  accent,
++}: {
++  label: string;
++  value: number;
++  accent?: "gold" | "alert";
++}) {
++  const color = accent === "gold" ? "text-clay" : accent === "alert" ? "text-alert" : "text-burgundy dark:text-[#f0d9d4]";
++  return (
++    <div className="rounded-2xl border border-rose/10 p-3 dark:border-white/8">
++      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-clay/55 dark:text-white/45">{label}</div>
++      <div className={`mt-1 text-xl font-semibold tabular-nums ${color}`}>{value}</div>
++    </div>
++  );
++}
+diff --git a/src/app/admin/(painel)/financeiro/layout.tsx b/src/app/admin/(painel)/financeiro/layout.tsx
+new file mode 100644
+index 0000000..ca7cfc5
+--- /dev/null
++++ b/src/app/admin/(painel)/financeiro/layout.tsx
+@@ -0,0 +1,83 @@
++"use client";
++
++import Link from "next/link";
++import { usePathname } from "next/navigation";
++import {
++  LayoutGrid,
++  Receipt,
++  Users,
++  ArrowDownToLine,
++  Percent,
++  Plug,
++  History,
++  LucideIcon,
++} from "lucide-react";
++import { Toaster } from "sonner";
++import { cn } from "@/lib/utils";
++
++const TABS: { href: string; label: string; icon: LucideIcon; exact?: boolean }[] = [
++  { href: "/admin/financeiro", label: "Visão geral", icon: LayoutGrid, exact: true },
++  { href: "/admin/financeiro/contas-receber", label: "Contas a receber", icon: Receipt },
++  { href: "/admin/financeiro/clientes", label: "Clientes", icon: Users },
++  { href: "/admin/financeiro/recebimentos", label: "Recebimentos", icon: ArrowDownToLine },
++  { href: "/admin/financeiro/comissoes", label: "Comissões", icon: Percent },
++  { href: "/admin/financeiro/integracoes", label: "Integrações", icon: Plug },
++  { href: "/admin/financeiro/historico", label: "Histórico", icon: History },
++];
++
++export default function FinanceiroLayout({ children }: { children: React.ReactNode }) {
++  const pathname = usePathname();
++
++  const isActive = (tab: (typeof TABS)[number]) =>
++    tab.exact ? pathname === tab.href : pathname.startsWith(tab.href);
++
++  return (
++    <div className="space-y-5">
++      <div className="rounded-3xl border border-rose/10 bg-white/70 p-5 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4">
++        <div className="flex flex-wrap items-start justify-between gap-3">
++          <div>
++            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-burgundy/45 dark:text-white/40">
++              Centro Financeiro
++            </p>
++            <h2 className="mt-1 text-lg font-semibold tracking-[-0.02em] text-burgundy dark:text-[#f0d9d4] sm:text-xl">
++              Contas a receber · Recebimentos · Comissões
++            </h2>
++            <p className="mt-1 max-w-2xl text-xs text-clay/70 dark:text-white/55">
++              Gestão financeira completa preparada para Conta Azul, Mercado Pago e webhooks bancários.
++              Nenhuma integração externa está conectada nesta etapa.
++            </p>
++          </div>
++          <span className="rounded-full border border-rose/15 bg-blush/40 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-burgundy/70 dark:border-white/10 dark:bg-white/6 dark:text-[#e8bcbc]">
++            Dados temporários · aguardando backend
++          </span>
++        </div>
++
++        <nav className="-mb-1 mt-5 flex gap-1 overflow-x-auto pb-1" role="tablist">
++          {TABS.map((t) => {
++            const active = isActive(t);
++            const Icon = t.icon;
++            return (
++              <Link
++                key={t.href}
++                href={t.href}
++                data-testid={`fin-tab-${t.label.toLowerCase().replace(/\s+/g, "-")}`}
++                className={cn(
++                  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border px-3 py-2 text-xs font-semibold transition-all",
++                  active
++                    ? "border-burgundy/15 bg-burgundy text-pearl shadow-[0_8px_18px_-10px_rgba(122,38,50,0.55)] dark:border-white/10 dark:bg-[#7f3546] dark:text-[#fff7f4]"
++                    : "border-transparent text-clay/65 hover:border-rose/12 hover:bg-blush/55 hover:text-burgundy dark:text-[#d5c8c6]/65 dark:hover:bg-white/6 dark:hover:text-[#f3e3df]",
++                )}
++              >
++                <Icon className="h-3.5 w-3.5" />
++                {t.label}
++              </Link>
++            );
++          })}
++        </nav>
++      </div>
++
++      <div>{children}</div>
++      <Toaster richColors position="top-right" theme="light" />
++    </div>
++  );
++}
+diff --git a/src/app/admin/(painel)/financeiro/page.tsx b/src/app/admin/(painel)/financeiro/page.tsx
+new file mode 100644
+index 0000000..677960d
+--- /dev/null
++++ b/src/app/admin/(painel)/financeiro/page.tsx
+@@ -0,0 +1,217 @@
++"use client";
++
++import { useVisaoGeral } from "@/features/financeiro/hooks";
++import { formatCurrency, formatDateBR } from "@/features/financeiro/utils";
++import { StatusBadge } from "@/features/financeiro/components/badges";
++import {
++  ArrowDownToLine,
++  AlertTriangle,
++  CalendarClock,
++  CircleDollarSign,
++  Percent,
++  LucideIcon,
++} from "lucide-react";
++
++type Accent = "burgundy" | "success" | "alert" | "gold";
++const ACCENT: Record<Accent, string> = {
++  burgundy: "text-burgundy",
++  success: "text-success",
++  alert: "text-alert",
++  gold: "text-clay",
++};
++
++function Stat({
++  icon: Icon,
++  label,
++  value,
++  hint,
++  accent = "burgundy",
++  testId,
++}: {
++  icon: LucideIcon;
++  label: string;
++  value: string;
++  hint?: string;
++  accent?: Accent;
++  testId?: string;
++}) {
++  return (
++    <div
++      className="rounded-3xl border border-rose/10 bg-white/70 p-5 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4"
++      data-testid={testId}
++    >
++      <div className="flex items-center justify-between">
++        <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-clay/55 dark:text-white/45">
++          {label}
++        </span>
++        <Icon className={`h-4 w-4 ${ACCENT[accent]}`} />
++      </div>
++      <div className="mt-2 text-2xl font-semibold tabular-nums tracking-[-0.02em] text-burgundy dark:text-[#f0d9d4]">
++        {value}
++      </div>
++      {hint && <div className="mt-1 text-[11px] text-clay/60 dark:text-white/50">{hint}</div>}
++    </div>
++  );
++}
++
++// Gráfico simples de barras SVG (sem dependências externas).
++function SimpleBarChart({ data }: { data: { mes: string; recebido: number; previsto: number }[] }) {
++  const max = Math.max(1, ...data.flatMap((d) => [d.recebido, d.previsto]));
++  const barW = 22;
++  const gap = 6;
++  const groupW = barW * 2 + gap + 24;
++  const width = data.length * groupW + 40;
++  const height = 220;
++
++  return (
++    <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
++      {[0.25, 0.5, 0.75, 1].map((p) => (
++        <line
++          key={p}
++          x1="30"
++          x2={width}
++          y1={height - 30 - p * (height - 60)}
++          y2={height - 30 - p * (height - 60)}
++          stroke="currentColor"
++          strokeDasharray="4 4"
++          className="text-clay/12 dark:text-white/10"
++        />
++      ))}
++      {data.map((d, i) => {
++        const previstoH = (d.previsto / max) * (height - 60);
++        const recebidoH = (d.recebido / max) * (height - 60);
++        const x = 30 + i * groupW;
++        return (
++          <g key={i}>
++            <rect
++              x={x}
++              y={height - 30 - previstoH}
++              width={barW}
++              height={previstoH}
++              rx="4"
++              className="fill-rose/25 dark:fill-white/12"
++            />
++            <rect
++              x={x + barW + gap}
++              y={height - 30 - recebidoH}
++              width={barW}
++              height={recebidoH}
++              rx="4"
++              className="fill-burgundy dark:fill-[#c88090]"
++            />
++            <text
++              x={x + barW + gap / 2}
++              y={height - 12}
++              textAnchor="middle"
++              className="fill-clay/60 text-[10px] dark:fill-white/50"
++            >
++              {d.mes}
++            </text>
++          </g>
++        );
++      })}
++    </svg>
++  );
++}
++
++export default function VisaoGeralPage() {
++  const { data, loading } = useVisaoGeral();
++
++  if (loading || !data) {
++    return <div className="text-sm text-clay/60 dark:text-white/50">Carregando visão geral…</div>;
++  }
++
++  return (
++    <div className="space-y-5">
++      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
++        <Stat
++          icon={CircleDollarSign}
++          label="A receber"
++          value={formatCurrency(data.totalReceber)}
++          hint={`${data.qtdParcelas} parcelas no total`}
++          testId="stat-a-receber"
++        />
++        <Stat
++          icon={ArrowDownToLine}
++          label="Recebido no mês"
++          value={formatCurrency(data.totalRecebidoMes)}
++          hint="Recebimentos deste mês"
++          accent="success"
++          testId="stat-recebido-mes"
++        />
++        <Stat
++          icon={AlertTriangle}
++          label="Em atraso"
++          value={formatCurrency(data.totalAtrasado)}
++          hint={`${data.qtdAtrasadas} parcelas atrasadas`}
++          accent="alert"
++          testId="stat-atrasado"
++        />
++        <Stat
++          icon={Percent}
++          label="Comissões liberadas"
++          value={formatCurrency(data.comissoesLiberadas)}
++          hint="Vinculadas a parcelas recebidas"
++          accent="gold"
++          testId="stat-comissoes"
++        />
++      </div>
++
++      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
++        <div className="rounded-3xl border border-rose/10 bg-white/70 p-5 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4 lg:col-span-2">
++          <div className="mb-3 flex items-center justify-between">
++            <div>
++              <h3 className="text-sm font-semibold text-burgundy dark:text-[#f0d9d4]">
++                Recebido vs previsto
++              </h3>
++              <p className="text-[11px] text-clay/60 dark:text-white/50">Últimos 6 meses</p>
++            </div>
++            <div className="flex gap-3 text-[10px] text-clay/60 dark:text-white/50">
++              <span className="inline-flex items-center gap-1">
++                <span className="h-2 w-2 rounded-sm bg-rose/25 dark:bg-white/20" /> Previsto
++              </span>
++              <span className="inline-flex items-center gap-1">
++                <span className="h-2 w-2 rounded-sm bg-burgundy dark:bg-[#c88090]" /> Recebido
++              </span>
++            </div>
++          </div>
++          <SimpleBarChart data={data.serie} />
++        </div>
++
++        <div className="rounded-3xl border border-rose/10 bg-white/70 p-5 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4">
++          <div className="mb-3 flex items-center justify-between">
++            <h3 className="text-sm font-semibold text-burgundy dark:text-[#f0d9d4]">
++              Próximos vencimentos
++            </h3>
++            <CalendarClock className="h-4 w-4 text-clay/50 dark:text-white/40" />
++          </div>
++          <div>
++            {data.proximas.map((p) => (
++              <div
++                key={p.id}
++                className="flex items-center justify-between border-b border-rose/8 py-2 last:border-0 dark:border-white/6"
++              >
++                <div className="min-w-0">
++                  <div className="truncate text-sm font-semibold text-burgundy dark:text-[#f0d9d4]">
++                    {p.clienteNome}
++                  </div>
++                  <div className="text-[10px] uppercase tracking-[0.14em] text-clay/55 dark:text-white/45">
++                    {formatDateBR(p.vencimento)} · {p.numero}/{p.totalParcelas}
++                  </div>
++                </div>
++                <div className="ml-3 shrink-0 text-right">
++                  <div className="text-sm font-semibold tabular-nums text-clay dark:text-white/85">
++                    {formatCurrency(p.valor)}
++                  </div>
++                  <div className="mt-0.5">
++                    <StatusBadge status={p.status} />
++                  </div>
++                </div>
++              </div>
++            ))}
++          </div>
++        </div>
++      </div>
++    </div>
++  );
++}
+diff --git a/src/app/admin/(painel)/financeiro/recebimentos/page.tsx b/src/app/admin/(painel)/financeiro/recebimentos/page.tsx
+new file mode 100644
+index 0000000..826296c
+--- /dev/null
++++ b/src/app/admin/(painel)/financeiro/recebimentos/page.tsx
+@@ -0,0 +1,73 @@
++"use client";
++
++import { useMemo, useState } from "react";
++import { Search, ArrowDownToLine } from "lucide-react";
++import { useRecebimentos } from "@/features/financeiro/hooks";
++import { formatCurrency, formatDateBR } from "@/features/financeiro/utils";
++import { FormaPagamentoBadge, OrigemBadge } from "@/features/financeiro/components/badges";
++import { inputClass } from "@/features/financeiro/components/Modal";
++
++export default function RecebimentosPage() {
++  const { data, loading } = useRecebimentos();
++  const [q, setQ] = useState("");
++  const filtered = useMemo(
++    () => (data || []).filter((r) => !q || r.clienteNome.toLowerCase().includes(q.toLowerCase())),
++    [data, q],
++  );
++  const total = filtered.reduce((s, r) => s + r.valor, 0);
++
++  return (
++    <div className="space-y-4">
++      <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-rose/10 bg-white/70 p-4 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4">
++        <div className="relative w-full max-w-sm">
++          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-clay/45 dark:text-white/40" />
++          <input
++            placeholder="Buscar cliente"
++            value={q}
++            onChange={(e) => setQ(e.target.value)}
++            className={inputClass + " pl-9"}
++          />
++        </div>
++        <div className="inline-flex items-center gap-2 text-xs text-clay/70 dark:text-white/55">
++          <ArrowDownToLine className="h-4 w-4 text-success" />
++          Total: <span className="font-semibold tabular-nums text-burgundy dark:text-[#f0d9d4]">{formatCurrency(total)}</span>
++        </div>
++      </div>
++
++      <div className="overflow-hidden rounded-3xl border border-rose/10 bg-white/80 shadow-card backdrop-blur-xl dark:border-white/8 dark:bg-white/4">
++        <div className="overflow-x-auto">
++          <table className="w-full border-collapse text-left">
++            <thead className="bg-blush/40 text-[10px] font-semibold uppercase tracking-[0.16em] text-burgundy/60 dark:bg-white/[0.05] dark:text-white/50">
++              <tr>
++                <th className="px-3 py-3">Data</th>
++                <th className="px-3 py-3">Cliente</th>
++                <th className="px-3 py-3">Descrição</th>
++                <th className="px-3 py-3 text-right">Valor</th>
++                <th className="px-3 py-3">Forma</th>
++                <th className="px-3 py-3">Origem</th>
++              </tr>
++            </thead>
++            <tbody className="divide-y divide-rose/8 text-sm text-clay dark:divide-white/6 dark:text-white/85">
++              {loading && (
++                <tr><td colSpan={6} className="py-8 text-center text-clay/55 dark:text-white/45">Carregando…</td></tr>
++              )}
++              {!loading && filtered.length === 0 && (
++                <tr><td colSpan={6} className="py-8 text-center text-clay/55 dark:text-white/45">Nenhum recebimento.</td></tr>
++              )}
++              {filtered.map((r) => (
++                <tr key={r.id}>
++                  <td className="px-3 py-3 tabular-nums">{formatDateBR(r.data)}</td>
++                  <td className="px-3 py-3 font-semibold text-burgundy dark:text-[#f0d9d4]">{r.clienteNome}</td>
++                  <td className="px-3 py-3 text-clay/80 dark:text-white/70">{r.descricao}</td>
++                  <td className="px-3 py-3 text-right font-semibold tabular-nums text-success">{formatCurrency(r.valor)}</td>
++                  <td className="px-3 py-3"><FormaPagamentoBadge forma={r.formaPagamento} /></td>
++                  <td className="px-3 py-3"><OrigemBadge origem={r.origem} /></td>
++                </tr>
++              ))}
++            </tbody>
++          </table>
++        </div>
++      </div>
++    </div>
++  );
++}
+diff --git a/src/app/admin/(painel)/layout.tsx b/src/app/admin/(painel)/layout.tsx
+index 4695dcd..58b4757 100644
+--- a/src/app/admin/(painel)/layout.tsx
++++ b/src/app/admin/(painel)/layout.tsx
+@@ -3,7 +3,7 @@
+ import { useEffect, useMemo, useState } from "react";
+ import Link from "next/link";
+ import { usePathname, useRouter } from "next/navigation";
+-import { Bell, CalendarRange, ChevronRight, CircleUserRound, Cog, LayoutDashboard, Landmark, LineChart, LogOut, Menu, Receipt, Search, ShoppingBag, Users, WalletCards, X, UserCog, BadgeDollarSign, Link2 } from "lucide-react";
++import { Bell, CalendarRange, ChevronRight, CircleUserRound, Cog, LayoutDashboard, Landmark, LineChart, LogOut, Menu, Receipt, Search, ShoppingBag, Users, WalletCards, X, UserCog, BadgeDollarSign, Link2, Wallet } from "lucide-react";
+ import { createClientSupabaseClient } from "@/lib/supabase/client";
+ import { Wordmark } from "@/components/ui/Logo";
+ import { cn } from "@/lib/utils";
+@@ -21,6 +21,7 @@ const NAV = [
+   { href: "/admin/central-boletos", label: "Central de Boletos", icon: Landmark, group: "Financeiro" },
+   { href: "/admin/pagamentos", label: "Pagamentos", icon: Receipt, group: "Financeiro" },
+   { href: "/admin/parcelas", label: "Parcelas", icon: WalletCards, group: "Financeiro" },
++  { href: "/admin/financeiro", label: "Financeiro", icon: Wallet, group: "Financeiro" },
+   { href: "/admin/relatorios", label: "Relatórios", icon: LineChart, group: "Gestão" },
+   { href: "/admin/colaboradores", label: "Colaboradores", icon: UserCog, group: "Gestão" },
+   { href: "/admin/vinculos-colaboradores", label: "Vínculos da Equipe", icon: Link2, group: "Gestão" },
+@@ -45,6 +46,7 @@ const TITLES: Record<string, string> = {
+   "/admin/central-boletos": "Central de Boletos",
+   "/admin/pagamentos": "Pagamentos",
+   "/admin/parcelas": "Parcelas",
++  "/admin/financeiro": "Financeiro",
+   "/admin/relatorios": "Relatórios",
+   "/admin/colaboradores": "Colaboradores",
+   "/admin/vinculos-colaboradores": "Vínculos da Equipe",
+diff --git a/src/features/financeiro/adapters/ApiAdapter.ts b/src/features/financeiro/adapters/ApiAdapter.ts
+new file mode 100644
+index 0000000..eedd450
+--- /dev/null
++++ b/src/features/financeiro/adapters/ApiAdapter.ts
+@@ -0,0 +1,66 @@
++// ApiAdapter — STUB preparado para receber, futuramente:
++//   • Endpoints REST do Sra. Luck  (/api/admin/financeiro/**)
++//   • Endpoints do Conta Azul       (via backend proxy)
++//   • Endpoints do Mercado Pago     (via backend proxy)
++//   • Webhooks bancários            (recebidos pelo backend)
++//
++// Implementação real deve preservar a MESMA interface do MockAdapter
++// (FinanceiroDataSource) para troca sem alterar componentes/hooks/serviços.
++
++import type { FinanceiroDataSource, RegistrarRecebimentoInput } from "./MockAdapter";
++import type { Parcela } from "../types";
++
++async function req<T>(url: string, init?: RequestInit): Promise<T> {
++  const res = await fetch(url, {
++    ...init,
++    headers: {
++      "Content-Type": "application/json",
++      ...(init?.headers ?? {}),
++    },
++    credentials: "same-origin",
++  });
++  if (!res.ok) throw new Error(`Erro ${res.status} em ${url}`);
++  return (await res.json()) as T;
++}
++
++const ApiAdapter: FinanceiroDataSource = {
++  subscribe: () => () => {},
++  listParcelas: () => req("/api/admin/financeiro/parcelas"),
++  getParcela: (id) => req(`/api/admin/financeiro/parcelas/${id}`),
++  registrarRecebimento: (id, payload: RegistrarRecebimentoInput) =>
++    req(`/api/admin/financeiro/parcelas/${id}/recebimento`, {
++      method: "POST",
++      body: JSON.stringify(payload),
++    }),
++  atualizarParcela: (id, patch: Partial<Parcela>) =>
++    req(`/api/admin/financeiro/parcelas/${id}`, {
++      method: "PATCH",
++      body: JSON.stringify(patch),
++    }),
++  negociarParcela: (id, payload) =>
++    req(`/api/admin/financeiro/parcelas/${id}/negociar`, {
++      method: "POST",
++      body: JSON.stringify(payload),
++    }),
++  cancelarParcela: (id, motivo) =>
++    req(`/api/admin/financeiro/parcelas/${id}/cancelar`, {
++      method: "POST",
++      body: JSON.stringify({ motivo }),
++    }),
++  anexarComprovante: (id, payload) =>
++    req(`/api/admin/financeiro/parcelas/${id}/comprovantes`, {
++      method: "POST",
++      body: JSON.stringify(payload),
++    }),
++  listClientes: () => req("/api/admin/financeiro/clientes"),
++  getCliente: (id) => req(`/api/admin/financeiro/clientes/${id}`),
++  getParcelasByCliente: (id) => req(`/api/admin/financeiro/clientes/${id}/parcelas`),
++  listRecebimentos: () => req("/api/admin/financeiro/recebimentos"),
++  listComissoes: () => req("/api/admin/financeiro/comissoes"),
++  getComissoesByParcela: (id) => req(`/api/admin/financeiro/parcelas/${id}/comissoes`),
++  listIntegracoes: () => req("/api/admin/financeiro/integracoes"),
++  getSincronizacao: () => req("/api/admin/financeiro/sincronizacao"),
++  listHistorico: () => req("/api/admin/financeiro/historico"),
++};
++
++export default ApiAdapter;
+diff --git a/src/features/financeiro/adapters/MockAdapter.ts b/src/features/financeiro/adapters/MockAdapter.ts
+new file mode 100644
+index 0000000..80a0caa
+--- /dev/null
++++ b/src/features/financeiro/adapters/MockAdapter.ts
+@@ -0,0 +1,248 @@
++// Adapter Mock — implementa a interface do FinanceiroDataSource
++// usando dados locais. Deve ser trocável por ApiAdapter sem alterar componentes.
++
++import { MOCK } from "../data/mockData";
++import {
++  Cliente,
++  Comissao,
++  EventoHistorico,
++  Integracao,
++  Parcela,
++  Recebimento,
++  SincronizacaoStatus,
++  STATUS_PARCELA,
++  HISTORICO_TIPOS,
++  FormaPagamento,
++  Origem,
++} from "../types";
++import { isOverdue } from "../utils";
++
++const state = {
++  parcelas: MOCK.parcelas.map((p) => ({ ...p })),
++  clientes: MOCK.clientes.map((c) => ({ ...c })),
++  comissoes: MOCK.comissoes.map((c) => ({ ...c })),
++  integracoes: MOCK.integracoes.map((i) => ({ ...i })),
++  historico: MOCK.historico.map((h) => ({ ...h })),
++  sincronizacao: { ...MOCK.sincronizacao },
++};
++
++const withDynamicStatus = (p: Parcela): Parcela => {
++  if (p.status === STATUS_PARCELA.pendente && isOverdue(p)) {
++    return { ...p, status: STATUS_PARCELA.atrasado };
++  }
++  return p;
++};
++
++type Listener = () => void;
++const listeners = new Set<Listener>();
++const notify = (): void => listeners.forEach((l) => l());
++const delay = (ms = 120) => new Promise<void>((r) => setTimeout(r, ms));
++
++const pushHistorico = (entry: Omit<EventoHistorico, "id" | "data"> & { data?: string }): void => {
++  state.historico.unshift({
++    id: `hist_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
++    data: entry.data ?? new Date().toISOString(),
++    tipo: entry.tipo,
++    descricao: entry.descricao,
++    parcelaId: entry.parcelaId,
++    clienteId: entry.clienteId,
++  });
++};
++
++export interface RegistrarRecebimentoInput {
++  valor?: number;
++  data?: string;
++  formaPagamento?: FormaPagamento;
++  origem?: Origem;
++  observacoes?: string;
++}
++
++export interface FinanceiroDataSource {
++  subscribe(listener: Listener): () => void;
++  listParcelas(): Promise<Parcela[]>;
++  getParcela(id: string): Promise<Parcela | null>;
++  registrarRecebimento(id: string, payload: RegistrarRecebimentoInput): Promise<Parcela>;
++  atualizarParcela(id: string, patch: Partial<Parcela>): Promise<Parcela>;
++  negociarParcela(id: string, payload: { novoVencimento?: string; observacoes?: string }): Promise<Parcela>;
++  cancelarParcela(id: string, motivo?: string): Promise<Parcela>;
++  anexarComprovante(id: string, payload: { nome?: string; origem?: string }): Promise<Parcela>;
++  listClientes(): Promise<Cliente[]>;
++  getCliente(id: string): Promise<Cliente | null>;
++  getParcelasByCliente(clienteId: string): Promise<Parcela[]>;
++  listRecebimentos(): Promise<Recebimento[]>;
++  listComissoes(): Promise<Comissao[]>;
++  getComissoesByParcela(parcelaId: string): Promise<Comissao[]>;
++  listIntegracoes(): Promise<Integracao[]>;
++  getSincronizacao(): Promise<SincronizacaoStatus>;
++  listHistorico(): Promise<EventoHistorico[]>;
++}
++
++const MockAdapter: FinanceiroDataSource = {
++  subscribe(listener) {
++    listeners.add(listener);
++    return () => listeners.delete(listener);
++  },
++  async listParcelas() {
++    await delay();
++    return state.parcelas.map(withDynamicStatus);
++  },
++  async getParcela(id) {
++    await delay(60);
++    const p = state.parcelas.find((x) => x.id === id);
++    return p ? withDynamicStatus(p) : null;
++  },
++  async registrarRecebimento(id, payload) {
++    await delay(180);
++    const idx = state.parcelas.findIndex((p) => p.id === id);
++    if (idx === -1) throw new Error("Parcela não encontrada");
++    const orig = state.parcelas[idx];
++    state.parcelas[idx] = {
++      ...orig,
++      status: STATUS_PARCELA.recebido,
++      valorRecebido: payload.valor ?? orig.valor,
++      recebidoEm: payload.data ?? new Date().toISOString(),
++      formaPagamento: payload.formaPagamento ?? orig.formaPagamento,
++      origem: payload.origem ?? orig.origem,
++      observacoes: payload.observacoes ?? orig.observacoes,
++    };
++    state.comissoes = state.comissoes.map((c) =>
++      c.parcelaId === id ? { ...c, status: "liberada", parcelaStatus: STATUS_PARCELA.recebido } : c,
++    );
++    pushHistorico({
++      tipo: HISTORICO_TIPOS.recebimento,
++      descricao: `Recebimento registrado — parcela ${orig.numero}/${orig.totalParcelas} de ${orig.clienteNome}`,
++      parcelaId: id,
++      clienteId: orig.clienteId,
++    });
++    notify();
++    return state.parcelas[idx];
++  },
++  async atualizarParcela(id, patch) {
++    await delay(140);
++    const idx = state.parcelas.findIndex((p) => p.id === id);
++    if (idx === -1) throw new Error("Parcela não encontrada");
++    state.parcelas[idx] = { ...state.parcelas[idx], ...patch };
++    pushHistorico({
++      tipo: HISTORICO_TIPOS.parcela_alterada,
++      descricao: `Parcela ${state.parcelas[idx].numero}/${state.parcelas[idx].totalParcelas} de ${state.parcelas[idx].clienteNome} atualizada`,
++      parcelaId: id,
++      clienteId: state.parcelas[idx].clienteId,
++    });
++    notify();
++    return state.parcelas[idx];
++  },
++  async negociarParcela(id, { novoVencimento, observacoes }) {
++    await delay(150);
++    const idx = state.parcelas.findIndex((p) => p.id === id);
++    if (idx === -1) throw new Error("Parcela não encontrada");
++    state.parcelas[idx] = {
++      ...state.parcelas[idx],
++      vencimento: novoVencimento || state.parcelas[idx].vencimento,
++      status: STATUS_PARCELA.negociado,
++      observacoes: observacoes || state.parcelas[idx].observacoes,
++    };
++    pushHistorico({
++      tipo: HISTORICO_TIPOS.negociacao,
++      descricao: `Negociação registrada — parcela ${state.parcelas[idx].numero}/${state.parcelas[idx].totalParcelas} de ${state.parcelas[idx].clienteNome}`,
++      parcelaId: id,
++      clienteId: state.parcelas[idx].clienteId,
++    });
++    notify();
++    return state.parcelas[idx];
++  },
++  async cancelarParcela(id, motivo) {
++    await delay(120);
++    const idx = state.parcelas.findIndex((p) => p.id === id);
++    if (idx === -1) throw new Error("Parcela não encontrada");
++    state.parcelas[idx] = {
++      ...state.parcelas[idx],
++      status: STATUS_PARCELA.cancelado,
++      observacoes: motivo || state.parcelas[idx].observacoes,
++    };
++    state.comissoes = state.comissoes.map((c) =>
++      c.parcelaId === id ? { ...c, status: "cancelada", parcelaStatus: STATUS_PARCELA.cancelado } : c,
++    );
++    pushHistorico({
++      tipo: HISTORICO_TIPOS.cancelamento,
++      descricao: `Parcela cancelada — ${state.parcelas[idx].clienteNome}${motivo ? " — " + motivo : ""}`,
++      parcelaId: id,
++      clienteId: state.parcelas[idx].clienteId,
++    });
++    notify();
++    return state.parcelas[idx];
++  },
++  async anexarComprovante(id, { nome, origem }) {
++    await delay(130);
++    const idx = state.parcelas.findIndex((p) => p.id === id);
++    if (idx === -1) throw new Error("Parcela não encontrada");
++    const novo = {
++      id: `cmp_${Date.now()}`,
++      nome: nome || "comprovante.pdf",
++      data: new Date().toISOString(),
++      origem: origem || "manual",
++      status: "aguardando_validacao",
++    };
++    state.parcelas[idx] = {
++      ...state.parcelas[idx],
++      comprovantes: [...(state.parcelas[idx].comprovantes || []), novo],
++    };
++    pushHistorico({
++      tipo: HISTORICO_TIPOS.comprovante,
++      descricao: `Comprovante anexado à parcela ${state.parcelas[idx].numero}/${state.parcelas[idx].totalParcelas} de ${state.parcelas[idx].clienteNome}`,
++      parcelaId: id,
++      clienteId: state.parcelas[idx].clienteId,
++    });
++    notify();
++    return state.parcelas[idx];
++  },
++  async listClientes() {
++    await delay();
++    return state.clientes.map((c) => c);
++  },
++  async getCliente(id) {
++    await delay(60);
++    return state.clientes.find((c) => c.id === id) || null;
++  },
++  async getParcelasByCliente(clienteId) {
++    await delay(80);
++    return state.parcelas.filter((p) => p.clienteId === clienteId).map(withDynamicStatus);
++  },
++  async listRecebimentos() {
++    await delay();
++    return state.parcelas
++      .filter((p) => p.status === STATUS_PARCELA.recebido)
++      .map((p) => ({
++        id: `rec_${p.id}`,
++        parcelaId: p.id,
++        clienteId: p.clienteId,
++        clienteNome: p.clienteNome,
++        descricao: p.descricao,
++        valor: p.valorRecebido ?? p.valor,
++        data: p.recebidoEm,
++        formaPagamento: p.formaPagamento,
++        origem: p.origem,
++      }));
++  },
++  async listComissoes() {
++    await delay();
++    return state.comissoes.map((c) => c);
++  },
++  async getComissoesByParcela(parcelaId) {
++    await delay(60);
++    return state.comissoes.filter((c) => c.parcelaId === parcelaId);
++  },
++  async listIntegracoes() {
++    await delay(80);
++    return state.integracoes.map((i) => i);
++  },
++  async getSincronizacao() {
++    await delay(60);
++    return { ...state.sincronizacao };
++  },
++  async listHistorico() {
++    await delay(80);
++    return state.historico.map((h) => h);
++  },
++};
++
++export default MockAdapter;
+diff --git a/src/features/financeiro/adapters/index.ts b/src/features/financeiro/adapters/index.ts
+new file mode 100644
+index 0000000..1531d1d
+--- /dev/null
++++ b/src/features/financeiro/adapters/index.ts
+@@ -0,0 +1,13 @@
++// Ponto de troca do data source do Financeiro.
++// Hoje: MockAdapter. Amanhã: ApiAdapter (Sra. Luck / Conta Azul / Mercado Pago).
++//
++// Para trocar em produção, alterar apenas a linha abaixo — nenhum componente,
++// service ou hook precisa ser modificado.
++
++import MockAdapter from "./MockAdapter";
++// import ApiAdapter from "./ApiAdapter";
++
++const dataSource = MockAdapter;
++
++export default dataSource;
++export type { FinanceiroDataSource } from "./MockAdapter";
+diff --git a/src/features/financeiro/components/Modal.tsx b/src/features/financeiro/components/Modal.tsx
+new file mode 100644
+index 0000000..19127b0
+--- /dev/null
++++ b/src/features/financeiro/components/Modal.tsx
+@@ -0,0 +1,148 @@
++"use client";
++
++import { AnimatePresence, motion } from "framer-motion";
++import { X } from "lucide-react";
++import { ReactNode, useEffect } from "react";
++
++// Modal centralizado leve (sem Radix) — compatível com o design system Sra. Luck.
++export function Modal({
++  open,
++  onClose,
++  title,
++  description,
++  children,
++  footer,
++  size = "md",
++}: {
++  open: boolean;
++  onClose: () => void;
++  title: string;
++  description?: string;
++  children: ReactNode;
++  footer?: ReactNode;
++  size?: "sm" | "md" | "lg";
++}) {
++  useEffect(() => {
++    if (!open) return;
++    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
++    document.addEventListener("keydown", onKey);
++    return () => document.removeEventListener("keydown", onKey);
++  }, [open, onClose]);
++
++  const widthClass = size === "sm" ? "max-w-sm" : size === "lg" ? "max-w-2xl" : "max-w-lg";
++
++  return (
++    <AnimatePresence>
++      {open && (
++        <motion.div
++          initial={{ opacity: 0 }}
++          animate={{ opacity: 1 }}
++          exit={{ opacity: 0 }}
++          className="fixed inset-0 z-[70] flex items-center justify-center bg-burgundy-dark/28 backdrop-blur-sm px-4 dark:bg-black/60"
++          onClick={onClose}
++        >
++          <motion.div
++            initial={{ opacity: 0, y: 12, scale: 0.98 }}
++            animate={{ opacity: 1, y: 0, scale: 1 }}
++            exit={{ opacity: 0, y: 8, scale: 0.98 }}
++            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
++            className={`w-full ${widthClass} rounded-3xl border border-rose/12 bg-white/95 p-6 shadow-soft backdrop-blur-2xl dark:border-white/8 dark:bg-[#161318]/96`}
++            onClick={(e) => e.stopPropagation()}
++          >
++            <div className="mb-4 flex items-start justify-between gap-4">
++              <div>
++                <h3 className="text-base font-semibold tracking-[-0.01em] text-burgundy dark:text-[#f0d9d4]">
++                  {title}
++                </h3>
++                {description && (
++                  <p className="mt-1 text-xs text-clay/70 dark:text-white/55">{description}</p>
++                )}
++              </div>
++              <button
++                onClick={onClose}
++                aria-label="Fechar"
++                className="rounded-lg p-1.5 text-clay/50 hover:bg-blush/60 hover:text-burgundy dark:text-white/45 dark:hover:bg-white/6"
++              >
++                <X className="h-4 w-4" />
++              </button>
++            </div>
++            <div className="space-y-3">{children}</div>
++            {footer && (
++              <div className="mt-5 flex items-center justify-end gap-2 border-t border-rose/8 pt-4 dark:border-white/6">
++                {footer}
++              </div>
++            )}
++          </motion.div>
++        </motion.div>
++      )}
++    </AnimatePresence>
++  );
++}
++
++// Drawer lateral (side sheet)
++export function Drawer({
++  open,
++  onClose,
++  children,
++}: {
++  open: boolean;
++  onClose: () => void;
++  children: ReactNode;
++}) {
++  useEffect(() => {
++    if (!open) return;
++    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
++    document.addEventListener("keydown", onKey);
++    return () => document.removeEventListener("keydown", onKey);
++  }, [open, onClose]);
++
++  return (
++    <AnimatePresence>
++      {open && (
++        <motion.div
++          initial={{ opacity: 0 }}
++          animate={{ opacity: 1 }}
++          exit={{ opacity: 0 }}
++          className="fixed inset-0 z-[65] bg-burgundy-dark/28 backdrop-blur-sm dark:bg-black/60"
++          onClick={onClose}
++        >
++          <motion.aside
++            initial={{ x: "100%" }}
++            animate={{ x: 0 }}
++            exit={{ x: "100%" }}
++            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
++            className="absolute right-0 top-0 h-full w-full max-w-2xl overflow-y-auto border-l border-rose/12 bg-white/98 shadow-soft dark:border-white/8 dark:bg-[#141216]"
++            onClick={(e) => e.stopPropagation()}
++          >
++            {children}
++          </motion.aside>
++        </motion.div>
++      )}
++    </AnimatePresence>
++  );
++}
++
++// Campos de formulário simples reutilizáveis
++export function Field({
++  label,
++  children,
++  span = 1,
++}: {
++  label: string;
++  children: ReactNode;
++  span?: 1 | 2;
++}) {
++  return (
++    <div className={span === 2 ? "col-span-2" : "col-span-1"}>
++      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-clay/60 dark:text-white/50">
++        {label}
++      </label>
++      {children}
++    </div>
++  );
++}
++
++export const inputClass =
++  "w-full rounded-xl border border-rose/15 bg-white/70 px-3 py-2 text-sm text-clay outline-none placeholder:text-clay/40 focus:border-burgundy/40 focus:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white/85 dark:placeholder:text-white/30 dark:focus:border-white/25";
++
++export const selectClass = inputClass + " appearance-none pr-8";
+diff --git a/src/features/financeiro/components/ParcelaDetailDrawer.tsx b/src/features/financeiro/components/ParcelaDetailDrawer.tsx
+new file mode 100644
+index 0000000..f650338
+--- /dev/null
++++ b/src/features/financeiro/components/ParcelaDetailDrawer.tsx
+@@ -0,0 +1,258 @@
++"use client";
++
++import { useState, ReactNode } from "react";
++import {
++  ArrowDownToLine,
++  CircleDollarSign,
++  FileText,
++  Paperclip,
++  RefreshCw,
++  XCircle,
++  User,
++  Phone,
++  Receipt,
++  History,
++  Percent,
++  LucideIcon,
++} from "lucide-react";
++import { Button } from "@/components/ui/Button";
++import { cn } from "@/lib/utils";
++import { Drawer } from "./Modal";
++import { StatusBadge, FormaPagamentoBadge, OrigemBadge } from "./badges";
++import { formatCurrency, formatCPF, formatDateBR, formatDateTimeBR, formatPhoneBR } from "../utils";
++import {
++  RegistrarRecebimentoDialog,
++  NegociarDialog,
++  CancelarDialog,
++  AnexarComprovanteDialog,
++} from "./dialogs";
++import { useComissoesByParcela } from "../hooks";
++import { STATUS_PARCELA, Parcela } from "../types";
++
++const TABS = [
++  { id: "detalhes", label: "Detalhes", Icon: FileText },
++  { id: "recebimento", label: "Recebimento", Icon: CircleDollarSign },
++  { id: "comissoes", label: "Comissões", Icon: Percent },
++  { id: "comprovantes", label: "Comprovantes", Icon: Paperclip },
++] as const;
++
++type TabId = (typeof TABS)[number]["id"];
++
++export default function ParcelaDetailDrawer({
++  parcela,
++  open,
++  onOpenChange,
++}: {
++  parcela: Parcela | null;
++  open: boolean;
++  onOpenChange: (open: boolean) => void;
++}) {
++  const [tab, setTab] = useState<TabId>("detalhes");
++  const [dlgReceb, setDlgReceb] = useState(false);
++  const [dlgNeg, setDlgNeg] = useState(false);
++  const [dlgCancel, setDlgCancel] = useState(false);
++  const [dlgComp, setDlgComp] = useState(false);
++
++  const { data: comissoes } = useComissoesByParcela(parcela?.id);
++  const podeReceber =
++    !!parcela &&
++    parcela.status !== STATUS_PARCELA.recebido &&
++    parcela.status !== STATUS_PARCELA.cancelado;
++
++  return (
++    <>
++      <Drawer open={open} onClose={() => onOpenChange(false)}>
++        {parcela && (
++          <div data-testid="parcela-drawer">
++            <div className="border-b border-rose/10 bg-blush/25 px-6 pt-5 pb-4 dark:border-white/8 dark:bg-white/[0.03]">
++              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-clay/55 dark:text-white/45">
++                Parcela {parcela.numero}/{parcela.totalParcelas} · {parcela.clienteContrato}
++              </p>
++              <h2 className="mt-1 text-2xl font-semibold tabular-nums tracking-[-0.02em] text-burgundy dark:text-[#f0d9d4]">
++                {formatCurrency(parcela.valor)}
++              </h2>
++              <div className="mt-3 flex flex-wrap items-center gap-2">
++                <StatusBadge status={parcela.status} />
++                <OrigemBadge origem={parcela.origem} />
++              </div>
++              <div className="mt-4 flex flex-wrap gap-2">
++                <Button
++                  size="sm"
++                  onClick={() => setDlgReceb(true)}
++                  disabled={!podeReceber}
++                  data-testid="btn-registrar-recebimento"
++                >
++                  <ArrowDownToLine className="h-3.5 w-3.5" /> Registrar recebimento
++                </Button>
++                <Button size="sm" variant="secondary" onClick={() => setDlgNeg(true)}>
++                  <RefreshCw className="h-3.5 w-3.5" /> Negociar
++                </Button>
++                <Button size="sm" variant="secondary" onClick={() => setDlgComp(true)}>
++                  <Paperclip className="h-3.5 w-3.5" /> Anexar
++                </Button>
++                <Button size="sm" variant="danger" onClick={() => setDlgCancel(true)}>
++                  <XCircle className="h-3.5 w-3.5" /> Cancelar
++                </Button>
++              </div>
++            </div>
++
++            <div className="border-b border-rose/8 px-6 dark:border-white/6">
++              <div className="flex gap-1 overflow-x-auto">
++                {TABS.map((t) => (
++                  <button
++                    key={t.id}
++                    onClick={() => setTab(t.id)}
++                    className={cn(
++                      "inline-flex items-center gap-1.5 border-b-2 px-3 py-3 text-xs font-medium whitespace-nowrap transition-colors",
++                      tab === t.id
++                        ? "border-burgundy text-burgundy dark:border-[#e8bcbc] dark:text-[#f0d9d4]"
++                        : "border-transparent text-clay/60 hover:text-burgundy dark:text-white/50",
++                    )}
++                  >
++                    <t.Icon className="h-3.5 w-3.5" />
++                    {t.label}
++                  </button>
++                ))}
++              </div>
++            </div>
++
++            <div className="space-y-4 p-6">
++              {tab === "detalhes" && (
++                <>
++                  <SectionCard title="Cliente" icon={User}>
++                    <Info label="Nome" value={parcela.clienteNome} />
++                    <Info label="CPF" value={formatCPF(parcela.clienteCpf)} />
++                    <Info label="Contrato" value={parcela.clienteContrato} />
++                    <Info
++                      label="Contato"
++                      value={
++                        <span className="inline-flex items-center gap-1">
++                          <Phone className="h-3 w-3" />
++                          {formatPhoneBR(parcela.clienteTelefone)}
++                        </span>
++                      }
++                    />
++                  </SectionCard>
++                  <SectionCard title="Parcela" icon={Receipt}>
++                    <Info label="Descrição" value={parcela.descricao} span={2} />
++                    <Info label="Número" value={`${parcela.numero}/${parcela.totalParcelas}`} />
++                    <Info label="Valor" value={formatCurrency(parcela.valor)} />
++                    <Info label="Vencimento" value={formatDateBR(parcela.vencimento)} />
++                    <Info label="Status" value={<StatusBadge status={parcela.status} />} />
++                  </SectionCard>
++                </>
++              )}
++
++              {tab === "recebimento" && (
++                <SectionCard title="Recebimento" icon={CircleDollarSign}>
++                  <Info label="Forma" value={<FormaPagamentoBadge forma={parcela.formaPagamento} />} />
++                  <Info label="Origem" value={<OrigemBadge origem={parcela.origem} />} />
++                  <Info label="Data" value={parcela.recebidoEm ? formatDateTimeBR(parcela.recebidoEm) : "—"} />
++                  <Info label="Valor recebido" value={parcela.valorRecebido ? formatCurrency(parcela.valorRecebido) : "—"} />
++                  {parcela.observacoes && (
++                    <Info label="Observações" value={parcela.observacoes} span={2} />
++                  )}
++                </SectionCard>
++              )}
++
++              {tab === "comissoes" && (
++                <div className="space-y-2">
++                  {(comissoes ?? []).length === 0 && (
++                    <p className="text-xs text-clay/60 dark:text-white/50">
++                      Nenhuma comissão vinculada a esta parcela.
++                    </p>
++                  )}
++                  {(comissoes ?? []).map((c) => (
++                    <div
++                      key={c.id}
++                      className="flex items-center justify-between rounded-2xl border border-rose/10 bg-white/70 p-3 dark:border-white/8 dark:bg-white/4"
++                    >
++                      <div>
++                        <div className="text-sm font-semibold text-burgundy dark:text-[#f0d9d4]">
++                          {c.vendedora}
++                        </div>
++                        <div className="text-[10px] uppercase tracking-[0.14em] text-clay/55 dark:text-white/45">
++                          {c.percentual}% sobre {formatCurrency(parcela.valor)}
++                        </div>
++                      </div>
++                      <div className="text-right">
++                        <div className="text-sm font-semibold tabular-nums text-clay dark:text-white/85">
++                          {formatCurrency(c.valor)}
++                        </div>
++                        <div className="text-[10px] uppercase tracking-[0.12em] text-clay/60 dark:text-white/45">
++                          {c.status.replace(/_/g, " ")}
++                        </div>
++                      </div>
++                    </div>
++                  ))}
++                  <p className="pt-2 text-[10px] text-clay/45 dark:text-white/35">
++                    ⚠️ A lógica real de comissões existente não é alterada nesta etapa.
++                  </p>
++                </div>
++              )}
++
++              {tab === "comprovantes" && (
++                <div className="space-y-2">
++                  {(parcela.comprovantes || []).length === 0 && (
++                    <p className="text-xs text-clay/60 dark:text-white/50">Nenhum comprovante anexado.</p>
++                  )}
++                  {(parcela.comprovantes || []).map((c) => (
++                    <div
++                      key={c.id}
++                      className="flex items-center justify-between rounded-2xl border border-rose/10 bg-white/70 p-3 dark:border-white/8 dark:bg-white/4"
++                    >
++                      <div className="flex items-center gap-3">
++                        <Paperclip className="h-4 w-4 text-burgundy/60 dark:text-[#d9a5a3]" />
++                        <div>
++                          <div className="text-sm font-medium text-clay dark:text-white/85">{c.nome}</div>
++                          <div className="text-[10px] uppercase tracking-[0.14em] text-clay/55 dark:text-white/45">
++                            {formatDateBR(c.data)} · {c.origem} · {c.status.replace(/_/g, " ")}
++                          </div>
++                        </div>
++                      </div>
++                    </div>
++                  ))}
++                </div>
++              )}
++
++              <p className="mt-4 flex items-center gap-2 text-[10px] text-clay/45 dark:text-white/35">
++                <History className="h-3 w-3" />
++                Ao registrar recebimento, histórico e comissões relacionadas são atualizados automaticamente.
++              </p>
++            </div>
++          </div>
++        )}
++      </Drawer>
++
++      <RegistrarRecebimentoDialog parcela={parcela} open={dlgReceb} onOpenChange={setDlgReceb} />
++      <NegociarDialog parcela={parcela} open={dlgNeg} onOpenChange={setDlgNeg} />
++      <CancelarDialog parcela={parcela} open={dlgCancel} onOpenChange={setDlgCancel} />
++      <AnexarComprovanteDialog parcela={parcela} open={dlgComp} onOpenChange={setDlgComp} />
++    </>
++  );
++}
++
++function SectionCard({ title, icon: Icon, children }: { title: string; icon: LucideIcon; children: ReactNode }) {
++  return (
++    <div className="overflow-hidden rounded-2xl border border-rose/10 dark:border-white/8">
++      <div className="flex items-center gap-2 border-b border-rose/8 bg-blush/25 px-4 py-2 dark:border-white/6 dark:bg-white/[0.03]">
++        <Icon className="h-3.5 w-3.5 text-burgundy/60 dark:text-[#d9a5a3]" />
++        <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-clay/60 dark:text-white/50">
++          {title}
++        </span>
++      </div>
++      <div className="grid grid-cols-2 gap-x-4 gap-y-3 bg-white/70 p-4 dark:bg-white/2">{children}</div>
++    </div>
++  );
++}
++
++function Info({ label, value, span = 1 }: { label: string; value: ReactNode; span?: 1 | 2 }) {
++  return (
++    <div className={span === 2 ? "col-span-2" : "col-span-1"}>
++      <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-clay/55 dark:text-white/45">
++        {label}
++      </div>
++      <div className="text-sm font-medium text-clay dark:text-white/85">{value}</div>
++    </div>
++  );
++}
+diff --git a/src/features/financeiro/components/badges.tsx b/src/features/financeiro/components/badges.tsx
+new file mode 100644
+index 0000000..9e70224
+--- /dev/null
++++ b/src/features/financeiro/components/badges.tsx
+@@ -0,0 +1,141 @@
++"use client";
++
++import { cn } from "@/lib/utils";
++import {
++  CheckCircle2,
++  AlertTriangle,
++  Clock,
++  RefreshCw,
++  XCircle,
++  Landmark,
++  Wallet,
++  CreditCard,
++  Receipt,
++  Banknote,
++  Building2,
++  ShieldCheck,
++  Hourglass,
++  LucideIcon,
++} from "lucide-react";
++import {
++  StatusParcela,
++  STATUS_PARCELA,
++  STATUS_LABEL,
++  FormaPagamento,
++  FORMA_LABEL,
++  Origem,
++  ORIGEM_LABEL,
++  IntegracaoStatus,
++  INTEGRACAO_STATUS_LABEL,
++} from "../types";
++
++const STATUS_STYLE: Record<StatusParcela, { className: string; Icon: LucideIcon }> = {
++  [STATUS_PARCELA.pendente]: {
++    className:
++      "bg-gold/12 text-clay border-gold/30 dark:bg-gold/20 dark:text-[#e8dcda] dark:border-gold/30",
++    Icon: Clock,
++  },
++  [STATUS_PARCELA.recebido]: {
++    className:
++      "bg-success/12 text-success border-success/25 dark:bg-success/22 dark:text-[#e6f2ea] dark:border-success/40",
++    Icon: CheckCircle2,
++  },
++  [STATUS_PARCELA.atrasado]: {
++    className:
++      "bg-alert/10 text-alert border-alert/25 dark:bg-alert/22 dark:text-[#ffe4e4] dark:border-alert/40",
++    Icon: AlertTriangle,
++  },
++  [STATUS_PARCELA.aguardando]: {
++    className:
++      "bg-blush text-burgundy border-rose/25 dark:bg-white/8 dark:text-[#f0d9d4] dark:border-white/12",
++    Icon: Hourglass,
++  },
++  [STATUS_PARCELA.negociado]: {
++    className:
++      "bg-burgundy/8 text-burgundy border-burgundy/20 dark:bg-white/6 dark:text-[#e8bcbc] dark:border-white/12",
++    Icon: RefreshCw,
++  },
++  [STATUS_PARCELA.cancelado]: {
++    className:
++      "bg-clay/10 text-clay/70 border-clay/15 dark:bg-white/4 dark:text-white/50 dark:border-white/8",
++    Icon: XCircle,
++  },
++};
++
++export function StatusBadge({ status, testId }: { status: StatusParcela; testId?: string }) {
++  const s = STATUS_STYLE[status];
++  const Icon = s.Icon;
++  return (
++    <span
++      className={cn(
++        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]",
++        s.className,
++      )}
++      data-testid={testId || `status-badge-${status}`}
++    >
++      <Icon className="h-3 w-3" />
++      {STATUS_LABEL[status]}
++    </span>
++  );
++}
++
++const FORMA_ICON: Record<FormaPagamento, LucideIcon> = {
++  boleto: Receipt,
++  pix: Banknote,
++  cartao_credito: CreditCard,
++  comprovante_manual: ShieldCheck,
++  dinheiro: Wallet,
++};
++
++export function FormaPagamentoBadge({ forma }: { forma: FormaPagamento }) {
++  const Icon = FORMA_ICON[forma] ?? Wallet;
++  return (
++    <span className="inline-flex items-center gap-1.5 text-xs text-clay dark:text-[#d5c8c6]">
++      <Icon className="h-3.5 w-3.5 text-burgundy/60 dark:text-[#d9a5a3]" />
++      {FORMA_LABEL[forma] ?? "—"}
++    </span>
++  );
++}
++
++const ORIGEM_STYLE: Record<Origem, { className: string; Icon: LucideIcon }> = {
++  conta_azul: { className: "border-blue-400/40 bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-200", Icon: Building2 },
++  mercado_pago: { className: "border-gold/40 bg-gold/15 text-clay dark:bg-gold/22 dark:text-[#f5dcbf]", Icon: Wallet },
++  banco: { className: "border-emerald-400/30 bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/18 dark:text-emerald-200", Icon: Landmark },
++  manual: { className: "border-clay/20 bg-clay/8 text-clay dark:bg-white/6 dark:text-white/68", Icon: ShieldCheck },
++};
++
++export function OrigemBadge({ origem }: { origem: Origem }) {
++  const s = ORIGEM_STYLE[origem] ?? ORIGEM_STYLE.manual;
++  const Icon = s.Icon;
++  return (
++    <span
++      className={cn(
++        "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium",
++        s.className,
++      )}
++    >
++      <Icon className="h-3 w-3" />
++      {ORIGEM_LABEL[origem] ?? "—"}
++    </span>
++  );
++}
++
++const INT_STYLE: Record<IntegracaoStatus, string> = {
++  em_preparacao: "bg-gold/15 text-clay border-gold/35 dark:bg-gold/22 dark:text-[#f5dcbf]",
++  planejado: "bg-clay/8 text-clay border-clay/20 dark:bg-white/6 dark:text-white/60",
++  nao_conectado: "bg-alert/10 text-alert border-alert/25",
++  em_desenvolvimento: "bg-burgundy/8 text-burgundy border-burgundy/20",
++};
++
++export function IntegracaoStatusBadge({ status }: { status: IntegracaoStatus }) {
++  return (
++    <span
++      className={cn(
++        "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]",
++        INT_STYLE[status],
++      )}
++    >
++      {INTEGRACAO_STATUS_LABEL[status]}
++    </span>
++  );
++}
+diff --git a/src/features/financeiro/components/dialogs.tsx b/src/features/financeiro/components/dialogs.tsx
+new file mode 100644
+index 0000000..730b840
+--- /dev/null
++++ b/src/features/financeiro/components/dialogs.tsx
+@@ -0,0 +1,259 @@
++"use client";
++
++import { useEffect, useState } from "react";
++import { toast } from "sonner";
++import { Button } from "@/components/ui/Button";
++import { Modal, Field, inputClass, selectClass } from "./Modal";
++import { contasReceberService } from "../services";
++import { FORMA_LABEL, FORMA_PAGAMENTO, ORIGEM, ORIGEM_LABEL, Parcela, FormaPagamento, Origem } from "../types";
++import { formatCurrency } from "../utils";
++
++interface DialogProps {
++  parcela: Parcela | null;
++  open: boolean;
++  onOpenChange: (open: boolean) => void;
++}
++
++export function RegistrarRecebimentoDialog({ parcela, open, onOpenChange }: DialogProps) {
++  const [valor, setValor] = useState<string>("");
++  const [data, setData] = useState<string>(new Date().toISOString().slice(0, 10));
++  const [forma, setForma] = useState<FormaPagamento>(FORMA_PAGAMENTO.pix);
++  const [origem, setOrigem] = useState<Origem>(ORIGEM.manual);
++  const [obs, setObs] = useState<string>("");
++  const [saving, setSaving] = useState(false);
++
++  useEffect(() => {
++    if (parcela) {
++      setValor(String(parcela.valor));
++      setForma(parcela.formaPagamento);
++      setOrigem(parcela.origem);
++      setObs("");
++      setData(new Date().toISOString().slice(0, 10));
++    }
++  }, [parcela]);
++
++  const submit = async () => {
++    if (!parcela) return;
++    setSaving(true);
++    try {
++      await contasReceberService.registrarRecebimento(parcela.id, {
++        valor: Number(valor),
++        data: new Date(data).toISOString(),
++        formaPagamento: forma,
++        origem,
++        observacoes: obs,
++      });
++      toast.success("Recebimento registrado", {
++        description: `Parcela ${parcela.numero}/${parcela.totalParcelas} de ${parcela.clienteNome} marcada como recebida.`,
++      });
++      onOpenChange(false);
++    } catch {
++      toast.error("Erro ao registrar recebimento");
++    } finally {
++      setSaving(false);
++    }
++  };
++
++  return (
++    <Modal
++      open={open}
++      onClose={() => onOpenChange(false)}
++      title="Registrar recebimento"
++      description={parcela ? `Parcela ${parcela.numero}/${parcela.totalParcelas} — ${parcela.clienteNome}` : ""}
++      footer={
++        <>
++          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>Cancelar</Button>
++          <Button size="sm" onClick={submit} loading={saving} data-testid="btn-confirmar-recebimento">
++            Confirmar
++          </Button>
++        </>
++      }
++    >
++      <div className="grid grid-cols-2 gap-3">
++        <Field label="Valor recebido">
++          <input
++            type="number"
++            step="0.01"
++            className={inputClass}
++            value={valor}
++            onChange={(e) => setValor(e.target.value)}
++            data-testid="input-valor-recebido"
++          />
++          <p className="mt-1 text-[10px] text-clay/50 dark:text-white/40">
++            Original: {parcela ? formatCurrency(parcela.valor) : "—"}
++          </p>
++        </Field>
++        <Field label="Data">
++          <input type="date" className={inputClass} value={data} onChange={(e) => setData(e.target.value)} />
++        </Field>
++        <Field label="Forma de pagamento">
++          <select
++            className={selectClass}
++            value={forma}
++            onChange={(e) => setForma(e.target.value as FormaPagamento)}
++            data-testid="select-forma-pagamento"
++          >
++            {Object.entries(FORMA_LABEL).map(([k, v]) => (
++              <option key={k} value={k}>{v}</option>
++            ))}
++          </select>
++        </Field>
++        <Field label="Origem">
++          <select className={selectClass} value={origem} onChange={(e) => setOrigem(e.target.value as Origem)}>
++            {Object.entries(ORIGEM_LABEL).map(([k, v]) => (
++              <option key={k} value={k}>{v}</option>
++            ))}
++          </select>
++        </Field>
++        <Field label="Observações" span={2}>
++          <textarea rows={3} className={inputClass} value={obs} onChange={(e) => setObs(e.target.value)} />
++        </Field>
++      </div>
++    </Modal>
++  );
++}
++
++export function NegociarDialog({ parcela, open, onOpenChange }: DialogProps) {
++  const [novoVencimento, setNovoVencimento] = useState("");
++  const [obs, setObs] = useState("");
++  const [saving, setSaving] = useState(false);
++
++  useEffect(() => {
++    if (parcela) {
++      setNovoVencimento(new Date(parcela.vencimento).toISOString().slice(0, 10));
++      setObs("");
++    }
++  }, [parcela]);
++
++  const submit = async () => {
++    if (!parcela) return;
++    setSaving(true);
++    try {
++      await contasReceberService.negociar(parcela.id, {
++        novoVencimento: new Date(novoVencimento).toISOString(),
++        observacoes: obs,
++      });
++      toast.success("Negociação registrada");
++      onOpenChange(false);
++    } catch {
++      toast.error("Erro ao negociar");
++    } finally {
++      setSaving(false);
++    }
++  };
++
++  return (
++    <Modal
++      open={open}
++      onClose={() => onOpenChange(false)}
++      title="Negociar parcela"
++      description="Ajuste o vencimento e registre observações."
++      footer={
++        <>
++          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>Voltar</Button>
++          <Button size="sm" onClick={submit} loading={saving}>Confirmar</Button>
++        </>
++      }
++    >
++      <div className="space-y-3">
++        <Field label="Novo vencimento">
++          <input type="date" className={inputClass} value={novoVencimento} onChange={(e) => setNovoVencimento(e.target.value)} />
++        </Field>
++        <Field label="Observações">
++          <textarea rows={3} className={inputClass} value={obs} onChange={(e) => setObs(e.target.value)} />
++        </Field>
++      </div>
++    </Modal>
++  );
++}
++
++export function CancelarDialog({ parcela, open, onOpenChange }: DialogProps) {
++  const [motivo, setMotivo] = useState("");
++  const [saving, setSaving] = useState(false);
++
++  const submit = async () => {
++    if (!parcela) return;
++    setSaving(true);
++    try {
++      await contasReceberService.cancelar(parcela.id, motivo);
++      toast.success("Parcela cancelada");
++      onOpenChange(false);
++      setMotivo("");
++    } catch {
++      toast.error("Erro ao cancelar");
++    } finally {
++      setSaving(false);
++    }
++  };
++
++  return (
++    <Modal
++      open={open}
++      onClose={() => onOpenChange(false)}
++      title="Cancelar parcela"
++      description="Esta ação altera o status da parcela para cancelada."
++      footer={
++        <>
++          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>Voltar</Button>
++          <Button variant="danger" size="sm" onClick={submit} loading={saving}>Cancelar parcela</Button>
++        </>
++      }
++    >
++      <Field label="Motivo">
++        <textarea rows={3} className={inputClass} value={motivo} onChange={(e) => setMotivo(e.target.value)} />
++      </Field>
++    </Modal>
++  );
++}
++
++export function AnexarComprovanteDialog({ parcela, open, onOpenChange }: DialogProps) {
++  const [nome, setNome] = useState("");
++  const [origem, setOrigem] = useState<Origem>(ORIGEM.manual);
++  const [saving, setSaving] = useState(false);
++
++  const submit = async () => {
++    if (!parcela) return;
++    setSaving(true);
++    try {
++      await contasReceberService.anexarComprovante(parcela.id, {
++        nome: nome || "comprovante.pdf",
++        origem,
++      });
++      toast.success("Comprovante anexado");
++      onOpenChange(false);
++      setNome("");
++    } catch {
++      toast.error("Erro ao anexar");
++    } finally {
++      setSaving(false);
++    }
++  };
++
++  return (
++    <Modal
++      open={open}
++      onClose={() => onOpenChange(false)}
++      title="Anexar comprovante"
++      description="Upload real será conectado ao storage do Sra. Luck em etapa futura."
++      footer={
++        <>
++          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>Fechar</Button>
++          <Button size="sm" onClick={submit} loading={saving}>Anexar</Button>
++        </>
++      }
++    >
++      <div className="space-y-3">
++        <Field label="Nome do arquivo">
++          <input type="text" placeholder="comprovante.pdf" className={inputClass} value={nome} onChange={(e) => setNome(e.target.value)} />
++        </Field>
++        <Field label="Origem">
++          <select className={selectClass} value={origem} onChange={(e) => setOrigem(e.target.value as Origem)}>
++            {Object.entries(ORIGEM_LABEL).map(([k, v]) => (
++              <option key={k} value={k}>{v}</option>
++            ))}
++          </select>
++        </Field>
++      </div>
++    </Modal>
++  );
++}
+diff --git a/src/features/financeiro/data/mockData.ts b/src/features/financeiro/data/mockData.ts
+new file mode 100644
+index 0000000..443f34a
+--- /dev/null
++++ b/src/features/financeiro/data/mockData.ts
+@@ -0,0 +1,250 @@
++// Fonte de dados MOCK temporária — isolada nesta camada.
++// Substituir por API real (Sra. Luck / Conta Azul / Mercado Pago) não deve
++// exigir alteração em componentes — apenas trocar o adapter em adapters/index.ts
++
++import {
++  Cliente,
++  Comissao,
++  EventoHistorico,
++  Integracao,
++  Parcela,
++  Recebimento,
++  SincronizacaoStatus,
++  STATUS_PARCELA,
++  FORMA_PAGAMENTO,
++  ORIGEM,
++  INTEGRACAO_STATUS,
++  HISTORICO_TIPOS,
++  FormaPagamento,
++  Origem,
++  StatusParcela,
++} from "../types";
++
++// ---------- Utilidades determinísticas ----------
++let _seed = 1337;
++const rand = (): number => {
++  _seed = (_seed * 9301 + 49297) % 233280;
++  return _seed / 233280;
++};
++const pick = <T,>(arr: readonly T[]): T => arr[Math.floor(rand() * arr.length)];
++const randInt = (min: number, max: number): number => Math.floor(rand() * (max - min + 1)) + min;
++
++const nomes = [
++  "Maria Silva", "Ana Beatriz Souza", "Camila Oliveira", "Juliana Ferreira",
++  "Fernanda Costa", "Patrícia Almeida", "Beatriz Lima", "Larissa Rodrigues",
++  "Amanda Martins", "Carolina Gomes", "Priscila Barbosa", "Renata Cardoso",
++  "Vanessa Ribeiro", "Tatiane Nunes", "Sabrina Pereira", "Isabela Araújo",
++  "Bruna Carvalho", "Débora Mendes", "Aline Teixeira", "Michele Rocha",
++] as const;
++
++const contatos = ["11 98123-4567", "11 97654-3210", "21 99123-4567", "31 98765-4321",
++  "41 99555-1122", "51 98333-2211", "61 97777-8899", "71 98111-2233"] as const;
++
++const descricoes = [
++  "Contrato de assessoria pré-nupcial",
++  "Consultoria de imagem — pacote completo",
++  "Pacote 6 meses de mentoria",
++  "Coaching executivo — trimestre",
++  "Programa transformação pessoal",
++  "Sessão premium de personal styling",
++  "Assinatura anual VIP",
++  "Consultoria de carreira",
++] as const;
++
++const paddedCPF = (n: string) => String(n).padStart(11, "0");
++
++const buildClientes = (): Cliente[] => {
++  const clientes: Cliente[] = [];
++  nomes.forEach((nome, i) => {
++    clientes.push({
++      id: `cli_${i + 1}`,
++      nome,
++      cpf: paddedCPF(String(10000000000 + i * 3717293)),
++      email: `${nome.toLowerCase().replace(/[^a-z]+/g, ".")}@example.com`,
++      telefone: pick(contatos),
++      contrato: `CT-2025-${String(i + 101).padStart(4, "0")}`,
++      criadoEm: new Date(2024, randInt(0, 11), randInt(1, 28)).toISOString(),
++    });
++  });
++  return clientes;
++};
++
++const CLIENTES = buildClientes();
++
++const buildParcelas = (): Parcela[] => {
++  const parcelas: Parcela[] = [];
++  const today = new Date();
++  let counter = 1;
++  const formas: FormaPagamento[] = Object.values(FORMA_PAGAMENTO);
++  const origens: Origem[] = Object.values(ORIGEM);
++
++  CLIENTES.forEach((cliente) => {
++    const totalParcelas = pick([3, 6, 12, 12, 6]);
++    const valorParcela = pick([490, 690, 890, 1200, 1490, 1990, 2490]);
++    const descricao = pick(descricoes);
++    const parcelasGeradas = randInt(2, Math.min(6, totalParcelas));
++    for (let n = 1; n <= parcelasGeradas; n++) {
++      const vencOffset = randInt(-60, 90);
++      const vencimento = new Date(today);
++      vencimento.setDate(today.getDate() + vencOffset);
++
++      let status: StatusParcela;
++      const r = rand();
++      if (vencOffset < -5) {
++        status = r < 0.65 ? STATUS_PARCELA.recebido : r < 0.9 ? STATUS_PARCELA.atrasado : STATUS_PARCELA.negociado;
++      } else if (vencOffset < 0) {
++        status = r < 0.4 ? STATUS_PARCELA.atrasado : r < 0.7 ? STATUS_PARCELA.pendente : STATUS_PARCELA.aguardando;
++      } else {
++        status = r < 0.75 ? STATUS_PARCELA.pendente : r < 0.9 ? STATUS_PARCELA.aguardando : STATUS_PARCELA.cancelado;
++      }
++
++      const forma = pick(formas);
++      const origem = pick(origens);
++      const recebidoEm =
++        status === STATUS_PARCELA.recebido
++          ? new Date(vencimento.getTime() + randInt(-3, 5) * 86400000).toISOString()
++          : null;
++
++      parcelas.push({
++        id: `par_${counter++}`,
++        clienteId: cliente.id,
++        clienteNome: cliente.nome,
++        clienteCpf: cliente.cpf,
++        clienteContrato: cliente.contrato,
++        clienteTelefone: cliente.telefone,
++        descricao,
++        numero: n,
++        totalParcelas,
++        valor: valorParcela,
++        valorRecebido: status === STATUS_PARCELA.recebido ? valorParcela : null,
++        vencimento: vencimento.toISOString(),
++        status,
++        formaPagamento: forma,
++        origem,
++        recebidoEm,
++        observacoes:
++          status === STATUS_PARCELA.negociado ? "Vencimento renegociado com a cliente." : "",
++        comprovantes:
++          status === STATUS_PARCELA.recebido && rand() > 0.5
++            ? [
++                {
++                  id: `cmp_${counter}`,
++                  nome: "comprovante.pdf",
++                  data: recebidoEm ?? new Date().toISOString(),
++                  origem,
++                  status: "validado",
++                },
++              ]
++            : [],
++      });
++    }
++  });
++
++  return parcelas;
++};
++
++const PARCELAS = buildParcelas();
++
++const vendedoras = ["Marina Duarte", "Helena Prado", "Cecília Vasques", "Rafaela Nunes"] as const;
++
++const COMISSOES: Comissao[] = PARCELAS.filter(() => rand() > 0.35).map((p, i) => ({
++  id: `com_${i + 1}`,
++  parcelaId: p.id,
++  clienteId: p.clienteId,
++  clienteNome: p.clienteNome,
++  vendedora: vendedoras[i % vendedoras.length],
++  percentual: pick([5, 8, 10, 12]),
++  valor: +(p.valor * pick([0.05, 0.08, 0.1, 0.12])).toFixed(2),
++  status:
++    p.status === STATUS_PARCELA.recebido
++      ? pick(["liberada", "paga"] as const)
++      : p.status === STATUS_PARCELA.cancelado
++      ? "cancelada"
++      : "aguardando_recebimento",
++  parcelaStatus: p.status,
++}));
++
++const INTEGRACOES: Integracao[] = [
++  {
++    id: "conta_azul",
++    nome: "Conta Azul",
++    descricao: "Principal integração financeira futura do Sra. Luck.",
++    status: INTEGRACAO_STATUS.em_preparacao,
++    ultimaSincronizacao: null,
++  },
++  {
++    id: "mercado_pago",
++    nome: "Mercado Pago",
++    descricao: "Pagamento por cartão de crédito.",
++    status: INTEGRACAO_STATUS.planejado,
++    ultimaSincronizacao: null,
++  },
++  {
++    id: "banco",
++    nome: "Banco / Boletos",
++    descricao: "Webhooks e baixa automática via banco.",
++    status: INTEGRACAO_STATUS.planejado,
++    ultimaSincronizacao: null,
++  },
++];
++
++const HISTORICO: EventoHistorico[] = [];
++let hi = 1;
++PARCELAS.slice(0, 40).forEach((p) => {
++  HISTORICO.push({
++    id: `hist_${hi++}`,
++    tipo: HISTORICO_TIPOS.parcela_criada,
++    descricao: `Parcela ${p.numero}/${p.totalParcelas} criada para ${p.clienteNome}`,
++    data: new Date(new Date(p.vencimento).getTime() - 40 * 86400000).toISOString(),
++    parcelaId: p.id,
++    clienteId: p.clienteId,
++  });
++  if (p.status === STATUS_PARCELA.recebido && p.recebidoEm) {
++    HISTORICO.push({
++      id: `hist_${hi++}`,
++      tipo: HISTORICO_TIPOS.recebimento,
++      descricao: `Recebimento confirmado da parcela ${p.numero}/${p.totalParcelas} de ${p.clienteNome}`,
++      data: p.recebidoEm,
++      parcelaId: p.id,
++      clienteId: p.clienteId,
++    });
++  }
++});
++HISTORICO.push({
++  id: `hist_${hi++}`,
++  tipo: HISTORICO_TIPOS.sincronizacao,
++  descricao: "Sincronização preparada aguardando conexão com Conta Azul.",
++  data: new Date().toISOString(),
++});
++HISTORICO.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
++
++const SINCRONIZACAO: SincronizacaoStatus = {
++  ultima: null,
++  clientesSincronizados: 0,
++  parcelasSincronizadas: 0,
++  recebimentosSincronizados: 0,
++  pendencias: PARCELAS.length,
++  erros: 0,
++};
++
++const RECEBIMENTOS_DERIVADOS: Recebimento[] = PARCELAS.filter((p) => p.status === STATUS_PARCELA.recebido).map((p) => ({
++  id: `rec_${p.id}`,
++  parcelaId: p.id,
++  clienteId: p.clienteId,
++  clienteNome: p.clienteNome,
++  descricao: p.descricao,
++  valor: p.valorRecebido ?? p.valor,
++  data: p.recebidoEm,
++  formaPagamento: p.formaPagamento,
++  origem: p.origem,
++}));
++
++export const MOCK = {
++  clientes: CLIENTES,
++  parcelas: PARCELAS,
++  comissoes: COMISSOES,
++  recebimentos: RECEBIMENTOS_DERIVADOS,
++  integracoes: INTEGRACOES,
++  historico: HISTORICO,
++  sincronizacao: SINCRONIZACAO,
++};
+diff --git a/src/features/financeiro/hooks.ts b/src/features/financeiro/hooks.ts
+new file mode 100644
+index 0000000..a757473
+--- /dev/null
++++ b/src/features/financeiro/hooks.ts
+@@ -0,0 +1,57 @@
++"use client";
++
++import { useCallback, useEffect, useState } from "react";
++import dataSource from "./adapters";
++import {
++  contasReceberService,
++  clientesService,
++  recebimentosService,
++  comissoesService,
++  integracoesService,
++  historicoService,
++  visaoGeralService,
++} from "./services";
++
++function useLive<T>(loader: () => Promise<T>, deps: React.DependencyList = []) {
++  const [data, setData] = useState<T | null>(null);
++  const [loading, setLoading] = useState(true);
++  const [error, setError] = useState<Error | null>(null);
++
++  const load = useCallback(async () => {
++    try {
++      setLoading(true);
++      const res = await loader();
++      setData(res);
++      setError(null);
++    } catch (e) {
++      setError(e as Error);
++    } finally {
++      setLoading(false);
++    }
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, deps);
++
++  useEffect(() => {
++    load();
++    const unsub = dataSource.subscribe(load);
++    return () => {
++      unsub();
++    };
++  }, [load]);
++
++  return { data, loading, error, refetch: load };
++}
++
++export const useContasReceber = () => useLive(() => contasReceberService.list(), []);
++export const useParcela = (id: string | null | undefined) =>
++  useLive(() => (id ? contasReceberService.get(id) : Promise.resolve(null)), [id]);
++export const useClientes = () => useLive(() => clientesService.list(), []);
++export const useClienteResumo = (id: string) => useLive(() => clientesService.resumo(id), [id]);
++export const useRecebimentos = () => useLive(() => recebimentosService.list(), []);
++export const useComissoes = () => useLive(() => comissoesService.list(), []);
++export const useComissoesByParcela = (parcelaId: string | null | undefined) =>
++  useLive(() => (parcelaId ? comissoesService.byParcela(parcelaId) : Promise.resolve([])), [parcelaId]);
++export const useIntegracoes = () => useLive(() => integracoesService.list(), []);
++export const useSincronizacao = () => useLive(() => integracoesService.sincronizacao(), []);
++export const useHistorico = () => useLive(() => historicoService.list(), []);
++export const useVisaoGeral = () => useLive(() => visaoGeralService.carregar(), []);
+diff --git a/src/features/financeiro/services.ts b/src/features/financeiro/services.ts
+new file mode 100644
+index 0000000..eec193f
+--- /dev/null
++++ b/src/features/financeiro/services.ts
+@@ -0,0 +1,165 @@
++// Fachada de serviços do módulo Financeiro.
++// Componentes/hooks consomem SOMENTE estes services — nunca acessam adapters diretamente.
++
++import dataSource from "./adapters";
++import {
++  Cliente,
++  Parcela,
++  STATUS_PARCELA,
++} from "./types";
++import { isOverdue } from "./utils";
++
++export const contasReceberService = {
++  list: () => dataSource.listParcelas(),
++  get: (id: string) => dataSource.getParcela(id),
++  registrarRecebimento: (id: string, payload: Parameters<typeof dataSource.registrarRecebimento>[1]) =>
++    dataSource.registrarRecebimento(id, payload),
++  atualizar: (id: string, patch: Partial<Parcela>) => dataSource.atualizarParcela(id, patch),
++  negociar: (id: string, payload: { novoVencimento?: string; observacoes?: string }) =>
++    dataSource.negociarParcela(id, payload),
++  cancelar: (id: string, motivo?: string) => dataSource.cancelarParcela(id, motivo),
++  anexarComprovante: (id: string, payload: { nome?: string; origem?: string }) =>
++    dataSource.anexarComprovante(id, payload),
++};
++
++export interface ClienteResumo {
++  cliente: Cliente;
++  parcelas: Parcela[];
++  totalContratado: number;
++  totalRecebido: number;
++  saldoPendente: number;
++  pagas: number;
++  pendentes: number;
++  atrasadas: number;
++  totalParcelas: number;
++  ultimoPagamento: string | null;
++  proximoVencimento: string | null;
++  situacao: "em_dia" | "com_pendencias" | "inadimplente" | "quitado";
++}
++
++export const clientesService = {
++  list: () => dataSource.listClientes(),
++  get: (id: string) => dataSource.getCliente(id),
++  parcelasByCliente: (id: string) => dataSource.getParcelasByCliente(id),
++  async resumo(clienteId: string): Promise<ClienteResumo | null> {
++    const [cliente, parcelas] = await Promise.all([
++      dataSource.getCliente(clienteId),
++      dataSource.getParcelasByCliente(clienteId),
++    ]);
++    if (!cliente) return null;
++    const totalContratado = parcelas.reduce((s, p) => s + p.valor, 0);
++    const totalRecebido = parcelas
++      .filter((p) => p.status === STATUS_PARCELA.recebido)
++      .reduce((s, p) => s + (p.valorRecebido ?? p.valor), 0);
++    const saldoPendente = parcelas
++      .filter((p) => p.status !== STATUS_PARCELA.recebido && p.status !== STATUS_PARCELA.cancelado)
++      .reduce((s, p) => s + p.valor, 0);
++    const pagas = parcelas.filter((p) => p.status === STATUS_PARCELA.recebido).length;
++    const atrasadas = parcelas.filter((p) => isOverdue(p) || p.status === STATUS_PARCELA.atrasado).length;
++    const pendentes = parcelas.filter(
++      (p) => p.status === STATUS_PARCELA.pendente || p.status === STATUS_PARCELA.aguardando,
++    ).length;
++    const ultimoPagamento =
++      parcelas
++        .filter((p) => p.recebidoEm)
++        .sort((a, b) => new Date(b.recebidoEm!).getTime() - new Date(a.recebidoEm!).getTime())[0]
++        ?.recebidoEm ?? null;
++    const proximoVencimento =
++      parcelas
++        .filter((p) => p.status !== STATUS_PARCELA.recebido && p.status !== STATUS_PARCELA.cancelado)
++        .sort((a, b) => new Date(a.vencimento).getTime() - new Date(b.vencimento).getTime())[0]
++        ?.vencimento ?? null;
++
++    let situacao: ClienteResumo["situacao"] = "em_dia";
++    if (atrasadas > 0) situacao = "inadimplente";
++    else if (pendentes > 0) situacao = "com_pendencias";
++    if (parcelas.length > 0 && pagas === parcelas.length) situacao = "quitado";
++
++    return {
++      cliente,
++      parcelas,
++      totalContratado,
++      totalRecebido,
++      saldoPendente,
++      pagas,
++      pendentes,
++      atrasadas,
++      totalParcelas: parcelas.length,
++      ultimoPagamento,
++      proximoVencimento,
++      situacao,
++    };
++  },
++};
++
++export const recebimentosService = { list: () => dataSource.listRecebimentos() };
++export const comissoesService = {
++  list: () => dataSource.listComissoes(),
++  byParcela: (parcelaId: string) => dataSource.getComissoesByParcela(parcelaId),
++};
++export const integracoesService = {
++  list: () => dataSource.listIntegracoes(),
++  sincronizacao: () => dataSource.getSincronizacao(),
++};
++export const historicoService = { list: () => dataSource.listHistorico() };
++
++export const visaoGeralService = {
++  async carregar() {
++    const [parcelas, recebimentos, comissoes] = await Promise.all([
++      dataSource.listParcelas(),
++      dataSource.listRecebimentos(),
++      dataSource.listComissoes(),
++    ]);
++    const totalReceber = parcelas
++      .filter((p) => p.status !== STATUS_PARCELA.recebido && p.status !== STATUS_PARCELA.cancelado)
++      .reduce((s, p) => s + p.valor, 0);
++    const now = new Date();
++    const totalRecebidoMes = recebimentos
++      .filter((r) => {
++        if (!r.data) return false;
++        const d = new Date(r.data);
++        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
++      })
++      .reduce((s, r) => s + r.valor, 0);
++    const atrasadas = parcelas.filter((p) => isOverdue(p) || p.status === STATUS_PARCELA.atrasado);
++    const totalAtrasado = atrasadas.reduce((s, p) => s + p.valor, 0);
++    const proximas = parcelas
++      .filter((p) => p.status !== STATUS_PARCELA.recebido && p.status !== STATUS_PARCELA.cancelado)
++      .sort((a, b) => new Date(a.vencimento).getTime() - new Date(b.vencimento).getTime())
++      .slice(0, 6);
++    const serie: { mes: string; recebido: number; previsto: number }[] = [];
++    for (let i = 5; i >= 0; i--) {
++      const ref = new Date(now.getFullYear(), now.getMonth() - i, 1);
++      const label = ref.toLocaleDateString("pt-BR", { month: "short" });
++      const recebidoMes = recebimentos
++        .filter(
++          (r) =>
++            r.data &&
++            new Date(r.data).getMonth() === ref.getMonth() &&
++            new Date(r.data).getFullYear() === ref.getFullYear(),
++        )
++        .reduce((s, r) => s + r.valor, 0);
++      const previstoMes = parcelas
++        .filter(
++          (p) =>
++            new Date(p.vencimento).getMonth() === ref.getMonth() &&
++            new Date(p.vencimento).getFullYear() === ref.getFullYear(),
++        )
++        .reduce((s, p) => s + p.valor, 0);
++      serie.push({ mes: label, recebido: recebidoMes, previsto: previstoMes });
++    }
++    const comissoesLiberadas = comissoes
++      .filter((c) => c.status === "liberada" || c.status === "paga")
++      .reduce((s, c) => s + c.valor, 0);
++    return {
++      totalReceber,
++      totalRecebidoMes,
++      totalAtrasado,
++      qtdAtrasadas: atrasadas.length,
++      proximas,
++      serie,
++      comissoesLiberadas,
++      qtdParcelas: parcelas.length,
++    };
++  },
++};
+diff --git a/src/features/financeiro/types.ts b/src/features/financeiro/types.ts
+new file mode 100644
+index 0000000..813c268
+--- /dev/null
++++ b/src/features/financeiro/types.ts
+@@ -0,0 +1,169 @@
++// Tipos e enums do módulo Financeiro
++export const STATUS_PARCELA = {
++  pendente: "pendente",
++  recebido: "recebido",
++  atrasado: "atrasado",
++  aguardando: "aguardando",
++  negociado: "negociado",
++  cancelado: "cancelado",
++} as const;
++
++export type StatusParcela = (typeof STATUS_PARCELA)[keyof typeof STATUS_PARCELA];
++
++export const STATUS_LABEL: Record<StatusParcela, string> = {
++  pendente: "Pendente",
++  recebido: "Recebido",
++  atrasado: "Em atraso",
++  aguardando: "Aguardando confirmação",
++  negociado: "Negociado",
++  cancelado: "Cancelado",
++};
++
++export const FORMA_PAGAMENTO = {
++  boleto: "boleto",
++  pix: "pix",
++  cartao_credito: "cartao_credito",
++  comprovante_manual: "comprovante_manual",
++  dinheiro: "dinheiro",
++} as const;
++export type FormaPagamento = (typeof FORMA_PAGAMENTO)[keyof typeof FORMA_PAGAMENTO];
++export const FORMA_LABEL: Record<FormaPagamento, string> = {
++  boleto: "Boleto bancário",
++  pix: "Pix",
++  cartao_credito: "Cartão de crédito",
++  comprovante_manual: "Comprovante manual",
++  dinheiro: "Dinheiro",
++};
++
++export const ORIGEM = {
++  conta_azul: "conta_azul",
++  mercado_pago: "mercado_pago",
++  banco: "banco",
++  manual: "manual",
++} as const;
++export type Origem = (typeof ORIGEM)[keyof typeof ORIGEM];
++export const ORIGEM_LABEL: Record<Origem, string> = {
++  conta_azul: "Conta Azul",
++  mercado_pago: "Mercado Pago",
++  banco: "Banco / Boleto",
++  manual: "Manual",
++};
++
++export const INTEGRACAO_STATUS = {
++  em_preparacao: "em_preparacao",
++  planejado: "planejado",
++  nao_conectado: "nao_conectado",
++  em_desenvolvimento: "em_desenvolvimento",
++} as const;
++export type IntegracaoStatus = (typeof INTEGRACAO_STATUS)[keyof typeof INTEGRACAO_STATUS];
++export const INTEGRACAO_STATUS_LABEL: Record<IntegracaoStatus, string> = {
++  em_preparacao: "Em preparação",
++  planejado: "Planejado",
++  nao_conectado: "Não conectado",
++  em_desenvolvimento: "Em desenvolvimento",
++};
++
++export const HISTORICO_TIPOS = {
++  cliente_criado: "cliente_criado",
++  parcela_criada: "parcela_criada",
++  parcela_alterada: "parcela_alterada",
++  recebimento: "recebimento",
++  baixa: "baixa",
++  cancelamento: "cancelamento",
++  negociacao: "negociacao",
++  integracao: "integracao",
++  webhook: "webhook",
++  sincronizacao: "sincronizacao",
++  comprovante: "comprovante",
++  comissao: "comissao",
++} as const;
++export type HistoricoTipo = (typeof HISTORICO_TIPOS)[keyof typeof HISTORICO_TIPOS];
++
++export interface Cliente {
++  id: string;
++  nome: string;
++  cpf: string;
++  email: string;
++  telefone: string;
++  contrato: string;
++  criadoEm: string;
++}
++
++export interface Comprovante {
++  id: string;
++  nome: string;
++  data: string;
++  origem: Origem | string;
++  status: string;
++}
++
++export interface Parcela {
++  id: string;
++  clienteId: string;
++  clienteNome: string;
++  clienteCpf: string;
++  clienteContrato: string;
++  clienteTelefone: string;
++  descricao: string;
++  numero: number;
++  totalParcelas: number;
++  valor: number;
++  valorRecebido: number | null;
++  vencimento: string;
++  status: StatusParcela;
++  formaPagamento: FormaPagamento;
++  origem: Origem;
++  recebidoEm: string | null;
++  observacoes: string;
++  comprovantes: Comprovante[];
++}
++
++export interface Comissao {
++  id: string;
++  parcelaId: string;
++  clienteId: string;
++  clienteNome: string;
++  vendedora: string;
++  percentual: number;
++  valor: number;
++  status: "liberada" | "paga" | "aguardando_recebimento" | "cancelada";
++  parcelaStatus: StatusParcela;
++}
++
++export interface Recebimento {
++  id: string;
++  parcelaId: string;
++  clienteId: string;
++  clienteNome: string;
++  descricao: string;
++  valor: number;
++  data: string | null;
++  formaPagamento: FormaPagamento;
++  origem: Origem;
++}
++
++export interface Integracao {
++  id: string;
++  nome: string;
++  descricao: string;
++  status: IntegracaoStatus;
++  ultimaSincronizacao: string | null;
++}
++
++export interface EventoHistorico {
++  id: string;
++  tipo: HistoricoTipo;
++  descricao: string;
++  data: string;
++  parcelaId?: string;
++  clienteId?: string;
++}
++
++export interface SincronizacaoStatus {
++  ultima: string | null;
++  clientesSincronizados: number;
++  parcelasSincronizadas: number;
++  recebimentosSincronizados: number;
++  pendencias: number;
++  erros: number;
++}
+diff --git a/src/features/financeiro/utils.ts b/src/features/financeiro/utils.ts
+new file mode 100644
+index 0000000..f1cb512
+--- /dev/null
++++ b/src/features/financeiro/utils.ts
+@@ -0,0 +1,57 @@
++// Utilitários de formatação para o módulo Financeiro (padrão BR)
++
++export const formatCurrency = (value: number | null | undefined): string => {
++  const n = Number(value ?? 0);
++  return n.toLocaleString("pt-BR", {
++    style: "currency",
++    currency: "BRL",
++    minimumFractionDigits: 2,
++    maximumFractionDigits: 2,
++  });
++};
++
++export const formatCurrencyCompact = (value: number | null | undefined): string => {
++  const n = Number(value ?? 0);
++  if (Math.abs(n) >= 1_000_000) return `R$ ${(n / 1_000_000).toFixed(1)}M`;
++  if (Math.abs(n) >= 1_000) return `R$ ${(n / 1_000).toFixed(1)}k`;
++  return formatCurrency(n);
++};
++
++export const formatDateBR = (isoOrDate: string | Date | null | undefined): string => {
++  if (!isoOrDate) return "—";
++  const d = typeof isoOrDate === "string" ? new Date(isoOrDate) : isoOrDate;
++  if (Number.isNaN(d.getTime())) return "—";
++  const dd = String(d.getDate()).padStart(2, "0");
++  const mm = String(d.getMonth() + 1).padStart(2, "0");
++  const yy = d.getFullYear();
++  return `${dd}/${mm}/${yy}`;
++};
++
++export const formatDateTimeBR = (isoOrDate: string | Date | null | undefined): string => {
++  if (!isoOrDate) return "—";
++  const d = typeof isoOrDate === "string" ? new Date(isoOrDate) : isoOrDate;
++  if (Number.isNaN(d.getTime())) return "—";
++  const hh = String(d.getHours()).padStart(2, "0");
++  const mi = String(d.getMinutes()).padStart(2, "0");
++  return `${formatDateBR(d)} ${hh}:${mi}`;
++};
++
++export const formatCPF = (cpf: string | null | undefined): string => {
++  if (!cpf) return "—";
++  const digits = String(cpf).replace(/\D/g, "").padStart(11, "0").slice(0, 11);
++  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`;
++};
++
++export const formatPhoneBR = (phone: string | null | undefined): string => {
++  if (!phone) return "—";
++  const d = String(phone).replace(/\D/g, "");
++  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
++  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
++  return phone;
++};
++
++export const isOverdue = (parcela: { vencimento: string; status: string } | null | undefined): boolean => {
++  if (!parcela) return false;
++  if (parcela.status === "recebido" || parcela.status === "cancelado") return false;
++  return new Date(parcela.vencimento) < new Date(new Date().toDateString());
++};
+-- 
+2.39.5
+

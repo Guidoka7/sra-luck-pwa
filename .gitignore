@@ -81,3 +81,5 @@ memory/test_credentials.md
 # Mobile development
 android-sdk/sra-luck-pwa/node_modules/@next/swc-linux-arm64-musl/next-swc.linux-arm64-musl.node
 sra-luck-pwa/node_modules/@next/swc-linux-arm64-gnu/next-swc.linux-arm64-gnu.node
+sra-luck-pwa/.next/cache/webpack/server-production/0.pack
+sra-luck-pwa/node_modules/@next/swc-linux-arm64-musl/next-swc.linux-arm64-musl.node
