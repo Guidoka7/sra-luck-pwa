@@ -89,3 +89,4 @@ sra-luck-pwa/node_modules/@next/swc-linux-arm64-musl/next-swc.linux-arm64-musl.n
 credentials.json
 *.key
 .credentials
+frontend/node_modules/.cache/default-development/0.pack
