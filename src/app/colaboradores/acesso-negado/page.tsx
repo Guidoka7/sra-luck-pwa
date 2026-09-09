@@ -1,0 +1,5 @@
+import Link from "next/link";
+
+export default function AcessoNegadoColaboradoresPage() {
+  return <main data-testid="colaboradores-access-denied" className="flex min-h-[100dvh] items-center justify-center bg-bloom px-5"><div className="w-full max-w-md rounded-3xl border border-rose/10 bg-white/80 p-7 text-center shadow-card backdrop-blur-xl"><p className="text-[0.6rem] font-bold uppercase tracking-[0.22em] text-rose">Acesso restrito</p><h1 className="mt-3 font-heading text-2xl text-burgundy">Perfil não encontrado</h1><p className="mt-3 text-sm leading-6 text-clay/60">Este usuário não possui um perfil de colaborador ativo. O Administrativo pode liberar o acesso sem criar outro sistema.</p><Link data-testid="colaboradores-access-denied-back" href="/colaboradores/login" className="mt-6 inline-flex rounded-xl bg-burgundy px-4 py-2.5 text-xs font-bold text-cream">Voltar ao login</Link></div></main>;
+}

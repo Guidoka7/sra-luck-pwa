@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-const CAMPO_LABEL: Record<string, string> = { nome_completo: "Nome completo", telefone: "Telefone", email: "E-mail", procedimento: "Procedimento", valor_contrato: "Carta de crédito", taxa_administrativa_percentual: "Taxa administrativa (%)", ativo: "Ativa", observacoes_internas: "Observações" };
+const CAMPO_LABEL: Record<string, string> = { nome_completo: "Nome completo", telefone: "Telefone", email: "E-mail", procedimento: "Procedimento", vendedora_id: "Vendedora", valor_contrato: "Carta de crédito", taxa_administrativa_percentual: "Taxa administrativa (%)", ativo: "Ativa", observacoes_internas: "Observações" };
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) { const supabase = createServerSupabaseClient(); const { data: { user } } = await supabase.auth.getUser(); if (!user) return NextResponse.json({ erro: "Não autenticado." }, { status: 401 }); const { data: cliente, error } = await supabase.from("clientes").select("*").eq("id", params.id).single(); if (error) return NextResponse.json({ erro: error.message }, { status: 404 }); const { data: historico } = await supabase.from("logs_alteracoes").select("*").eq("entidade", "clientes").eq("entidade_id", params.id).order("created_at", { ascending: false }); return NextResponse.json({ cliente, historico: historico ?? [] }); }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
  const supabase = createServerSupabaseClient(); const { data: { user } } = await supabase.auth.getUser(); if (!user) return NextResponse.json({ erro: "Não autenticado." }, { status: 401 }); const body = await req.json(); const atualizacoes: Record<string, unknown> = {};
  if (body.nomeCompleto !== undefined) atualizacoes.nome_completo = body.nomeCompleto; if (body.telefone !== undefined) atualizacoes.telefone = body.telefone || null; if (body.email !== undefined) atualizacoes.email = body.email || null; if (body.procedimento !== undefined) atualizacoes.procedimento = body.procedimento || null;
+ if (body.vendedoraId !== undefined) atualizacoes.vendedora_id = body.vendedoraId || null;
  if (body.valorContrato !== undefined) { const valor = Number(body.valorContrato); if (!Number.isFinite(valor) || valor <= 0) return NextResponse.json({ erro: "Carta de crédito inválida." }, { status: 400 }); atualizacoes.valor_contrato = valor; }
  if (body.taxaAdministrativaPercentual !== undefined) { const taxa = Number(body.taxaAdministrativaPercentual); if (!Number.isFinite(taxa) || taxa < 0) return NextResponse.json({ erro: "Taxa administrativa inválida." }, { status: 400 }); atualizacoes.taxa_administrativa_percentual = taxa; }
  if (body.ativo !== undefined) atualizacoes.ativo = body.ativo; if (body.observacoes !== undefined) atualizacoes.observacoes_internas = body.observacoes || null;

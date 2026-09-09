@@ -5,6 +5,20 @@
 [build.environment]
   NODE_VERSION = "22"
 
+# Desenvolvimento/homologação: branch deploy de DEVELOP.
+# Configure as variáveis de ambiente de homologação no painel da Netlify.
+[context.develop]
+  command = "npm run build"
+
+# Pull Requests: preview isolado para validação antes do merge.
+# Configure as variáveis de ambiente de preview/homologação no painel da Netlify.
+[context.deploy-preview]
+  command = "npm run build"
+
+# Produção: somente a MAIN deve estar configurada como Production branch na Netlify.
+[context.production]
+  command = "npm run build"
+
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
