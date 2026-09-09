@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowDownToLine, History, LayoutGrid, Percent, Plug, Receipt, Users, Wallet } from "lucide-react";
@@ -15,7 +16,7 @@ const TABS = [
   { href: "/admin/financeiro/historico", label: "Histórico", icon: History },
 ];
 
-export default function FinanceiroLayout({ children }: { children: React.ReactNode }) {
+export default function FinanceiroLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   return (
     <div className="min-h-full">
