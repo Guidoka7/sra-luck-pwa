@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
   const { data: boletos, error } = await query;
   if (error) return NextResponse.json({ erro: error.message }, { status: 503 });
 
-  const lista = (boletos ?? []).map((b) => ({ ...b, valor: Number(b.valor) }));
+  const lista = (boletos ?? []).map((b: any) => ({ ...b, valor: Number(b.valor) }));
   const dentroPeriodo = (date: string | null) => Boolean(date && date >= inicio && date <= fim);
   const vencido = (b: typeof lista[number]) => b.status !== "pago" && Boolean(b.data_vencimento && b.data_vencimento < hojeIso);
   const previsto = lista.filter((b) => b.status !== "pago" && dentroPeriodo(b.data_vencimento));
