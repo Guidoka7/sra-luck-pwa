@@ -1,11 +1,11 @@
-// Adapter Mock — implementa a interface do FinanceiroDataSource
-// usando dados locais. Deve ser trocável por ApiAdapter sem alterar componentes.
+// Adapter de protótipo — implementa a interface do FinanceiroDataSource
+// usando dados locais enquanto o backend ainda não está conectado.
+// Deve ser trocado por ApiAdapter sem alterar componentes, services ou hooks.
 
 import { MOCK } from "../data/mockData";
 import { STATUS_PARCELA, HISTORICO_TIPOS } from "../types";
 import { isOverdue } from "../utils/format";
 
-// Estado local mutável (permite baixas, edições em memória enquanto o backend não existe)
 const state = {
   parcelas: MOCK.parcelas.map((p) => ({ ...p })),
   clientes: MOCK.clientes.map((c) => ({ ...c })),
@@ -15,12 +15,8 @@ const state = {
   sincronizacao: { ...MOCK.sincronizacao },
 };
 
-// Recalcula status "atrasado" dinamicamente (para não engessar mocks)
 const withDynamicStatus = (p) => {
-  if (
-    p.status === STATUS_PARCELA.pendente &&
-    isOverdue({ ...p, status: STATUS_PARCELA.pendente })
-  ) {
+  if (p.status === STATUS_PARCELA.pendente && isOverdue({ ...p, status: STATUS_PARCELA.pendente })) {
     return { ...p, status: STATUS_PARCELA.atrasado };
   }
   return p;
@@ -28,7 +24,6 @@ const withDynamicStatus = (p) => {
 
 const listeners = new Set();
 const notify = () => listeners.forEach((l) => l());
-
 const delay = (ms = 120) => new Promise((r) => setTimeout(r, ms));
 
 const pushHistorico = (entry) => {
@@ -70,7 +65,6 @@ const MockAdapter = {
       origem: payload.origem ?? state.parcelas[idx].origem,
       observacoes: payload.observacoes ?? state.parcelas[idx].observacoes,
     };
-    // Comissões vinculadas → liberadas
     state.comissoes = state.comissoes.map((c) =>
       c.parcelaId === id ? { ...c, status: "liberada", parcelaStatus: STATUS_PARCELA.recebido } : c,
     );
@@ -180,6 +174,36 @@ const MockAdapter = {
   async getParcelasByCliente(clienteId) {
     await delay(80);
     return state.parcelas.filter((p) => p.clienteId === clienteId).map(withDynamicStatus);
+  },
+
+  async criarCliente(payload) {
+    await delay(160);
+    const cpfNormalizado = String(payload.cpf || "").replace(/\D/g, "");
+    if (state.clientes.some((c) => String(c.cpf || "").replace(/\D/g, "") === cpfNormalizado)) {
+      throw new Error("Já existe uma cliente com este CPF.");
+    }
+
+    const id = `cli_local_${Date.now()}`;
+    const cliente = {
+      id,
+      nome: payload.nome,
+      cpf: payload.cpf,
+      telefone: payload.telefone || "",
+      email: payload.email || "",
+      contrato: payload.contrato || "",
+      valorContrato: Number(payload.valorContrato || 0),
+      quantidadeParcelas: payload.quantidadeParcelas ? Number(payload.quantidadeParcelas) : null,
+      criadoEm: new Date().toISOString(),
+    };
+
+    state.clientes.unshift(cliente);
+    pushHistorico({
+      tipo: HISTORICO_TIPOS.cliente_criado,
+      descricao: `Cliente criada — ${cliente.nome}`,
+      clienteId: cliente.id,
+    });
+    notify();
+    return cliente;
   },
 
   // ---------- Recebimentos ----------
