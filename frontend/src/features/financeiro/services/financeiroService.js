@@ -1,11 +1,11 @@
 // Fachada de serviços do módulo Financeiro.
 // Componentes/hooks consomem *apenas* estes services — nunca acessam adapters diretamente.
+// O adapter atual é de protótipo; a futura API real entra sem alterar esta camada de UI.
 
 import dataSource from "../adapters";
 import { STATUS_PARCELA } from "../types";
 import { isOverdue } from "../utils/format";
 
-// ---------- Contas a Receber ----------
 export const contasReceberService = {
   list: () => dataSource.listParcelas(),
   get: (id) => dataSource.getParcela(id),
@@ -16,13 +16,12 @@ export const contasReceberService = {
   anexarComprovante: (id, payload) => dataSource.anexarComprovante(id, payload),
 };
 
-// ---------- Clientes ----------
 export const clientesService = {
   list: () => dataSource.listClientes(),
   get: (id) => dataSource.getCliente(id),
   parcelasByCliente: (id) => dataSource.getParcelasByCliente(id),
+  criar: (payload) => dataSource.criarCliente(payload),
 
-  // Resumo financeiro do cliente, calculado no service.
   async resumo(clienteId) {
     const [cliente, parcelas] = await Promise.all([
       dataSource.getCliente(clienteId),
@@ -70,29 +69,24 @@ export const clientesService = {
   },
 };
 
-// ---------- Recebimentos ----------
 export const recebimentosService = {
   list: () => dataSource.listRecebimentos(),
 };
 
-// ---------- Comissões ----------
 export const comissoesService = {
   list: () => dataSource.listComissoes(),
   byParcela: (parcelaId) => dataSource.getComissoesByParcela(parcelaId),
 };
 
-// ---------- Integrações ----------
 export const integracoesService = {
   list: () => dataSource.listIntegracoes(),
   sincronizacao: () => dataSource.getSincronizacao(),
 };
 
-// ---------- Histórico ----------
 export const historicoService = {
   list: () => dataSource.listHistorico(),
 };
 
-// ---------- Visão geral (dashboard) ----------
 export const visaoGeralService = {
   async carregar() {
     const [parcelas, recebimentos, comissoes] = await Promise.all([
@@ -126,7 +120,6 @@ export const visaoGeralService = {
       .sort((a, b) => new Date(a.vencimento) - new Date(b.vencimento))
       .slice(0, 6);
 
-    // Série mensal (últimos 6 meses) para o gráfico
     const serie = [];
     const now = new Date();
     for (let i = 5; i >= 0; i--) {
