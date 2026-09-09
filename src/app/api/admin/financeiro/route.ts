@@ -1,20 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAdminOperator } from "@/lib/admin-access";
 
-type BoletoFinanceiro = {
-  id: string;
-  cliente_id: string | null;
-  numero_parcela: number | null;
-  total_parcelas: number | null;
-  valor: number;
-  status: string;
-  data_vencimento: string | null;
-  data_pagamento: string | null;
-  observacoes: string | null;
-  carne_id: string | null;
-  clientes?: unknown;
-};
-
 function isoDate(value: string | null) {
   if (!value) return null;
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
@@ -49,9 +35,9 @@ export async function GET(req: NextRequest) {
   const { data: boletos, error } = await query;
   if (error) return NextResponse.json({ erro: error.message }, { status: 503 });
 
-  const lista: BoletoFinanceiro[] = (boletos ?? []).map((b: any) => ({ ...b, valor: Number(b.valor) }));
+  const lista = (boletos ?? []).map((b: any) => ({ ...b, valor: Number(b.valor) }));
   const dentroPeriodo = (date: string | null) => Boolean(date && date >= inicio && date <= fim);
-  const vencido = (b: BoletoFinanceiro) => b.status !== "pago" && Boolean(b.data_vencimento && b.data_vencimento < hojeIso);
+  const vencido = (b: typeof lista[number]) => b.status !== "pago" && Boolean(b.data_vencimento && b.data_vencimento < hojeIso);
   const previsto = lista.filter((b) => b.status !== "pago" && dentroPeriodo(b.data_vencimento));
   const recebido = lista.filter((b) => b.status === "pago" && dentroPeriodo(b.data_pagamento));
   const vencidos = lista.filter(vencido);
@@ -77,7 +63,7 @@ export async function GET(req: NextRequest) {
   const statusResumo = ["nao_pago", "pendente_confirmacao", "rejeitado", "pago"].map((s) => ({ status: s, quantidade: lista.filter((b) => b.status === s).length, valor: lista.filter((b) => b.status === s).reduce((sum, b) => sum + b.valor, 0) }));
 
   const { data: comissoes } = await sessao.service!.from("comissoes").select("valor, status, created_at").gte("created_at", `${inicio}T00:00:00`).lte("created_at", `${fim}T23:59:59`);
-  const comissoesGeradas = (comissoes ?? []).reduce((s, c) => s + Number(c.valor ?? 0), 0);
+  const comissoesGeradas = (comissoes ?? []).reduce((s: number, c: any) => s + Number(c.valor ?? 0), 0);
 
   return NextResponse.json({
     periodo: { inicio, fim },
